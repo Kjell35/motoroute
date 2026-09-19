@@ -1,26 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
+import 'package:motoroute_app/core/network/api_client.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
-import 'package:motoroute_app/core/utils/formatters.dart';
+import 'package:motoroute_app/core/utils/formatters.dart' show DistanceUnit;
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
 
-/// Screen 11: Einstellungen - ruhige Listen-Struktur. Fahrzeugstandard
-/// und Einheiten sind echte Toggles gegen die globalen Provider; die
-/// übrigen Punkte bleiben bewusst inaktiv, bis Auth (Supabase) und
-/// Energiesparmodus (Sprint 11) umgesetzt sind.
-class SettingsScreen extends ConsumerWidget {
+/// Screen 11: Einstellungen. Fahrzeug, Einheiten und POI-Kategorien
+/// sind ECHTE, persistente Toggles (shared_preferences - überleben
+/// App-Starts und Updates); der Server-Bereich schaltet REST und
+/// WebSocket auf eine andere Backend-Instanz um (Runtime-Override,
+/// wirksam nach App-Neustart vollständig, neue Requests sofort).
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  late final TextEditingController _serverController;
+  bool _serverDirty = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _serverController = TextEditingController(text: ApiClient.baseUrl);
+  }
+
+  @override
+  void dispose() {
+    _serverController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveServer() async {
+    await ApiClient.saveBaseUrl(_serverController.text);
+    if (!mounted) return;
+    setState(() => _serverDirty = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+            'Server gespeichert. Neue Anfragen nutzen ihn sofort - für Chat/Karte einmal App neu starten.'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final vehicleType = ref.watch(vehicleTypeProvider);
     final unit = ref.watch(distanceUnitProvider);
+    final categories = ref.watch(activePoiCategoriesProvider);
     final energy = ref.watch(energySaverControllerProvider);
 
     return Scaffold(
@@ -37,6 +72,7 @@ class SettingsScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.motorcycle, color: AppColors.textSecondaryDark, size: 20),
                 title: Text('Fahrzeugstandard', style: AppTypography.body),
+                subtitle: Text('Beeinflusst Routing und Dauer', style: AppTypography.caption),
                 trailing: SegmentedButton<VehicleType>(
                   segments: const [
                     ButtonSegment(value: VehicleType.motorcycle, icon: Icon(Icons.two_wheeler, size: 18)),
@@ -44,8 +80,10 @@ class SettingsScreen extends ConsumerWidget {
                     ButtonSegment(value: VehicleType.bicycle, icon: Icon(Icons.pedal_bike, size: 18)),
                   ],
                   selected: {vehicleType},
-                  onSelectionChanged: (selection) =>
-                      ref.read(vehicleTypeProvider.notifier).state = selection.first,
+                  onSelectionChanged: (selection) {
+                    ref.read(vehicleTypeProvider.notifier).state = selection.first;
+                    persistVehicleType(selection.first);
+                  },
                   style: const ButtonStyle(
                     visualDensity: VisualDensity.compact,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -65,8 +103,10 @@ class SettingsScreen extends ConsumerWidget {
                     ButtonSegment(value: DistanceUnit.miles, label: Text('mi')),
                   ],
                   selected: {unit},
-                  onSelectionChanged: (selection) =>
-                      ref.read(distanceUnitProvider.notifier).state = selection.first,
+                  onSelectionChanged: (selection) {
+                    ref.read(distanceUnitProvider.notifier).state = selection.first;
+                    persistDistanceUnit(selection.first);
+                  },
                   style: const ButtonStyle(
                     visualDensity: VisualDensity.compact,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -108,6 +148,10 @@ class SettingsScreen extends ConsumerWidget {
                 ),
             ]),
             const SizedBox(height: AppSpacing.lg),
+            _buildPoiSection(categories),
+            const SizedBox(height: AppSpacing.lg),
+            _buildServerSection(),
+            const SizedBox(height: AppSpacing.lg),
             _buildChatSection(context, ref),
             const SizedBox(height: AppSpacing.lg),
             _buildSection('Konto', [
@@ -116,7 +160,7 @@ class SettingsScreen extends ConsumerWidget {
               const ListTile(
                 dense: true,
                 title: Text('App-Version', style: AppTypography.body),
-                trailing: Text('0.1.0', style: AppTypography.caption),
+                trailing: Text('0.1.1', style: AppTypography.caption),
               ),
             ]),
           ],
@@ -141,6 +185,110 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  /// POI-Kategorien: Sichtbarkeit der Karten-Layer, persistent pro
+  /// Gerät (gleiche Kategorien wie der Auswahl-Screen auf der Karte).
+  Widget _buildPoiSection(Set<PoiCategory> categories) {
+    return _buildSection('Karte - POI-Kategorien', [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
+        child: Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            for (final category in PoiCategory.values)
+              FilterChip(
+                label: Text(category.label, style: const TextStyle(fontSize: 12)),
+                selected: categories.contains(category),
+                onSelected: (selected) {
+                  final next = {...categories};
+                  selected ? next.add(category) : next.remove(category);
+                  if (next.isEmpty) return; // immer mindestens eine Kategorie
+                  ref.read(activePoiCategoriesProvider.notifier).state = next;
+                  persistPoiCategories(next);
+                },
+                checkmarkColor: AppColors.accentPrimaryDark,
+                selectedColor: AppColors.accentPrimaryDark.withValues(alpha: 0.25),
+                backgroundColor: AppColors.bgSurfaceRaisedDark,
+                labelStyle: TextStyle(
+                  color: categories.contains(category)
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textSecondaryDark,
+                ),
+                side: BorderSide(
+                  color: categories.contains(category)
+                      ? AppColors.accentPrimaryDark
+                      : AppColors.borderHairlineDark,
+                ),
+                showCheckmark: false,
+              ),
+          ],
+        ),
+      ),
+    ]);
+  }
+
+  /// Server & Verbindung: Die App spricht NUR mit dem eigenen Backend.
+  /// Diese URL kann auf dem Gerät umgestellt werden (eigener Server im
+  /// LAN, eigener VPS, später Produktion) - ohne Neubau der App.
+  Widget _buildServerSection() {
+    return _buildSection('Server & Verbindung', [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _serverController,
+              onChanged: (_) => setState(() => _serverDirty = true),
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              style: AppTypography.caption,
+              decoration: InputDecoration(
+                labelText: 'Backend-URL',
+                hintText: 'http://192.168.1.50:3000',
+                hintStyle: const TextStyle(color: AppColors.textMutedDark, fontSize: 12),
+                labelStyle: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.borderHairlineDark),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.accentPrimaryDark),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                if (_serverDirty)
+                  Expanded(
+                    child: SizedBox(
+                      height: AppSpacing.touchTargetPlanning,
+                      child: ElevatedButton.icon(
+                        onPressed: _saveServer,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accentPrimaryDark,
+                          foregroundColor: AppColors.textPrimaryDark,
+                        ),
+                        icon: const Icon(Icons.save_outlined, size: 18),
+                        label: const Text('Speichern'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Leer lassen = eingebaute Standard-URL. Die Karte (OpenStreetMap/CARTO) braucht keinen API-Key; Verkehrs-, Wetter- und Routing-Daten liefert das Backend.',
+              style: AppTypography.caption,
+            ),
+          ],
+        ),
+      ),
+    ]);
   }
 
   Widget _buildListTile(IconData icon, String title, String? subtitle, VoidCallback? onTap) {

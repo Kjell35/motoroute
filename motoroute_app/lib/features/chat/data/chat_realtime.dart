@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/network/api_client.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 
@@ -63,9 +64,9 @@ class ChatRealtimeClient {
 
   ChatRealtimeClient({String? wsBaseUrl})
       : _wsBaseUrl = wsBaseUrl ??
-            (const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:3000')
-                .replaceFirst('http://', 'ws://')
-                .replaceFirst('https://', 'wss://'));
+            // Basis-URL aus ApiClient: dart-define ODER Runtime-Override
+            // aus den Einstellungen ("Server") - ein Regler für REST+WS.
+            ApiClient.asWebSocketUrl(ApiClient.baseUrl);
 
   bool get isConnected => _channel != null && _channel!.closeCode == null;
 

@@ -2,13 +2,19 @@
   "version": 8,
   "name": "moto-route-dark",
   "metadata": {
-    "description": "MotoRoute dark map style - cockpit aesthetic, route is the only loud element"
+    "description": "MotoRoute dark map style - CARTO dark raster, komplett ohne API-Key/Account. Fuer einen eigenen Vektor-Stil MAP_STYLE_URL als dart-define setzen (siehe docs/API_SETUP.md)."
   },
-  "glyphs": "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
   "sources": {
-    "openmaptiles": {
-      "type": "vector",
-      "url": "https://tiles.openmaptiles.org/v3/openmaptiles/tiles.json"
+    "carto-dark": {
+      "type": "raster",
+      "tiles": [
+        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"
+      ],
+      "tileSize": 512,
+      "maxzoom": 19,
+      "attribution": "© OpenStreetMap-Mitwirkende, © CARTO"
     }
   },
   "layers": [
@@ -20,112 +26,13 @@
       }
     },
     {
-      "id": "land",
-      "type": "fill",
-      "source": "openmaptiles",
-      "source-layer": "land",
+      "id": "carto-dark",
+      "type": "raster",
+      "source": "carto-dark",
       "paint": {
-        "fill-color": "#151A1F"
-      }
-    },
-    {
-      "id": "water",
-      "type": "fill",
-      "source": "openmaptiles",
-      "source-layer": "water",
-      "paint": {
-        "fill-color": "#1A2330"
-      }
-    },
-    {
-      "id": "road",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transport",
-      "filter": [
-        "all",
-        ["!=", "class", "motorway"],
-        ["!=", "class", "trunk"],
-        ["!=", "class", "primary"]
-      ],
-      "paint": {
-        "line-color": "#2A3340",
-        "line-width": 1
-      }
-    },
-    {
-      "id": "road-secondary",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transport",
-      "filter": [
-        "all",
-        ["==", "class", "secondary"]
-      ],
-      "paint": {
-        "line-color": "#3A4452",
-        "line-width": 2
-      }
-    },
-    {
-      "id": "road-primary",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transport",
-      "filter": [
-        "all",
-        ["==", "class", "primary"]
-      ],
-      "paint": {
-        "line-color": "#4A5563",
-        "line-width": 3
-      }
-    },
-    {
-      "id": "road-trunk",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transport",
-      "filter": [
-        "all",
-        ["==", "class", "trunk"]
-      ],
-      "paint": {
-        "line-color": "#5A6573",
-        "line-width": 4
-      }
-    },
-    {
-      "id": "road-motorway",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "transport",
-      "filter": [
-        "all",
-        ["==", "class", "motorway"]
-      ],
-      "paint": {
-        "line-color": "#FF5A1F",
-        "line-width": 5,
-        "line-opacity": 0.7
-      }
-    },
-    {
-      "id": "building",
-      "type": "fill",
-      "source": "openmaptiles",
-      "source-layer": "building",
-      "paint": {
-        "fill-color": "#1A1F28"
-      }
-    },
-    {
-      "id": "poi",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "poi",
-      "layout": {
-        "visibility": "none"
+        "raster-opacity": 0.94,
+        "raster-saturation": -0.2,
+        "raster-contrast": 0.06
       }
     }
   ]

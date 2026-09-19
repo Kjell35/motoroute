@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/features/map/presentation/map_screen.dart';
@@ -25,7 +26,12 @@ import 'package:motoroute_app/features/group_rides/presentation/group_ride_scree
 import 'package:motoroute_app/features/settings/settings_screen.dart';
 import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Persistierte Einstellungen + Server-Override laden, BEVOR das
+  // erste Widget gebaut wird (Provider-Startwerte lesen die Werte;
+  // ApiClient.baseUrl muss vor dem ersten Request korrekt sein).
+  await initSessionSettings();
   runApp(const ProviderScope(child: MotoRouteApp()));
 }
 

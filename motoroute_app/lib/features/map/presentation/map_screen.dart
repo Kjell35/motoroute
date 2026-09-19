@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
@@ -587,6 +587,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     target: LatLng(48.1351, 11.5820), // München als Startpunkt
                     zoom: 12,
                   ),
+                  // Cockpit-Steuerung: Kompass dreht mit (tap = nach Norden
+                  // zurück), Kameraposition wird getrackt.
+                  compassEnabled: true,
+                  compassViewPosition: CompassViewPosition.topRight,
+                  trackCameraPosition: true,
                   myLocationEnabled: _hasLocationPermission,
                   myLocationTrackingMode: MyLocationTrackingMode.tracking,
                   onMapCreated: (controller) {
@@ -600,6 +605,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     _drawIncidents(ref);
                     _drawHazards(ref);
                   },
+                ),
+                // Quellen-Hinweis (Pflicht bei OSM/CARTO-Daten) + ehrlicher
+                // Fallback-Hinweis, falls Tiles nicht laden (Offline).
+                Positioned(
+                  left: AppSpacing.sm,
+                  bottom: AppSpacing.xs,
+                  child: Text(
+                    _styleString!.isEmpty
+                        ? 'Karte offline - POIs, Routing und Navigation funktionieren weiter'
+                        : '© OpenStreetMap-Mitwirkende © CARTO',
+                    style: const TextStyle(
+                      color: AppColors.textMutedDark,
+                      fontSize: 10,
+                    ),
+                  ),
                 ),
                 _buildTopBar(context, vehicleType),
                 _buildSideButtons(context),
@@ -663,7 +683,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         children: [
           // POI-Layer-Button
           GestureDetector(
-            onTap: () => Navigator.of(context).pushNamed('/pois'),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(context).pushNamed('/pois');
+            },
             child: _buildIconBox(Icons.layers, circular: true),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -685,7 +708,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           const SizedBox(height: AppSpacing.md),
           // "Wegpunkt per Kartentap setzen"-Button (Phase 3 Screen 9)
           GestureDetector(
-            onTap: () => setState(() => _tapMode = !_tapMode),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _tapMode = !_tapMode);
+            },
             child: Container(
               width: AppSpacing.touchTargetPlanning,
               height: AppSpacing.touchTargetPlanning,
@@ -858,7 +884,11 @@ class _VehicleSwitcher extends ConsumerWidget {
         children: [
           for (final type in VehicleType.values)
             GestureDetector(
-              onTap: () => ref.read(vehicleTypeProvider.notifier).state = type,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                ref.read(vehicleTypeProvider.notifier).state = type;
+                persistVehicleType(type);
+              },
               child: Container(
                 width: AppSpacing.touchTargetPlanning,
                 height: AppSpacing.touchTargetPlanning,
