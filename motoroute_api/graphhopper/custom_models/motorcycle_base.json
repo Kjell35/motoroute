@@ -1,0 +1,15 @@
+{
+  "//": "Base access/speed rules shared by ALL motorcycle fahrstil profiles. Style-specific files (style_*.json) are layered on top and only adjust PRIORITY, never access - a road that's illegal/impassable for a motorcycle must stay excluded regardless of fahrstil.",
+  "speed": [
+    { "if": "road_class == MOTORWAY", "limit_to": "120" },
+    { "if": "road_class == TRUNK || road_class == PRIMARY", "limit_to": "100" },
+    { "if": "road_class == SECONDARY || road_class == TERTIARY", "limit_to": "80" },
+    { "if": "road_class == RESIDENTIAL || road_class == LIVING_STREET", "limit_to": "40" },
+    { "if": "road_class == TRACK && surface == PAVED", "limit_to": "30" },
+    { "if": "road_class == TRACK && surface != PAVED", "limit_to": "15" }
+  ],
+  "priority": [
+    { "if": "road_access == PRIVATE || road_access == NO", "multiply_by": "0" },
+    { "if": "!motorcycle_access", "multiply_by": "0" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "//": "Fahrstil: Schnell & kurvig. The balancing act between style_fast and style_extra_curvy - motorways stay usable (unlike extra_curvy) for the boring connector stretches, but curvy alternatives are still meaningfully preferred once available. This is the profile most likely to need tuning after real user feedback, since 'balanced' is inherently subjective.",
+  "priority": [
+    { "if": "curvature > 0.15", "multiply_by": "1.25" },
+    { "if": "curvature > 0.35", "multiply_by": "1.5" },
+    { "if": "road_class == MOTORWAY", "multiply_by": "0.85" },
+    { "if": "road_class == TRUNK", "multiply_by": "0.9" }
+  ]
+}

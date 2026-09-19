@@ -1,0 +1,7 @@
+{
+  "//": "Fahrstil: Unbefestigte Straßen. Actively prefers tracks/gravel over paved roads where legally accessible for the vehicle profile. Curvature is not a factor here - surface type is the primary signal, distinct from the curvy profiles.",
+  "priority": [
+    { "if": "road_class == TRACK && surface != PAVED", "multiply_by": "1.8" },
+    { "if": "road_class == MOTORWAY || road_class == TRUNK", "multiply_by": "0.2" }
+  ]
+}

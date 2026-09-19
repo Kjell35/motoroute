@@ -1,0 +1,67 @@
+# CI-Build: Debug-APK bei jedem Push auf main und für Pull Requests.
+#
+# Die APK landet als Workflow-Artefakt (Run-Seite → "Artifacts" →
+# motoRoute-debug-apk). Sie ist mit dem Android-Debug-Key signiert -
+# ideal zum schnellen Testen, NICHT als Grundlage für Updates einer
+# installierten Release-App (andere Signatur → Deinstallation nötig,
+# siehe docs/INSTALL.md "Debug- vs. Release-Signatur").
+#
+# Release-Builds (Tag → signierte APK + GitHub Release): android-release.yml
+
+name: android-build
+
+on:
+  push:
+    branches: [main]
+    # Release-Tags haben ihren eigenen Workflow.
+    tags-ignore: ['v*']
+  pull_request:
+
+jobs:
+  build-debug-apk:
+    name: Tests + Debug-APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter einrichten
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub-Abhängigkeiten
+        working-directory: motoroute_app
+        run: flutter pub get
+
+      - name: Statische Analyse (nur Fehler blockieren)
+        working-directory: motoroute_app
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+
+      - name: Tests
+        working-directory: motoroute_app
+        run: flutter test
+
+      - name: Debug-APK bauen
+        working-directory: motoroute_app
+        run: flutter build apk --debug
+
+      - name: APK-Größe im Log
+        working-directory: motoroute_app/build/app/outputs/flutter-apk
+        run: ls -lh app-debug.apk
+
+      - name: APK als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: motoRoute-debug-apk
+          path: motoroute_app/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

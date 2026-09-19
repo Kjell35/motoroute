@@ -1,0 +1,126 @@
+# Release-Build: Ein Push des Tags `vX.Y.Z` erzeugt eine signierte APK und
+# hängt sie automatisch an ein GitHub Release an.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Signierung (siehe docs/INSTALL.md, Abschnitt "Keystore einrichten"):
+#   GitHub-Repo → Settings → Secrets and variables → Actions →
+#   Repository secrets: MOTOROUTE_KEYSTORE_B64, MOTOROUTE_KEYSTORE_PASSWORD,
+#   MOTOROUTE_KEY_ALIAS, MOTOROUTE_KEY_PASSWORD
+#
+#   Ohne Secrets läuft der Build durch, wird aber mit dem Android-Debug-Key
+#   signiert (Fallback im app/build.gradle.kts). Für die eigene Installation
+#   sollte der echte Keystore hinterlegt sein - Debug- und Release-Signatur
+#   vertragen sich nicht als Update untereinander.
+#
+# Versionierung: VersionName/VersionCode kommen aus motoroute_app/pubspec.yaml
+# (version: 0.1.0+1). Der VersionCode steigt mit jedem Release (+1) - Android
+# lehnt ein Update mit gleichem/niedrigerem Code ab.
+
+name: android-release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-apk:
+    name: Signierte Release-APK + GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter einrichten
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub-Abhängigkeiten
+        working-directory: motoroute_app
+        run: flutter pub get
+
+      - name: Statische Analyse (nur Fehler blockieren)
+        working-directory: motoroute_app
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+
+      - name: Tests
+        working-directory: motoroute_app
+        run: flutter test
+
+      - name: Keystore aus Secrets decodieren (falls vorhanden)
+        id: keystore
+        env:
+          MOTOROUTE_KEYSTORE_B64: ${{ secrets.MOTOROUTE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$MOTOROUTE_KEYSTORE_B64" ]; then
+            echo "$MOTOROUTE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/motoroute-release.jks"
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Kein MOTOROUTE_KEYSTORE_B64 - APK wird mit Debug-Key signiert (siehe docs/INSTALL.md)"
+          fi
+
+      - name: Release-APK bauen
+        working-directory: motoroute_app
+        env:
+          MOTOROUTE_KEYSTORE_PATH: ${{ runner.temp }}/motoroute-release.jks
+          MOTOROUTE_KEYSTORE_PASSWORD: ${{ secrets.MOTOROUTE_KEYSTORE_PASSWORD }}
+          MOTOROUTE_KEY_ALIAS: ${{ secrets.MOTOROUTE_KEY_ALIAS }}
+          MOTOROUTE_KEY_PASSWORD: ${{ secrets.MOTOROUTE_KEY_PASSWORD }}
+        run: flutter build apk --release
+
+      - name: Version aus pubspec.yaml lesen
+        id: version
+        run: |
+          VERSION=$(grep '^version:' motoroute_app/pubspec.yaml | sed 's/version: *//; s/+.*//')
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "VersionName: $VERSION"
+
+      - name: Signatur prüfen (schlägt bei korrupter APK fehl)
+        run: |
+          BT=$(ls "$ANDROID_HOME/build-tools/" | sort -V | tail -1)
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify \
+            motoroute_app/build/app/outputs/flutter-apk/app-release.apk
+          echo "APK-Signatur OK"
+
+      - name: APK umbenennen mit Version
+        run: |
+          cp motoroute_app/build/app/outputs/flutter-apk/app-release.apk \
+             "MotoRoute-v${{ steps.version.outputs.name }}.apk"
+
+      - name: APK als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: MotoRoute-v${{ steps.version.outputs.name }}
+          path: MotoRoute-v*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: GitHub Release anlegen + APK anhängen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: MotoRoute ${{ steps.version.outputs.name }}
+          body: |
+            MotoRoute ${{ steps.version.outputs.name }}
+
+            **Installation auf dem Android-Smartphone:**
+            1. APK unten herunterladen (MotoRoute-v${{ steps.version.outputs.name }}.apk)
+            2. APK öffnen - Android fragt, ob Installation aus dieser Quelle erlaubt wird
+            3. Erlauben → Installieren → MotoRoute starten
+
+            Vollständige Anleitung inkl. Update-Hinweisen: docs/INSTALL.md
+          files: MotoRoute-v*.apk
+          fail_on_unmatched_files: true

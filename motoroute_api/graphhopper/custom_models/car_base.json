@@ -1,0 +1,14 @@
+{
+  "//": "Base access/speed rules for the car vehicle profile. Deliberately separate from motorcycle_base.json even though much of it looks similar today - the two are expected to diverge (e.g. car will later need width/weight restrictions that don't apply to a motorcycle) and sharing a file would silently couple them.",
+  "speed": [
+    { "if": "road_class == MOTORWAY", "limit_to": "130" },
+    { "if": "road_class == TRUNK || road_class == PRIMARY", "limit_to": "100" },
+    { "if": "road_class == SECONDARY || road_class == TERTIARY", "limit_to": "80" },
+    { "if": "road_class == RESIDENTIAL || road_class == LIVING_STREET", "limit_to": "30" },
+    { "if": "road_class == TRACK", "limit_to": "20" }
+  ],
+  "priority": [
+    { "if": "road_access == PRIVATE || road_access == NO", "multiply_by": "0" },
+    { "if": "!car_access", "multiply_by": "0" }
+  ]
+}

@@ -1,0 +1,55 @@
+# MotoRoute - root .gitignore
+# Keine echten Secrets, keine Build-Artefakte, keine OSM-Rohdaten.
+
+# Umgebungsvariablen
+.env
+.env.local
+.env.*.local
+
+# Node.js / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Flutter / Dart
+.flutter/
+.flutter_test/
+build/
+.pub-cache/
+.pub/
+*.iml
+.DS_Store
+
+# GraphHopper - OSM-Rohdaten und generierte Graph-Caches
+# Siehe docs/GRAPHHOPPER_SETUP.md Abschnitt 4: reproduzierbar aus der Quelle.
+motoroute_api/graphhopper/data/
+motoroute_api/graphhopper/graph-cache/
+*.osm.pbf
+*.gh*
+
+# Supabase-Lokal-Konfiguration
+.supabase/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test-Artefakte
+.coverage
+coverage/
+*.log
+# Android-Signierung (motoroute_app): NIE committen (docs/ANDROID_INSTALL.md)
+*.jks
+*.keystore
+motoroute_app/android/key.properties
+
+# Build-Kompilate (werden bei Bedarf via npm run build erzeugt)
+motoroute_api/dist/
+
+# Flutter/Android: maschinenspezifische SDK-Pfade
+motoroute_app/android/local.properties

@@ -1,0 +1,8 @@
+{
+  "//": "Fahrstil: Schnell. Classic shortest-time weighting - curvature is not a factor. This is the control/baseline profile: if curvy profiles ever produce a WORSE time-to-distance ratio than this on a straight motorway stretch, that's a bug in the curvy weighting, not in this file.",
+  "priority": [
+    { "if": "road_class == MOTORWAY", "multiply_by": "1.0" },
+    { "if": "road_class == TRUNK || road_class == PRIMARY", "multiply_by": "0.95" },
+    { "if": "road_class == TRACK", "multiply_by": "0.3" }
+  ]
+}

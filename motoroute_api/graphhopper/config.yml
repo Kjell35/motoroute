@@ -1,0 +1,70 @@
+# GraphHopper server config for MotoRoute.
+#
+# This config assumes the graphhopper-curvature-ext jar (see
+# /graphhopper-curvature-ext in the repo root) is on the classpath so
+# the custom "curvature" encoded value is available to the profiles
+# below. Without it, the curvy/extra_curvy profiles will fail to start
+# with an "unknown encoded value: curvature" error - that is intentional
+# fail-fast behaviour, not a bug: we never want a "curvy" route silently
+# falling back to plain-fastest routing.
+#
+# Base map data (OSM extract) is NOT committed to the repo (too large).
+# See docs/GRAPHHOPPER_SETUP.md for the import procedure.
+
+graphhopper:
+  datareader.file: data/region.osm.pbf
+  graph.location: data/graph-cache
+
+  # Every fahrstil from the product spec maps 1:1 to a profile here so
+  # the backend can pass `profile=<name>` straight through without any
+  # translation layer duplicating this logic.
+  profiles:
+    - name: motorcycle_fast
+      custom_model_files: [motorcycle_base.json, style_fast.json]
+
+    - name: motorcycle_curvy
+      custom_model_files: [motorcycle_base.json, style_curvy.json]
+
+    - name: motorcycle_extra_curvy
+      custom_model_files: [motorcycle_base.json, style_extra_curvy.json]
+
+    - name: motorcycle_fast_curvy
+      custom_model_files: [motorcycle_base.json, style_fast_curvy.json]
+
+    - name: motorcycle_unpaved
+      custom_model_files: [motorcycle_base.json, style_unpaved.json]
+
+    - name: car_fast
+      custom_model_files: [car_base.json, style_fast.json]
+
+    - name: bicycle_fast
+      custom_model_files: [bicycle_base.json, style_fast.json]
+
+  profiles_ch:
+    # Contraction Hierarchies (speed mode) only for the "fast" profiles,
+    # where the custom_model is static enough to precompute. The
+    # curvy/extra_curvy profiles use flexible mode (no CH) because their
+    # weighting is more exploratory - acceptable latency trade-off for
+    # MVP, revisit if p95 routing latency becomes a problem.
+    - profile: motorcycle_fast
+    - profile: car_fast
+    - profile: bicycle_fast
+
+  graph.encoded_values: road_class, road_environment, surface, toll, ferry, average_slope, curvature
+
+  # Avoid-options (Autobahn/Fähre/Maut) are implemented as custom_model
+  # request-time overrides from the backend, not baked into the profile
+  # itself - see motoroute_api/src/modules/routing for how avoid[] maps
+  # to a per-request custom_model "road_class"/"toll"/"ferry" block
+  # merged on top of the profile's base model.
+  custom_models.directory: graphhopper/custom_models
+
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: 127.0.0.1   # never expose directly - only the backend talks to this
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: 127.0.0.1
