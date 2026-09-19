@@ -21,14 +21,17 @@ val appId = "de.motoroute.app"
 // Keystore und Passwörter landen NIE im Repository; lokal kann jeder
 // Build ohne Keystore laufen (Fallback: Debug-Signierung, nur für
 // Entwicklung, nicht für Update-Installationen auf dem Handy).
-val keystorePath = System.getenv("MOTOROUTE_KEYSTORE_PATH")
-val keystorePassword = System.getenv("MOTOROUTE_KEYSTORE_PASSWORD")
-val keyAlias = System.getenv("MOTOROUTE_KEY_ALIAS")
-val keyPassword = System.getenv("MOTOROUTE_KEY_PASSWORD")
-val hasReleaseKeystore = !keystorePath.isNullOrBlank() &&
-        !keystorePassword.isNullOrBlank() &&
-        !keyAlias.isNullOrBlank() &&
-        !keyPassword.isNullOrBlank()
+// WICHTIG: Eigene, kollisionsfreie Namen - Variablen, die genauso heißen
+// wie die SigningConfig-Eigenschaften (keyPassword, keyAlias), würden im
+// create("release")-Block auf die (noch leere) Eigenschaft selbst auflösen.
+val keystoreFilePath = System.getenv("MOTOROUTE_KEYSTORE_PATH")
+val keystorePasswordValue = System.getenv("MOTOROUTE_KEYSTORE_PASSWORD")
+val keyAliasValue = System.getenv("MOTOROUTE_KEY_ALIAS")
+val keyPasswordValue = System.getenv("MOTOROUTE_KEY_PASSWORD")
+val hasReleaseKeystore = !keystoreFilePath.isNullOrBlank() &&
+        !keystorePasswordValue.isNullOrBlank() &&
+        !keyAliasValue.isNullOrBlank() &&
+        !keyPasswordValue.isNullOrBlank()
 
 android {
     namespace = appId
@@ -51,10 +54,10 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                storeFile = file(keystorePath!!)
-                storePassword = keystorePassword
-                keyAlias = keyAlias
-                keyPassword = keyPassword
+                storeFile = file(keystoreFilePath!!)
+                storePassword = keystorePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
             }
         }
     }
