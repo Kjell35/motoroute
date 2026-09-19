@@ -160,7 +160,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const ListTile(
                 dense: true,
                 title: Text('App-Version', style: AppTypography.body),
-                trailing: Text('0.1.1', style: AppTypography.caption),
+                trailing: Text('0.1.2', style: AppTypography.caption),
               ),
             ]),
           ],

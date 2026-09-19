@@ -63,6 +63,23 @@ class SearchRepository {
         .map((e) => SearchResult.fromJson(e as Map<String, dynamic>))
         .toList(growable: false);
   }
+
+  /// Reverse-Geocoding: Koordinaten -> lesbarer Name (Wegpunkt-Label
+  /// beim Kartentap). Liefert null bei 404 (unresolvable) - Netzfehler
+  /// werden geworfen, damit der Aufrufer unterscheiden kann.
+  Future<SearchResult?> reverse({required double lat, required double lng}) async {
+    try {
+      final response = await _dio.get<dynamic>('/v1/search/reverse/$lat/$lng');
+      final data = response.data;
+      if (data is Map) {
+        return SearchResult.fromJson(Map<String, dynamic>.from(data as Map));
+      }
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
 }
 
 final searchRepositoryProvider = Provider<SearchRepository>((ref) {

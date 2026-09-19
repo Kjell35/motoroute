@@ -34,17 +34,19 @@ Diese Datei ist **gitignored** und nie im Repo. Kopiervorlage:
 | `SUPABASE_SERVICE_ROLE_KEY` | Serverseitiger DB-Zugriff (RLS-Umgehung fürs BFF) | Auth/Chat nicht nutzbar |
 | `SUPABASE_JWT_SECRET` | Verifikation der Login-Tokens | Login-Schläge werden abgewiesen |
 | `GRAPHHOPPER_URL` | Routing-Engine (lokal `http://127.0.0.1:8989`, kein externer Key) | Routing zeigt Fehler |
-| `TRAFFIC_API_KEY` | **TomTom** — Echtzeitverkehr + Umleitungen | Verkehr-Feature meldet „deaktiviert", Rest läuft |
-| `OPENWEATHER_API_KEY` | **OpenWeatherMap One Call 3.0** — Wetter-Radar | Wetter-Widget bleibt aus (`isEnabled:false`), Rest läuft |
+| `TRAFFIC_API_KEY` | **TomTom** — Echtzeitverkehr, Umleitungen **UND Ortssuche/Reverse-Geocoding** | Verkehr + **Ortssuche** deaktiviert, Rest läuft |
+| `OPENWEATHER_API_KEY` | **OpenWeatherMap One Call 3.0** — OPTIONALER Wetter-Upgrade (Standard: Open-Meteo, keyless) | egal — Wetter-Radar läuft ab Werk über Open-Meteo |
 | `OVERPASS_URL` | OSM-POIs (Tankstellen) | POI-Abfrage leer/fehlerhaft |
 | `RIDE_RELAY_SECRET` | Gemeinsames Secret BFF ↔ POI-Dienst (Live-Gruppenfahrt) | Ride-Radar deaktiviert (fail-closed) |
 | `BIKER_POI_SERVICE_URL` | Adresse des kuratierten POI-Dienstes | Kuratierte POIs aus (OSM-POIs weiter da) |
 | `PUBLIC_URL` | Öffentliche Backend-Adresse (OAuth-Redirects) | Nur für OAuth relevant |
 
-**Zusammengefasst für das volle Erlebnis brauchst du genau 2 externe Keys:**
-TomTom (developer.tomtom.com, Free-Tier reicht) und OpenWeatherMap
-(openweathermap.org, Free-Tier reicht; einmalig im Dashboard die
-„One Call 3.0"-Subscription aktivieren). Beide gehören NUR in `.env`.
+**Zusammengefasst: Mit genau 1 externem Key (TomTom) läuft ALLES:** Verkehr,
+Umleitungen, **Ortsuche** und Wegpunkt-Namen. Das Wetter-Radar läuft ab Werk
+ohne jeden Key über **Open-Meteo** (keyless, Attribution im Widget); ein
+OpenWeatherMap-Key (openweathermap.org, Free-Tier, einmalig „One Call 3.0"
+aktivieren) schaltet auf die höher aufgelöste OWM-Vorhersage um — reines
+Upgrade, keine Pflicht. Beide Keys gehören NUR in `.env`.
 
 ## 3. Optionaler POI-Dienst (`motoroute_poi_service/.env`)
 
@@ -60,14 +62,27 @@ Eigenständiger Node-Dienst (PostGIS + eigene DB), kuratiert Motorrad-POIs:
 Ohne diesen Dienst läuft die App normal — nur die kuratierten Motorradhotels/
 Bikertreffs fehlen und das Biker-Radar/Ride-Radar sind aus.
 
-## 4. Was niemals in die App gehört
+## 4. Setup in 3 Schritten ("App für Papa")
+
+1. **Backend starten**: `motoroute_api/.env` aus `.env.example` kopieren,
+   Supabase-Werte + `TRAFFIC_API_KEY` (TomTom) eintragen — fertig. Suche,
+   Verkehr und Wegpunkt-Namen laufen; Wetter läuft ohne weitere Keys.
+2. **App installieren**: APK aus dem neuesten GitHub Release.
+3. **Einmalig in der App**: Einstellungen → Server & Verbindung →
+   Backend-URL des eigenen Servers eintragen (z. B. `http://192.168.1.50:3000`).
+   Fertig — Karte, Suche, Routing, Verkehr, Wetter, Chat funktionieren.
+
+Für die Live-Gruppenfahrt zusätzlich `RIDE_RELAY_SECRET` (BFF + POI-Dienst
+identisch) und den POI-Dienst starten (eigene PostGIS-DB, siehe unten).
+
+## 5. Was niemals in die App gehört
 
 Fahrzeug-Regel des Projekts: Keys liegen nur im Backend. Konkret verboten im
 App-Bundle: TomTom-Key, OpenWeatherMap-Key, Supabase-Service-Role-Key.
 Der Chat-Login (Supabase-JWT) landet bewusst nur im Gerät-Speicher der
 angemeldeten Session, nie im Build.
 
-## 5. Eigener Karten-Stil (optional)
+## 6. Eigener Karten-Stil (optional)
 
 Der eingebaute Stil ist keyless (CARTO-Dark). Wer einen eigenen Vektor-Stil
 nutzen will (z. B. MapTiler/Stadia): beim Build

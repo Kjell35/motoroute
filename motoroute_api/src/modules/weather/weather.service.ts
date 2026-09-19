@@ -61,6 +61,43 @@ interface OwmHourly {
   weather: { id: number }[];
 }
 
+/**
+ * Open-Meteo-Antwort (keyless, Default-Provider): WMO weathercode je
+ * Stunde. Wird 1:1 in die interne OwmHourly-Form gemappt - detectStorm
+ * (OWM-Code-Semantik) bleibt unveraendert, der WMO-Compat-Layer
+ * (wmoCodeToOwm) uebersetzt.
+ */
+interface OpenMeteoResponse {
+  hourly?: {
+    time: string[];
+    temperature_2m: (number | null)[];
+    precipitation: (number | null)[];
+    wind_gusts_10m: (number | null)[];
+    weathercode: (number | null)[];
+  };
+}
+
+/**
+ * WMO weathercode -> OWM-Condition-Id (Kompatibilitaetsschicht):
+ * 2xx = Gewitter, 5xx/3xx = Regen, 6xx = Schnee, 800 = klar.
+ * Konservativ: unklare Codes werden zu "bewoelkt" (801).
+ */
+export function wmoCodeToOwm(code: number | null): number {
+  if (code == null) return 800;
+  if (code >= 0 && code <= 1) return 800; // klar / ueberwiegend klar
+  if (code === 2 || code === 3) return 801; // bewoelkt
+  if (code === 45 || code === 48) return 701; // Nebel (OWM-Gruppe 7xx)
+  if (code >= 51 && code <= 57) return 300; // Nieselregen -> OWM-Drizzle
+  if (code >= 61 && code <= 65) return 500; // Regen
+  if (code === 66 || code === 67) return 502; // gefrierender Regen (heavy)
+  if (code >= 71 && code <= 77) return 600; // Schnee
+  if (code === 85 || code === 86) return 601; // Schneeschauer
+  if (code === 80 || code === 81) return 520; // leichte/moderate Schauer
+  if (code === 82) return 522; // heftige Schauer (danger-Naehe)
+  if (code >= 95) return 201; // Gewitter (OWM-Gruppe 2xx)
+  return 801;
+}
+
 interface OwmOneCallResponse {
   hourly: OwmHourly[];
 }
@@ -112,8 +149,20 @@ export class WeatherService {
     private readonly poiService: PoiService,
   ) {}
 
+  /**
+   * Wetter-Radar ist ab Werk aktiv: Open-Meteo ist keyless (Attribution-
+   * Pflicht erfuellt der Widget-Text). Ein gesetzter OPENWEATHER_API_KEY
+   * schaltet auf OWM One Call 3.0 um (hoehere Aufloesung, Lizenz-Pflichten
+   * laut OWM). Ausnahme: OWM-Key ist gesetzt, aber empty string -> bleibt
+   * keyless (kein "Key-loeschen schaltet das Feature aus").
+   */
   get isEnabled(): boolean {
-    return Boolean(this.config.get<string>('OPENWEATHER_API_KEY'));
+    return true;
+  }
+
+  private get provider(): 'open-meteo' | 'owm' {
+    const key = this.config.get<string>('OPENWEATHER_API_KEY');
+    return key && key.trim().length > 0 ? 'owm' : 'open-meteo';
   }
 
   /**
@@ -246,20 +295,12 @@ export class WeatherService {
     }
 
     try {
-      const response = await axios.get<OwmOneCallResponse>(
-        'https://api.openweathermap.org/data/3.0/onecall',
-        {
-          params: {
-            lat,
-            lon: lng,
-            exclude: 'minutely,daily,alerts',
-            units: 'metric',
-            appid: this.config.get<string>('OPENWEATHER_API_KEY'),
-          },
-          timeout: 8000,
-        },
-      );
-      const hourly = response.data.hourly ?? [];
+      let hourly: OwmHourly[];
+      if (this.provider === 'owm') {
+        hourly = await this.fetchOwm(lat, lng);
+      } else {
+        hourly = await this.fetchOpenMeteo(lat, lng);
+      }
       this.cache.set(key, {
         expiresAt: Date.now() + WEATHER_CACHE_TTL_MS,
         hourly,
@@ -274,10 +315,55 @@ export class WeatherService {
     } catch (e) {
       // Provider-Ausfall degradiert bewusst: Navigation darf nicht
       // blockieren, die App zeigt einfach "kein Wetter" (vgl. Traffic).
-      this.logger.warn(`OpenWeatherMap nicht erreichbar: ${String(e)}`);
+      this.logger.warn(`Wetter-Provider nicht erreichbar: ${String(e)}`);
       this.cache.set(key, { expiresAt: Date.now() + 60_000, hourly: [] });
       return null;
     }
+  }
+
+  /** OpenWeatherMap One Call 3.0 - wenn OPENWEATHER_API_KEY gesetzt ist. */
+  private async fetchOwm(lat: number, lng: number): Promise<OwmHourly[]> {
+    const response = await axios.get<OwmOneCallResponse>(
+      'https://api.openweathermap.org/data/3.0/onecall',
+      {
+        params: {
+          lat,
+          lon: lng,
+          exclude: 'minutely,daily,alerts',
+          units: 'metric',
+          appid: this.config.get<string>('OPENWEATHER_API_KEY'),
+        },
+        timeout: 8000,
+      },
+    );
+    return response.data.hourly ?? [];
+  }
+
+  /** Open-Meteo (Default, keyless) - forecast API, WMO-Code-Mapping. */
+  private async fetchOpenMeteo(lat: number, lng: number): Promise<OwmHourly[]> {
+    const response = await axios.get<OpenMeteoResponse>(
+      'https://api.open-meteo.com/v1/forecast',
+      {
+        params: {
+          latitude: lat,
+          longitude: lng,
+          hourly: 'temperature_2m,precipitation,wind_gusts_10m,weathercode',
+          forecast_days: 2,
+          timezone: 'UTC',
+        },
+        timeout: 8000,
+      },
+    );
+    const h = response.data.hourly;
+    if (!h?.time?.length) return [];
+    return h.time.map((iso, i) => ({
+      dt: Math.floor(new Date(`${iso}Z`).getTime() / 1000),
+      temp: h.temperature_2m[i] ?? 0,
+      wind_speed: 0, // Open-Meteo: Böen sind der relevante Wert
+      wind_gust: h.wind_gusts_10m[i] ?? undefined,
+      rain: { '1h': h.precipitation[i] ?? 0 },
+      weather: [{ id: wmoCodeToOwm(h.weathercode[i]) }],
+    }));
   }
 }
 

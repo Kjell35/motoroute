@@ -2,38 +2,84 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { SearchQueryDto, SearchResult } from './dto/search-query.dto';
+import { TomTomGeocoder } from './tomtom-geocoder';
 
 /**
- * Wraps a self-hosted Photon/Nominatim instance (GEOCODING_URL env var,
- * see Phase 1/2 Teil B.3/H). Provider is intentionally injected via
- * config rather than hardcoded - the geocoding backend is one of the
- * "evaluate before committing" items and may change before MVP ships.
+ * Ortssuche des BFF. Provider-Kette:
  *
- * Konkret implementiert gegen die Photon-API (/api?q=&lat=&lon=&lang=&limit=),
- * da Photon das GraphHopper-Ökosystem-Pendant ist und bias-by-location
- * nativ unterstützt. Nominatim hätte /search?q=&format=jsonv2 - das
- * Response-Mapping unterscheidet sich leicht und würde einen Adapter
- * pro Anbieter bedeuten; falls Nominatim gewählt wird, ist DAS HIER die
- * eine Datei, die sich ändert (gleiche Isolation wie GraphHopperClient).
+ *   1. TomTom Search API v2 (TRAFFIC_API_KEY, immer da wenn Verkehr an)
+ *   2. Photon/Nominatim (GEOCODING_URL) - selbst gehostet, Fallback
+ *   3. Beide nicht konfiguriert -> 503 mit klarem Fehler
+ *
+ * Frueher war Photon die einzige Quelle (503 ohne selbst gehosteten
+ * Server) - fuer den Praxiseinsatz ("App fuer Papa") ist die Suche
+ * Kernfunktion, daher liefert sie jetzt out-of-the-box ueber den
+ * vorhandenen TomTom-Key. Die App kennt den Provider nie.
  */
 @Injectable()
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly tomtom: TomTomGeocoder,
+  ) {}
 
   async search(query: SearchQueryDto): Promise<SearchResult[]> {
-    const geocodingUrl = this.config.get<string>('GEOCODING_URL');
-    if (!geocodingUrl) {
-      // Fails loudly as 503 rather than silently returning [] - unlike
-      // the traffic module, search has no "acceptable to be off" state
-      // in the MVP scope (Zielsuche is a core screen, Phase 1/2 Teil C.5).
-      throw new HttpException(
-        { error: 'GEOCODING_NOT_CONFIGURED', message: 'Search is not available' },
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
+    const near = parseNear(query.near);
+
+    // 1) TomTom (Key aus dem Verkehrs-Modul) - der schnelle Standardweg.
+    if (this.tomtom.isConfigured) {
+      const hits = await this.tomtom.search(query.q, {
+        ...(near ? { lat: near[0], lng: near[1] } : {}),
+      });
+      if (hits.length > 0) return hits;
+      // Leeres Ergebnis ist legitim (Tippfehler); Netzfehler ebenfalls -
+      // beides faellt durch zum Photon, falls vorhanden.
     }
 
+    // 2) Photon-Fallback.
+    const geocodingUrl = this.config.get<string>('GEOCODING_URL');
+    if (!geocodingUrl) {
+      if (!this.tomtom.isConfigured) {
+        // Kein Provider konfiguriert: bewusst laut 503 statt stiller
+        // Leere - die Zielsuche ist Kern-Screen (Phase 1/2 Teil C.5).
+        throw new HttpException(
+          {
+            error: 'GEOCODING_NOT_CONFIGURED',
+            message:
+              'Kein Such-Provider konfiguriert (TRAFFIC_API_KEY oder GEOCODING_URL setzen)',
+          },
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+      // TomTom konfiguriert, aber ohne Treffer: leere Liste ist das
+      // ehrliche Ergebnis (kein Fake-Fehler).
+      return [];
+    }
+
+    return this.searchPhoton(query, geocodingUrl);
+  }
+
+  /** Koordinaten -> lesbarer Name (Wegpunkt-Labels, Kartentap). */
+  async reverse(lat: number, lng: number): Promise<SearchResult | null> {
+    const hit = await this.tomtom.reverse(lat, lng);
+    if (!hit) return null;
+    return {
+      label: hit.label,
+      lat: hit.lat,
+      lng: hit.lng,
+      type: hit.type,
+      ...(hit.postcode ? { postcode: hit.postcode } : {}),
+      ...(hit.city ? { city: hit.city } : {}),
+    };
+  }
+
+  /** Photon/Nominatim-Suche (ehemaliger Hauptpfad, jetzt Fallback). */
+  private async searchPhoton(
+    query: SearchQueryDto,
+    geocodingUrl: string,
+  ): Promise<SearchResult[]> {
     try {
       const params: Record<string, string | number> = {
         q: query.q,
@@ -41,9 +87,6 @@ export class SearchService {
         lang: 'de',
       };
 
-      // Optionaler Standort-Bias: Photon sortiert Ergebnisse näher zum
-      // Punkt weiter nach vorn - genau das, was Screen 5 (Zielsuche)
-      // für "In der Nähe"-Kontext braucht.
       if (query.near) {
         const [lat, lng] = query.near.split(',').map(Number);
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -75,12 +118,17 @@ export class SearchService {
         };
       });
     } catch (err) {
-      if (err instanceof HttpException) throw err;
       this.logger.error(`Geocoding request failed: ${err}`);
       throw new HttpException(
-        { error: 'GEOCODING_UNAVAILABLE', message: 'Search is temporarily unavailable' },
-        HttpStatus.SERVICE_UNAVAILABLE,
+        { error: 'GEOCODING_FAILED', message: 'Search failed' },
+        HttpStatus.BAD_GATEWAY,
       );
     }
   }
+}
+
+function parseNear(near?: string): [number, number] | null {
+  if (!near) return null;
+  const [lat, lng] = near.split(',').map(Number);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
 }

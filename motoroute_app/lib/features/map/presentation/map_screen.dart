@@ -18,6 +18,7 @@ import 'package:motoroute_app/features/poi/biker_poi_sync.dart';
 import 'package:motoroute_app/features/poi/poi_map_layer.dart';
 import 'package:motoroute_app/features/poi/poi_providers.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
+import 'package:motoroute_app/features/search/search_providers.dart';
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
 
 /// Lädt den integrierten MotoRoute-Dark-Style als JSON-String.
@@ -258,27 +259,49 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         label: 'Start',
       ));
     }
+
+    // Ortsname asynchron aufloesen (TomTom Reverse-Geocoding im BFF):
+    // Der Wegpunkt erscheint sofort mit Fallback-Label, der Name wird
+    // nachgereicht - fuehlt sich sofort an, heisst aber Klartext.
+    final isTargetReplacement = waypoints.length >= 2;
+    final fallbackLabel =
+        '${tapped.latitude.toStringAsFixed(4)}, ${tapped.longitude.toStringAsFixed(4)}';
+    ref.read(searchRepositoryProvider).reverse(lat: tapped.latitude, lng: tapped.longitude).then((result) {
+      if (!mounted) return;
+      final list = [...ref.read(waypointListProvider)];
+      if (list.isEmpty) return;
+      final updated = Waypoint(
+        lat: tapped.latitude,
+        lng: tapped.longitude,
+        label: result?.label ?? fallbackLabel,
+      );
+      if (isTargetReplacement && list.length >= 2) {
+        list[list.length - 1] = updated;
+      } else {
+        list.add(updated);
+      }
+      ref.read(waypointListProvider.notifier).state = list;
+    });
+
     // Ziel wird ersetzt, wenn es schon existiert; sonst neuer Wegpunkt.
-    if (waypoints.length >= 2) {
+    if (isTargetReplacement) {
       waypoints[waypoints.length - 1] = Waypoint(
         lat: tapped.latitude,
         lng: tapped.longitude,
-        label: 'Kartenpunkt',
+        label: fallbackLabel,
       );
     } else {
       waypoints.add(Waypoint(
         lat: tapped.latitude,
         lng: tapped.longitude,
-        label: 'Kartenpunkt',
+        label: fallbackLabel,
       ));
     }
     ref.read(waypointListProvider.notifier).state = waypoints;
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Wegpunkt gesetzt: ${tapped.latitude.toStringAsFixed(4)}, ${tapped.longitude.toStringAsFixed(4)}',
-          ),
+          content: Text('Wegpunkt gesetzt - Ort wird aufgeloest …'),
           action: SnackBarAction(
             label: 'Verwalten',
             onPressed: () => Navigator.of(context).pushNamed('/waypoints'),
