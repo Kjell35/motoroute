@@ -7,6 +7,7 @@ import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart' show DistanceUnit;
+import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
@@ -54,6 +55,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final vehicleType = ref.watch(vehicleTypeProvider);
+    final auth = ref.watch(authControllerProvider);
     final unit = ref.watch(distanceUnitProvider);
     final categories = ref.watch(activePoiCategoriesProvider);
     final energy = ref.watch(energySaverControllerProvider);
@@ -154,13 +156,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             _buildChatSection(context, ref),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection('Konto', [
-              _buildListTile(Icons.person_outline, 'Profil', 'Kommt mit Supabase-Auth', null),
-              _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Datenlöschung', null),
+            _buildAccountSection(context, ref, auth),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSection('Info', [
+              _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Gefahrenradar-Positionen laufen nach 24 h ab', null),
               const ListTile(
                 dense: true,
                 title: Text('App-Version', style: AppTypography.body),
-                trailing: Text('0.1.2', style: AppTypography.caption),
+                trailing: Text('0.2.0', style: AppTypography.caption),
               ),
             ]),
           ],
@@ -287,6 +290,77 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ],
         ),
+      ),
+    ]);
+  }
+
+  /// Konto-Bereich: angemeldet (Name, E-Mail, Abmelden) oder Gast
+  /// (Hinweis auf Willkommens-Screen).
+  Widget _buildAccountSection(BuildContext context, WidgetRef ref, AuthState auth) {
+    if (!auth.isAuthenticated) {
+      return _buildSection('Konto', [
+        ListTile(
+          leading: const Icon(Icons.person_outline, color: AppColors.textSecondaryDark, size: 20),
+          title: Text('Nicht angemeldet', style: AppTypography.body),
+          subtitle: Text('Chat und Gruppen brauchen ein Konto', style: AppTypography.caption),
+          trailing: TextButton(
+            onPressed: () => Navigator.of(context).pushNamed('/welcome'),
+            child: const Text('Anmelden'),
+          ),
+        ),
+      ]);
+    }
+
+    final user = auth.user!;
+    return _buildSection('Konto', [
+      ListTile(
+        leading: CircleAvatar(
+          backgroundColor: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
+          child: Text(
+            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+            style: const TextStyle(
+              color: AppColors.accentPrimaryDark,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        title: Text(user.name, style: AppTypography.body),
+        subtitle: Text(user.email, style: AppTypography.caption),
+      ),
+      ListTile(
+        leading: const Icon(Icons.logout, color: AppColors.statusDanger, size: 20),
+        title: const Text('Abmelden', style: TextStyle(color: AppColors.statusDanger)),
+        onTap: () async {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              backgroundColor: AppColors.bgSurfaceDark,
+              title: Text('Abmelden?', style: AppTypography.title),
+              content: Text(
+                'Gespeicherte Routen und Einstellungen bleiben auf dem Gerät.',
+                style: AppTypography.caption,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Abbrechen'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.statusDanger,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Abmelden'),
+                ),
+              ],
+            ),
+          );
+          if (confirmed != true) return;
+          await ref.read(authControllerProvider.notifier).logout();
+          if (!context.mounted) return;
+          Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
+        },
       ),
     ]);
   }

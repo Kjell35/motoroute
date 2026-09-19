@@ -1,25 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
+import 'package:motoroute_app/features/auth/auth_providers.dart';
 
-/// Screen 1: Splash - reines Markenmoment, < 1 Sekunde Zielwert.
-/// Vollflächig bg/base; Wortmarke + Motorrad-Silhouette faden und
-/// skalieren sanft ein, eine dünne Akzentlinie läuft als dezenter
-/// Fortschritt. Navigation danach wie gehabt (Timer 900 ms - der
-/// Widget-Test pumpt danach).
-class SplashScreen extends StatefulWidget {
+/// Screen 1: Splash - Markenmoment + Entscheider. Während der Animation
+/// läuft parallel die Auth-Wiederherstellung; nach Minimum 900 ms und
+/// abgeschlossenem Restore geht es zur Willkommens-/Login-Seite (nicht
+/// angemeldet), ins Onboarding (erstes Starten) oder in die Tab-Shell
+/// (angemeldet - die Shell begrüßt den Nutzer namentlich).
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _fade;
   late final Animation<double> _scale;
+  Future<void>? _restoreFuture;
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -33,11 +38,33 @@ class _SplashScreenState extends State<SplashScreen>
         .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 900), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/onboarding');
-      }
-    });
+    // Restore parallel zur Animation starten.
+    _restoreFuture = ref.read(authControllerProvider.notifier).restore();
+
+    // Mindestdauer 900 ms (Marke + Test-Timing) UND Restore fertig,
+    // dann EINMALIG weiterleiten (Navigation nie im Build auslösen).
+    Future.wait([
+      _restoreFuture!,
+      Future<void>.delayed(const Duration(milliseconds: 900)),
+    ]).then((_) => _navigateOnce());
+  }
+
+  Future<void> _navigateOnce() async {
+    if (_navigated || !mounted) return;
+    _navigated = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    final onboardingDone = prefs.getBool('onboarding.done') ?? false;
+    final authenticated = ref.read(authControllerProvider).isAuthenticated;
+    if (!mounted) return;
+
+    if (!authenticated) {
+      Navigator.of(context).pushReplacementNamed('/welcome');
+    } else if (!onboardingDone) {
+      Navigator.of(context).pushReplacementNamed('/onboarding');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/home');
+    }
   }
 
   @override
@@ -58,8 +85,6 @@ class _SplashScreenState extends State<SplashScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Motorrad-Silhouette im Akzent-Orbit: das Marken-symbol
-                // vor dem Wort - "Fahrspaß" wird sofort sichtbar.
                 Container(
                   width: 96,
                   height: 96,
@@ -90,7 +115,6 @@ class _SplashScreenState extends State<SplashScreen>
                 const SizedBox(height: AppSpacing.xs),
                 Text('Fahrspaß statt nur ankommen', style: AppTypography.caption),
                 const SizedBox(height: AppSpacing.xxl),
-                // Dünne Fortschrittslinie: hetzt nicht, zeigt aber Leben.
                 SizedBox(
                   width: 132,
                   child: ClipRRect(

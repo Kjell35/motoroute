@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
+import 'package:motoroute_app/features/auth/auth_providers.dart';
+import 'package:motoroute_app/features/auth/welcome_screen.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/features/map/presentation/map_screen.dart';
@@ -11,6 +13,7 @@ import 'package:motoroute_app/features/poi/poi_selection_screen.dart';
 import 'package:motoroute_app/features/routing/route_overview_screen.dart';
 import 'package:motoroute_app/features/routing/route_style_selection.dart';
 import 'package:motoroute_app/features/search/search_screen.dart';
+import 'package:motoroute_app/features/shell/home_shell.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart' show ConversationType;
 import 'package:motoroute_app/features/chat/presentation/chat_hub_screen.dart';
 import 'package:motoroute_app/features/chat/presentation/conversation_screen.dart';
@@ -32,7 +35,7 @@ Future<void> main() async {
   // erste Widget gebaut wird (Provider-Startwerte lesen die Werte;
   // ApiClient.baseUrl muss vor dem ersten Request korrekt sein).
   await initSessionSettings();
-  runApp(const ProviderScope(child: MotoRouteApp()));
+  runApp(const MotoRouteApp());
 }
 
 class MotoRouteApp extends StatelessWidget {
@@ -40,7 +43,10 @@ class MotoRouteApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    // ProviderScope GEHÖRT zur App (nicht zu main): Damit starten auch
+    // Widget-Tests, die MotoRouteApp direkt pumpen, in einem Scope.
+    return ProviderScope(
+      child: MaterialApp(
       title: 'MotoRoute',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
@@ -50,8 +56,16 @@ class MotoRouteApp extends StatelessWidget {
       themeMode: ThemeMode.dark,
       initialRoute: '/',
       routes: {
+        // Splash entscheidet: Willkommen/Login, Onboarding oder Shell.
         '/': (context) => const SplashScreen(),
-        '/map': (context) => const MapScreen(),
+        '/home': (context) => const HomeShell(),
+        '/welcome': (context) => const WelcomeScreen(),
+        // Tab-Aliase (Deep-Links aus Nicht-Shell-Kontexten): Shell mit
+        // dem jeweiligen Start-Tab.
+        '/map': (context) => const HomeShell(initialTab: 0),
+        '/tours': (context) => const HomeShell(initialTab: 1),
+        '/chat': (context) => const HomeShell(initialTab: 2),
+        '/settings': (context) => const HomeShell(initialTab: 3),
         '/onboarding': (context) => const OnboardingScreen(),
         '/search': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
@@ -68,9 +82,7 @@ class MotoRouteApp extends StatelessWidget {
         '/navigation': (context) => const ActiveNavigationScreen(),
         '/waypoints': (context) => const WaypointManagementScreen(),
         '/pois': (context) => const PoiSelectionScreen(),
-        '/settings': (context) => const SettingsScreen(),
         // ----------------------------------------- Chat-Bereich (💬)
-        '/chat': (context) => const ChatHubScreen(),
         '/chat/conversation': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
           final typeRaw = (args?['type'] ?? 'private') as String;
@@ -119,6 +131,7 @@ class MotoRouteApp extends StatelessWidget {
           return GroupRideScreen(routeId: args?['routeId'] as String);
         },
       },
+      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
@@ -26,6 +27,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.dispose();
   }
 
+  Future<void> _finish() async {
+    // Onboarding als erledigt markieren: Der Splash leitet beim
+    // nächsten Start direkt in die Tab-Shell.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding.done', true);
+    if (mounted) Navigator.of(context).pushReplacementNamed('/home');
+  }
+
   void _nextPage() {
     if (_currentPage < 2) {
       _pageController.nextPage(
@@ -33,12 +42,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.of(context).pushReplacementNamed('/map');
+      _finish();
     }
   }
 
   void _skip() {
-    Navigator.of(context).pushReplacementNamed('/map');
+    _finish();
   }
 
   @override

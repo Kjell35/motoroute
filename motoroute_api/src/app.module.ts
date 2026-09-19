@@ -9,6 +9,7 @@ import { PoiModule } from './modules/poi/poi.module';
 import { SearchModule } from './modules/search/search.module';
 import { TrafficModule } from './modules/traffic/traffic.module';
 import { RoundTripModule } from './modules/roundtrip/roundtrip.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/users/user.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { GroupRoutesModule } from './modules/group-routes/group-routes.module';
@@ -38,6 +39,7 @@ import { WeatherModule } from './modules/weather/weather.module';
     // requirement, not a later hardening pass.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     SupabaseModule,
+    AuthModule,
     RoutingModule,
     PoiModule,
     SearchModule,
