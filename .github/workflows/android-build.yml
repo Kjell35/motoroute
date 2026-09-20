@@ -52,7 +52,7 @@ jobs:
 
       - name: Debug-APK bauen
         working-directory: motoroute_app
-        run: flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com
+        run: flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }}
 
       - name: APK-Größe im Log
         working-directory: motoroute_app/build/app/outputs/flutter-apk

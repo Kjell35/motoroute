@@ -21,11 +21,27 @@ import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/features/search/search_providers.dart';
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
 
-/// Lädt den integrierten MotoRoute-Dark-Style als JSON-String.
-/// Wird nur verwendet, wenn kein MAP_STYLE_URL gesetzt ist (z. B.
-/// in der lokalen Entwicklung ohne Tile-Provider-Account).
+/// CARTO-API-Key (Basemap-Lizenz): Wird beim Build via
+/// --dart-define=CARTO_BASEMAP_KEY=... eingesetzt und zur Laufzeit in
+/// den gebündelten Stil eingesetzt (Platzhalter __CARTO_KEY__).
+/// Kein Key im Repo, kein Key im App-Store-Listing - nur im Build.
+const _cartoBasemapKey = String.fromEnvironment('CARTO_BASEMAP_KEY');
+
+/// Lädt den gebündelten Karten-Stil: CARTO Dark Matter (Vektor, 93
+/// Layer, scharf auf jedem Display). Die Raster-Variante
+/// (moto-route-dark.json) ist Stilllegungs-kandidat: CARTO brennt dort
+/// ohne gültigen Key ein "API KEY REQUIRED"-Wasserzeichen in die
+/// Kacheln. Vektor-Tiles laufen (Stand Sep 2026) auch ohne Key.
 Future<String> _loadLocalStyle() async {
-  return await rootBundle.loadString('assets/styles/moto-route-dark.json');
+  final raw = await rootBundle.loadString('assets/styles/carto-dark-matter.json');
+  if (_cartoBasemapKey.isEmpty) {
+    // Ohne Build-Key: Key-Parameter komplett entfernen (Vektor-Tiles
+    // funktionieren auch ohne - nur ohne Quota-Absicherung).
+    return raw
+        .replaceAll('?key=__CARTO_KEY__', '')
+        .replaceAll('&key=__CARTO_KEY__', '');
+  }
+  return raw.replaceAll('__CARTO_KEY__', _cartoBasemapKey);
 }
 
 /// Screen 3+4 aus Phase 3, Teil C: Startseite und Kartenseite sind

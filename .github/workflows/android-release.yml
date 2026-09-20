@@ -79,7 +79,7 @@ jobs:
           MOTOROUTE_KEYSTORE_PASSWORD: ${{ secrets.MOTOROUTE_KEYSTORE_PASSWORD }}
           MOTOROUTE_KEY_ALIAS: ${{ secrets.MOTOROUTE_KEY_ALIAS }}
           MOTOROUTE_KEY_PASSWORD: ${{ secrets.MOTOROUTE_KEY_PASSWORD }}
-        run: flutter build apk --release --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com
+        run: flutter build apk --release --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }}
 
       - name: Version aus pubspec.yaml lesen
         id: version
