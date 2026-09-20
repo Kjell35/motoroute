@@ -1,5 +1,23 @@
 # MotoRoute Backend als Render-Blueprint.
 #
+# WICHTIG: Dienst über "New + Blueprint" anlegen (nicht "New + Web
+# Service") - nur dann liest Render diese Datei mit rootDir
+# motoroute_api. Bei "Web Service" auto-erkennt Render sonst den
+# POI-Dienst-Ordner und deployt das falsche App.
+#
+# Falls schon ein falscher Dienst existiert (URL antwortet mit
+# {"service":"motoroute-server"} auf /health): Im Dashboard den Dienst
+# öffnen und REPARIEREN (Name/URL bleibt):
+#   Settings -> Root Directory: motoroute_api
+#   Build Command:  npm ci && npm run build
+#   Start Command:  node dist/main.js
+#   Health Check Path: /v1/health
+#   Environment: NODE_ENV=production, AUTH_AUTO_CONFIRM=true,
+#                SUPABASE_URL, SUPABASE_ANON_KEY,
+#                SUPABASE_SERVICE_ROLE_KEY, TRAFFIC_API_KEY,
+#                RIDE_RELAY_SECRET (Werte aus motoroute_api/.env)
+#   -> Manual Deploy. Danach antwortet /v1/health mit {"status":"ok"}.
+#
 # Einmaliges Setup (2 Minuten, Free Tier, keine Kreditkarte noetig):
 #   1. https://dashboard.render.com/select-repo?type=blueprint oeffnen
 #   2. GitHub-Repo "Kjell35/motoroute" verbinden

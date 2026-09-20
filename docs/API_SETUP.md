@@ -77,6 +77,16 @@ Bikertreffs fehlen und das Biker-Radar/Ride-Radar sind aus.
    dauerhaft unter `https://motoroute-api.onrender.com` — Free Tier,
    keine Kreditkarte. Routing läuft dort automatisch über den
    OSRM-Fallback (Auto-Profil).
+
+   ⚠️ **Wichtig:** Dienst wirklich über **„New + Blueprint“** anlegen —
+   bei „New + Web Service“ auto-erkennt Render sonst den falschen
+   Ordner (POI-Dienst statt Backend; erkennbar daran, dass `/health`
+   `{"service":"motoroute-server"}` antwortet). Reparatur eines falsch
+   angelegten Dienstes: Name/URL behalten, in den Settings
+   `Root Directory: motoroute_api`, Build `npm ci && npm run build`,
+   Start `node dist/main.js`, Health `/v1/health` + die 5 Env-Vars aus
+   `render.yaml` setzen → Manual Deploy. Details stehen im Kopf von
+   `render.yaml`.
 3. **APK installieren**: aktuelles Release laden → registrieren → fertig.
    Die Backend-URL ist im Release-APK fest eingebaut
    (`--dart-define=API_BASE_URL=…` in den GitHub-Workflows) — der Nutzer
