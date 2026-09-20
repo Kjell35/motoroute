@@ -63,10 +63,15 @@ class EnvironmentVariables {
 }
 
 export function validateEnv(config: Record<string, unknown>) {
-  // Diagnose (nur Namen + gesetzt/fehlt - NIEMALS Werte): zeigt im
-  // Deploy-Log, welche Variablen im Prozess ankommen. Unverzichtbar
-  // bei Hosting-Faellen wie "Variable ist am Service gesetzt, aber die
-  // Laufzeit sieht sie nicht".
+  // DEFENSIV: process.env explizit einmergen. Je nach ConfigModule-
+  // Konfiguration (z.B. ignoreEnvVars) kann der uebergebene `config`
+  // NUR die .env-Datei enthalten - auf Hosts ohne .env (Render!) war
+  // die Validierung dann immer leer, selbst bei korrekt gesetzten
+  // echten Env-Variablen. process.env gewinnt NICHT (Datei zuerst),
+  // echte Env-Vars fuellen nur Luecken.
+  const merged: Record<string, unknown> = { ...process.env, ...config };
+
+  // Diagnose (nur Namen + gesetzt/fehlt - NIEMALS Werte).
   const diag = [
     'SUPABASE_URL',
     'SUPABASE_ANON_KEY',
@@ -76,16 +81,14 @@ export function validateEnv(config: Record<string, unknown>) {
     'NODE_ENV',
     'PORT',
     'RENDER_SERVICE_ID',
-    'RENDER_DEPLOY_COMMIT',
-    'CI',
   ];
   // eslint-disable-next-line no-console
   console.log(
     '[env-debug]',
-    diag.map((k) => `${k}=${k in config ? (String(config[k]).length > 0 ? 'set' : 'EMPTY') : 'MISSING'}`).join(' | '),
+    diag.map((k) => `${k}=${k in merged ? (String(merged[k]).length > 0 ? 'set' : 'EMPTY') : 'MISSING'}`).join(' | '),
   );
 
-  const validated = plainToInstance(EnvironmentVariables, config, {
+  const validated = plainToInstance(EnvironmentVariables, merged, {
     enableImplicitConversion: true,
   });
   const errors = validateSync(validated, { skipMissingProperties: false });

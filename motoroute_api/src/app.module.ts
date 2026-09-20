@@ -32,7 +32,12 @@ import { HealthController } from './modules/health/health.controller';
       // process.env). In Produktion: echte Env-Variablen ohne .env-
       // Datei setzen - die greifen dann uneingeschränkt.
       envFilePath: '.env',
-      ignoreEnvVars: true,
+      // ignoreEnvVars war true - das EXKLUDIERTE process.env aus der
+      // Validierung, d.h. auf Hosts ohne .env-Datei (Render!) fiel die
+      // Validierung immer auf leer, selbst wenn alle Variablen korrekt
+      // als echte Env-Variablen injiziert waren. Jetzt: process.env
+      // fliesst in die Validierung ein (defensiv zusaetzlich in
+      // validateEnv gemerged).
     }),
     // Global rate limiting - the mobile app is the only intended
     // caller, but the API is public-reachable (unlike GraphHopper/
