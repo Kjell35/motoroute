@@ -1,0 +1,40 @@
+# Keep-Alive: Hält das Render-Free-Tier-Backend wach.
+#
+# Render schläft nach ~15 min ohne Requests ein (Kaltstart 30-60 s).
+# Dieser Workflow pingt alle 5 Minuten die Health-URL - auch wenn GitHub
+# einen Lauf verzögert, bleibt die Lücke zwischen zwei Pings unter der
+# Schlaf-Schwelle. Kostenfrei (öffentliches Repo).
+#
+# Hinweise:
+#  - GitHub deaktiviert Zeitpläne nach 60 Tagen ohne Repo-Aktivität;
+#    bei normalem Entwicklungsfluss (Auto-Deploys) bleibt das Repo aktiv.
+#  - Überschneidungen sind ausgeschlossen (concurrency group).
+#  - Fällt GitHub aus, greift der Auto-Retry in der App (v0.3.3+).
+
+name: keep-alive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {} # manueller Testlauf möglich
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Backend aufwecken
+        run: |
+          code=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 90 \
+            https://motoroute-api-8fi9.onrender.com/v1/health || echo "000")
+          echo "Health: HTTP $code"
+          cat /tmp/health.json || true
+          if [ "$code" != "200" ]; then
+            echo "::warning::Backend antwortete nicht mit 200 (HTTP $code)"
+          fi
