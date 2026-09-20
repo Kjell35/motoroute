@@ -1,0 +1,45 @@
+# MotoRoute Backend als Render-Blueprint.
+#
+# Einmaliges Setup (2 Minuten, Free Tier, keine Kreditkarte noetig):
+#   1. https://dashboard.render.com/select-repo?type=blueprint oeffnen
+#   2. GitHub-Repo "Kjell35/motoroute" verbinden
+#   3. Render liest diese Datei und fragt die sync:false-Variablen ab -
+#      die Werte stehen in der lokalen motoroute_api/.env (kopieren und
+#      einfuegen). Danach ist das Backend dauerhaft online unter
+#      https://motoroute-api.onrender.com - die App hat die URL fest
+#      eingebaut, der Endnutzer traegt GAR NICHTS ein.
+#
+# Bewusst NICHT gesetzt:
+#   - GRAPHHOPPER_URL: Auf dem Free Tier laeuft keine lokale Java-
+#     Routing-Instanz. Der Routing-Client faellt automatisch auf den
+#     OSRM-Fallback zurueck (Auto-Profil, Kurven-Praeferenzen entfallen
+#     dort - siehe graphhopper.client.ts). Spaeter einfach ergaenzen,
+#     wenn ein GraphHopper-Cloud-Key oder eigener Server existiert.
+#   - OPENWEATHER_API_KEY / OVERPASS_URL / BIKER_POI_SERVICE_URL:
+#     optionale Features (Wetter laeuft ab Werk keyless ueber Open-Meteo).
+
+services:
+  - type: web
+    name: motoroute-api
+    runtime: node
+    rootDir: motoroute_api
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node dist/main.js
+    healthCheckPath: /v1/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_AUTO_CONFIRM
+        value: "true"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TRAFFIC_API_KEY
+        sync: false
+      - key: RIDE_RELAY_SECRET
+        sync: false

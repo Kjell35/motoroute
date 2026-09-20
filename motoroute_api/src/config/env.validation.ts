@@ -10,6 +10,13 @@ import { IsIn, IsInt, IsOptional, IsString, Max, Min, validateSync } from 'class
  * TRAFFIC_API_KEY is deliberately optional - see .env.example: the
  * traffic module is not part of the MVP and must degrade gracefully
  * when unset, not block startup.
+ *
+ * GRAPHHOPPER_URL ist ebenfalls optional: Ohne eigenen GraphHopper
+ * routed das Backend über den OSRM-Fallback (ROUTING_FALLBACK_URL,
+ * Default: öffentlicher OSRM-Demo-Server) - so läuft ein Cloud-
+ * Deployment ohne lokale Java-Instanz. SUPABASE_JWT_SECRET wird von
+ * keinem Modul mehr gelesen (JWT-Verifikation läuft serverseitig über
+ * auth.getUser()) und ist deshalb optional.
  */
 class EnvironmentVariables {
   @IsInt()
@@ -20,8 +27,13 @@ class EnvironmentVariables {
   @IsIn(['development', 'production', 'test'])
   NODE_ENV: string = 'development';
 
+  @IsOptional()
   @IsString()
-  GRAPHHOPPER_URL: string;
+  GRAPHHOPPER_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  ROUTING_FALLBACK_URL?: string;
 
   @IsString()
   SUPABASE_URL: string;
@@ -29,8 +41,9 @@ class EnvironmentVariables {
   @IsString()
   SUPABASE_SERVICE_ROLE_KEY: string;
 
+  @IsOptional()
   @IsString()
-  SUPABASE_JWT_SECRET: string;
+  SUPABASE_JWT_SECRET?: string;
 
   @IsOptional()
   @IsString()

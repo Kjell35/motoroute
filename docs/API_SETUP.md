@@ -33,7 +33,7 @@ Diese Datei ist **gitignored** und nie im Repo. Kopiervorlage:
 | `SUPABASE_URL` | Postgres + Auth (Login, Chat, Gruppen) | App startet, aber Auth/Chat/Gruppen melden Fehler |
 | `SUPABASE_SERVICE_ROLE_KEY` | Serverseitiger DB-Zugriff (RLS-Umgehung fürs BFF) | Auth/Chat nicht nutzbar |
 | `SUPABASE_JWT_SECRET` | Verifikation der Login-Tokens | Login-Schläge werden abgewiesen |
-| `GRAPHHOPPER_URL` | Routing-Engine (lokal `http://127.0.0.1:8989`, kein externer Key) | Routing zeigt Fehler |
+| `GRAPHHOPPER_URL` | Routing-Engine (lokal `http://127.0.0.1:8989`) — **optional**: ohne ihn läuft Routing über den OSRM-Fallback (Auto-Profil, Kurven-Präferenzen entfallen) | nichts — Routing läuft dann über OSRM |
 | `TRAFFIC_API_KEY` | **TomTom** — Echtzeitverkehr, Umleitungen **UND Ortssuche/Reverse-Geocoding** | Verkehr + **Ortssuche** deaktiviert, Rest läuft |
 | `OPENWEATHER_API_KEY` | **OpenWeatherMap One Call 3.0** — OPTIONALER Wetter-Upgrade (Standard: Open-Meteo, keyless) | egal — Wetter-Radar läuft ab Werk über Open-Meteo |
 | `OVERPASS_URL` | OSM-POIs (Tankstellen) | POI-Abfrage leer/fehlerhaft |
@@ -62,15 +62,30 @@ Eigenständiger Node-Dienst (PostGIS + eigene DB), kuratiert Motorrad-POIs:
 Ohne diesen Dienst läuft die App normal — nur die kuratierten Motorradhotels/
 Bikertreffs fehlen und das Biker-Radar/Ride-Radar sind aus.
 
-## 4. Setup in 3 Schritten ("App für Papa")
+## 4. Setup ("App für Papa" — der Endnutzer trägt GAR NICHTS ein)
 
-1. **Backend starten**: `motoroute_api/.env` aus `.env.example` kopieren,
-   Supabase-Werte + `TRAFFIC_API_KEY` (TomTom) eintragen — fertig. Suche,
-   Verkehr und Wegpunkt-Namen laufen; Wetter läuft ohne weitere Keys.
-2. **App installieren**: APK aus dem neuesten GitHub Release.
-3. **Einmalig in der App**: Einstellungen → Server & Verbindung →
-   Backend-URL des eigenen Servers eintragen (z. B. `http://192.168.1.50:3000`).
-   Fertig — Karte, Suche, Routing, Verkehr, Wetter, Chat funktionieren.
+**Einmalig von dir (nicht vom Nutzer):**
+
+1. **Datenbank anlegen** (einmalig): Supabase-Dashboard → SQL-Editor →
+   Inhalt von `motoroute_api/supabase/migrations/0001_full_setup.sql`
+   einfügen → Run. Idempotent, mehrfach ausführen ist harmlos.
+2. **Backend dauerhaft online** (2 Minuten): https://dashboard.render.com/select-repo?type=blueprint
+   öffnen → Repo `Kjell35/motoroute` verbinden → Render liest `render.yaml`
+   und fragt 5 Werte ab (aus der lokalen `motoroute_api/.env` kopieren:
+   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+   `TRAFFIC_API_KEY`, `RIDE_RELAY_SECRET`). Danach läuft das Backend
+   dauerhaft unter `https://motoroute-api.onrender.com` — Free Tier,
+   keine Kreditkarte. Routing läuft dort automatisch über den
+   OSRM-Fallback (Auto-Profil).
+3. **APK installieren**: aktuelles Release laden → registrieren → fertig.
+   Die Backend-URL ist im Release-APK fest eingebaut
+   (`--dart-define=API_BASE_URL=…` in den GitHub-Workflows) — der Nutzer
+   gibt NIE eine URL und NIE einen Key ein.
+
+**Alternativ LAN** (Backend auf dem eigenen PC statt Render): App in den
+Einstellungen → Server & Verbindung auf die PC-IP setzen
+(`http://192.168.1.50:3000` + Firewall-Regel). Das Feld bleibt als
+Override erhalten — leer = eingebaute Produktions-URL.
 
 Für die Live-Gruppenfahrt zusätzlich `RIDE_RELAY_SECRET` (BFF + POI-Dienst
 identisch) und den POI-Dienst starten (eigene PostGIS-DB, siehe unten).
