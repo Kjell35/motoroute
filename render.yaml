@@ -42,7 +42,7 @@ services:
     runtime: node
     rootDir: motoroute_api
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: node dist/main.js
     healthCheckPath: /v1/health
     autoDeploy: true
