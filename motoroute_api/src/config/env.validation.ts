@@ -63,6 +63,28 @@ class EnvironmentVariables {
 }
 
 export function validateEnv(config: Record<string, unknown>) {
+  // Diagnose (nur Namen + gesetzt/fehlt - NIEMALS Werte): zeigt im
+  // Deploy-Log, welche Variablen im Prozess ankommen. Unverzichtbar
+  // bei Hosting-Faellen wie "Variable ist am Service gesetzt, aber die
+  // Laufzeit sieht sie nicht".
+  const diag = [
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'TRAFFIC_API_KEY',
+    'RIDE_RELAY_SECRET',
+    'NODE_ENV',
+    'PORT',
+    'RENDER_SERVICE_ID',
+    'RENDER_DEPLOY_COMMIT',
+    'CI',
+  ];
+  // eslint-disable-next-line no-console
+  console.log(
+    '[env-debug]',
+    diag.map((k) => `${k}=${k in config ? (String(config[k]).length > 0 ? 'set' : 'EMPTY') : 'MISSING'}`).join(' | '),
+  );
+
   const validated = plainToInstance(EnvironmentVariables, config, {
     enableImplicitConversion: true,
   });
