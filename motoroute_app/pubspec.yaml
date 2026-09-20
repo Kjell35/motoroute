@@ -4,7 +4,7 @@ description: >
   Routing (kurvig/extra kurvig/schnell). Siehe /docs (Phase 1-3) im
   Repo-Root für Produktkontext.
 publish_to: 'none'
-version: 0.3.4+9
+version: 0.3.5+10
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
