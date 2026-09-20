@@ -4,7 +4,7 @@ description: >
   Routing (kurvig/extra kurvig/schnell). Siehe /docs (Phase 1-3) im
   Repo-Root für Produktkontext.
 publish_to: 'none'
-version: 0.3.3+8
+version: 0.3.4+9
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -51,6 +51,11 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # Karten-Stil (CARTO dark raster, keyless). Ohne diesen Eintrag
+    # liefert rootBundle.loadString einen Fehler und die Karte faellt
+    # in einen leeren Stil = Blackscreen (nur GPS-Dot sichtbar).
+    - assets/styles/moto-route-dark.json
 
 # Launcher-Icon aus tool/motoroute_icon.png (generiert durch
 # tool/generate_icon.dart) in alle Android-Dichten rendern. Neuausführen

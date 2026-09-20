@@ -34,33 +34,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late final TextEditingController _serverController;
-  bool _serverDirty = false;
   bool _runningHealthCheck = false;
   String? _healthResult; // null = noch nicht getestet
 
   @override
   void initState() {
     super.initState();
-    _serverController = TextEditingController(text: ApiClient.baseUrl);
-  }
-
-  @override
-  void dispose() {
-    _serverController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveServer() async {
-    await ApiClient.saveBaseUrl(_serverController.text);
-    if (!mounted) return;
-    setState(() => _serverDirty = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-            'Server gespeichert. Neue Anfragen nutzen ihn sofort - für Chat/Karte einmal App neu starten.'),
-      ),
-    );
   }
 
   /// Echter Verbindungstest: GET /v1/health (anonym, kein Auth nötig).
@@ -524,8 +503,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ------------------------------------------------------------------
-  // Server & Verbindung: Backend-URL (Runtime-Override) + echter
-  // Verbindungstest gegen /v1/health.
+  // Server & Verbindung: Status + echter Verbindungstest gegen
+  // /v1/health. KEIN URL-Eingabefeld mehr - die Backend-URL ist fest
+  // im APK (dart-define), normale Nutzer tragen nie etwas ein.
   // ------------------------------------------------------------------
   Widget _buildServerSection() {
     return _buildSection('Server & Verbindung', [
@@ -534,28 +514,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-              controller: _serverController,
-              onChanged: (_) => setState(() => _serverDirty = true),
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-              style: AppTypography.caption,
-              decoration: InputDecoration(
-                labelText: 'Backend-URL',
-                hintText: 'http://192.168.1.50:3000',
-                hintStyle: const TextStyle(color: AppColors.textMutedDark, fontSize: 12),
-                labelStyle: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairlineDark),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.accentPrimaryDark),
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 OutlinedButton.icon(
@@ -573,23 +531,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       : const Icon(Icons.network_check, size: 18),
                   label: const Text('Verbindung testen'),
                 ),
-                if (_serverDirty) ...[
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: SizedBox(
-                      height: AppSpacing.touchTargetPlanning,
-                      child: ElevatedButton.icon(
-                        onPressed: _saveServer,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentPrimaryDark,
-                          foregroundColor: AppColors.textPrimaryDark,
-                        ),
-                        icon: const Icon(Icons.save_outlined, size: 18),
-                        label: const Text('Speichern'),
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
             if (_healthResult != null) ...[
@@ -598,7 +539,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Leer lassen = eingebaute Standard-URL. Kein API-Key nötig: die Karte (OSM/CARTO) ist keyless, alle anderen Dienste laufen über das Backend.',
+              'Die Verbindung zum MotoRoute-Server ist fest konfiguriert - kein API-Key und keine URL nötig. Falls Probleme auftreten, hier testen.',
               style: AppTypography.caption,
             ),
           ],
