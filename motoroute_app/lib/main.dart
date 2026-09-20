@@ -9,6 +9,7 @@ import 'package:motoroute_app/features/map/presentation/map_screen.dart';
 import 'package:motoroute_app/features/navigation_session/active_navigation_screen.dart';
 import 'package:motoroute_app/features/onboarding/onboarding_screen.dart';
 import 'package:motoroute_app/features/onboarding/splash_screen.dart';
+import 'package:motoroute_app/features/settings/legal_screens.dart';
 import 'package:motoroute_app/features/poi/poi_selection_screen.dart';
 import 'package:motoroute_app/features/routing/route_overview_screen.dart';
 import 'package:motoroute_app/features/routing/route_style_selection.dart';
@@ -67,6 +68,10 @@ class MotoRouteApp extends StatelessWidget {
         '/chat': (context) => const HomeShell(initialTab: 2),
         '/settings': (context) => const HomeShell(initialTab: 3),
         '/onboarding': (context) => const OnboardingScreen(),
+        // Recht & Info (aus den Einstellungen erreichbar).
+        '/privacy': (context) => const PrivacyScreen(),
+        '/imprint': (context) => const ImprintScreen(),
+        '/about': (context) => const AboutScreen(),
         '/search': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
           return SearchScreen(addWaypointMode: args?['addWaypoint'] == true);

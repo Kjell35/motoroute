@@ -26,8 +26,32 @@ describe('UserService', () => {
 
     const result = await service.getMe({ id: 'u-1', email: 'a@b.de' });
 
-    expect(result).toEqual({ id: 'u-1', email: 'a@b.de', display_name: 'Rider' });
+    expect(result).toEqual({
+      id: 'u-1',
+      email: 'a@b.de',
+      display_name: 'Rider',
+      entitlements: {
+        plan: 'free',
+        liveGroupRides: true,
+        weatherRadar: true,
+        offlineMaps: true,
+        unlimitedGroups: true,
+      },
+    });
     expect(sb.eq).toHaveBeenCalledWith('id', 'u-1');
+  });
+
+  it('getMe marks premium plans without unlocking anything extra yet (no billing active)', async () => {
+    const sb = mockSupabase();
+    sb.maybeSingle.mockResolvedValue({
+      data: { id: 'u-1', plan: 'premium' },
+      error: null,
+    } as SupabaseResult);
+    const service = new UserService(sb as never);
+
+    const result = (await service.getMe({ id: 'u-1' })) as { entitlements: { plan: string } };
+
+    expect(result.entitlements.plan).toBe('premium');
   });
 
   it('getMe falls back to a default profile when the row does not exist yet', async () => {
@@ -42,8 +66,29 @@ describe('UserService', () => {
       email: null,
       display_name: null,
       avatar_url: null,
+      plan: 'free',
       updated_at: null,
+      entitlements: {
+        plan: 'free',
+        liveGroupRides: true,
+        weatherRadar: true,
+        offlineMaps: true,
+        unlimitedGroups: true,
+      },
     });
+  });
+
+  it('getMe returns a default profile instead of a 500 when the users table is missing (pre-migration)', async () => {
+    const sb = mockSupabase();
+    sb.maybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'relation "public.users" does not exist', code: 'PGRST205' },
+    } as SupabaseResult);
+    const service = new UserService(sb as never);
+
+    const result = (await service.getMe({ id: 'u-1' })) as { plan: string };
+
+    expect(result.plan).toBe('free');
   });
 
   it('updateMe never accepts a user id from the DTO (id comes from JWT only)', async () => {

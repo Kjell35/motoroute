@@ -19,5 +19,11 @@ import { ChatGateway } from './chat.gateway';
   imports: [SupabaseModule, EventEmitterModule.forRoot()],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway, AuthProvider, SupabaseAuthService],
+  // ChatGateway muss exportiert sein: BikerPoisGateway (POI-Push) und die
+  // Gruppenrouten-Realtime nutzen dieselbe WS-Verbindung. Ohne Export
+  // kann BikerPoisModule den Gateway nicht injizieren -> der DI-Container
+  // bricht beim Start ab -> DER GESAMTE SERVER startet nicht (die echte
+  // Ursache von "Verbindung zum Server fehlgeschlagen" in der App).
+  exports: [ChatGateway],
 })
 export class ChatModule {}

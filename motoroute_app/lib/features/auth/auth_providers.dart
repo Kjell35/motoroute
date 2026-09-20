@@ -227,6 +227,62 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
+  /// Anzeigename serverseitig ändern (PUT /v1/users/me). Das Backend
+  /// validiert den JWT - die User-ID kommt nie aus dem Body.
+  Future<void> updateDisplayName(String displayName) async {
+    final token = _accessToken;
+    if (token == null) throw AuthException('Nicht angemeldet');
+    await ApiClient.create().put(
+      '/v1/users/me',
+      data: {'displayName': displayName},
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+    );
+    final user = state.user;
+    if (user != null) {
+      state = state.copyWith(user: AuthUser(id: user.id, email: user.email, displayName: displayName));
+    }
+  }
+
+  /// Passwort ändern. Das Backend verifiziert das aktuelle Passwort per
+  /// echtem GoTrue-Login (401 bei falsch) und ändert dann per Admin-API.
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    final token = _accessToken;
+    if (token == null) throw AuthException('Nicht angemeldet');
+    try {
+      await ApiClient.create().post(
+        '/v1/users/me/password',
+        data: {'currentPassword': currentPassword, 'newPassword': newPassword},
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 401) throw AuthException('Aktuelles Passwort ist falsch');
+      if (status == 400) {
+        throw AuthException('Das neue Passwort muss mindestens 8 Zeichen lang sein');
+      }
+      throw AuthException('Server nicht erreichbar - bitte später erneut versuchen');
+    }
+  }
+
+  /// Konto ENDGÜLTIG löschen (auth.users + alle Profil-/Chat-/Gruppen-
+  /// Zeilen per Cascade) und lokal abmelden. Rückfragen macht die UI.
+  Future<void> deleteAccount() async {
+    final token = _accessToken;
+    if (token == null) throw AuthException('Nicht angemeldet');
+    try {
+      await ApiClient.create().delete(
+        '/v1/users/me',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } on DioException catch (e) {
+      throw AuthException(
+          e.response?.statusCode == 503
+              ? 'Server nicht konfiguriert - Konto konnte nicht gelöscht werden'
+              : 'Löschen fehlgeschlagen - bitte später erneut versuchen');
+    }
+    await logout();
+  }
+
   /// Abmelden: Server informieren (best-effort), lokale Persistenz
   /// UND In-Memory-Sitzung verwerfen.
   Future<void> logout() async {

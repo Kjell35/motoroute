@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuthSession, LoginDto, RegisterDto } from './auth.dto';
+import { PUBLIC_CONVERSATION_ID } from '../chat/chat.service';
 
 /**
  * Auth-Service: E-Mail/Passwort-Login gegen Supabase GoTrue.
@@ -26,6 +27,16 @@ export class AuthService {
   private readonly client: SupabaseClient | null;
   private readonly configured: boolean;
 
+  /**
+   * Admin-Client (Service-Key) - zwei Pflichtaufgaben:
+   * 1. AUTH_AUTO_CONFIRM=true: Registrierung serverseitig bestätigen
+   *    (Testphase ohne E-Mail-Zustell-Risiko; der Nutzer bekommt seine
+   *    Session SOFORT, ohne auf eine Mail warten zu müssen).
+   * 2. displayName sauber in die GoTrue-User-Metadaten schreiben
+   *    (der frühere Weg via anonymem updateUser konnte ohne Session
+   *    gar nicht funktionieren - stiller Fail).
+   */
+  private readonly adminClient: SupabaseClient | null;
   constructor(
     private readonly config: ConfigService,
   ) {
@@ -47,6 +58,63 @@ export class AuthService {
           auth: { autoRefreshToken: false, persistSession: false },
         })
       : null;
+
+    const autoConfirm = /^(1|true|yes)$/i.test(
+      this.config.get<string>('AUTH_AUTO_CONFIRM') ?? '',
+    );
+    this.adminClient =
+      this.configured && serviceKey && serviceKey.startsWith('sb_secret_')
+        ? createClient(url!, serviceKey, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          })
+        : null;
+    if (autoConfirm && this.adminClient == null) {
+      this.logger.warn(
+        'AUTH_AUTO_CONFIRM=true, aber kein sb_secret_-Service-Key gesetzt - Auto-Confirm bleibt aus',
+      );
+    }
+  }
+
+  /**
+   * Provisioning nach erfolgreicher Registrierung: Profilzeile
+   * (users-Tabelle, Grundlage für Chat-Suche/Anzeigenamen) + Beitritt
+   * zum öffentlichen Chat. Beides idempotent (ON CONFLICT ignore), so
+   * dass ein Re-Run nie doppelte Zeilen erzeugt. RLS erlaubt beide
+   * Operationen bewusst (users_self_insert, conv_member_insert für
+   * type='public'); die conversations-Zeile des öffentlichen Chats
+   * legt der Admin-Client an, falls sie noch fehlt (erst-Setup).
+   */
+  private async provisionUser(userId: string, email: string | undefined, displayName?: string): Promise<void> {
+    const db = this.adminClient;
+    if (!db) return;
+    try {
+      // 1) Profilzeile (Webhook-freier Pfad: direkt hier, nicht erst
+      //    beim ersten Profilabruf).
+      await db.from('users').upsert(
+        {
+          id: userId,
+          email: email ?? null,
+          ...(displayName ? { display_name: displayName } : {}),
+        },
+        { onConflict: 'id', ignoreDuplicates: true },
+      );
+
+      // 2) Öffentliche Chat-Konversation sicherstellen (idempotent).
+      await db.from('conversations').upsert(
+        { id: PUBLIC_CONVERSATION_ID, type: 'public' },
+        { onConflict: 'id', ignoreDuplicates: true },
+      );
+
+      // 3) Auto-Join: Mitglied des öffentlichen Chats werden.
+      await db.from('conversation_members').upsert(
+        { conversation_id: PUBLIC_CONVERSATION_ID, user_id: userId, role: 'member' },
+        { onConflict: 'conversation_id,user_id', ignoreDuplicates: true },
+      );
+    } catch (e) {
+      // Provisioning darf die Registrierung nie scheitern lassen -
+      // der ChatService heilt fehlende Profile selbst (getProfile).
+      this.logger.warn(`Provisioning unvollständig (ignoriert): ${String(e)}`);
+    }
   }
 
   get isConfigured(): boolean {
@@ -71,14 +139,53 @@ export class AuthService {
     if (error || !data.session || !data.user) {
       throw new UnauthorizedException('E-Mail oder Passwort falsch');
     }
+    // Self-Healing: Nutzer aus der Zeit vor dem Auto-Provisioning bekommen
+    // Profilzeile + öffentlichen Chat beim ersten Login nachgerüstet.
+    await this.provisionUser(data.user.id, data.user.email);
     return this.toSession(data.session, data.user);
   }
 
   async register(dto: RegisterDto): Promise<AuthSession> {
     const client = this.requireClient();
+
+    // Admin-Pfad (Testphase / private Nutzung): Konto direkt anlegen und
+    // bestätigen. Kein E-Mail-Versand => keine Zustell-Risiken und keine
+    // GoTrue-Rate-Limits (over_email_send_rate_limit). Aktiv, sobald ein
+    // sb_secret_-Service-Key konfiguriert ist.
+    if (this.adminClient) {
+      const { error: adminError } = await this.adminClient.auth.admin.createUser({
+        email: dto.email,
+        password: dto.password,
+        email_confirm: true,
+        ...(dto.displayName ? { user_metadata: { display_name: dto.displayName } } : {}),
+      });
+      if (!adminError) {
+        const { data: signIn, error: signInError } = await client.auth.signInWithPassword({
+          email: dto.email,
+          password: dto.password,
+        });
+        if (!signInError && signIn.session && signIn.user) {
+          await this.provisionUser(signIn.user.id, dto.email, dto.displayName);
+          return this.toSession(signIn.session, signIn.user);
+        }
+        throw new UnauthorizedException(
+          'Konto erstellt - bitte melde dich mit E-Mail und Passwort an',
+        );
+      }
+      if (/already|exists|registered|duplicate/i.test(adminError.message)) {
+        throw new ConflictException('Diese E-Mail ist bereits registriert');
+      }
+      this.logger.warn(
+        `Admin-Registrierung fehlgeschlagen (${adminError.message}) - Fallback auf Standard-Signup`,
+      );
+    }
+
     const { data, error } = await client.auth.signUp({
       email: dto.email,
       password: dto.password,
+      // displayName als User-Metadaten: landet via Webhook in der
+      // users-Tabelle (raw_user_meta_data->>display_name).
+      ...(dto.displayName ? { options: { data: { display_name: dto.displayName } } } : {}),
     });
 
     if (error) {
@@ -90,23 +197,15 @@ export class AuthService {
       throw new UnauthorizedException(error.message);
     }
     if (!data.session || !data.user) {
-      // Projekt mit E-Mail-Bestätigungspflicht: ohne Session gibt es
-      // nichts zu übergeben - klarer Hinweis statt undefined.
+      // Projekt mit E-Mail-Bestätigungspflicht (ohne Admin-Pfad): klarer
+      // Hinweis statt undefined.
       throw new UnauthorizedException(
         'Bitte bestätige zuerst die E-Mail (Link im Postfach) und melde dich dann an',
       );
     }
 
-    const session = this.toSession(data.session, data.user);
-    if (dto.displayName) {
-      try {
-        await client.auth.updateUser({ data: { display_name: dto.displayName } });
-      } catch (e) {
-        // Namen nicht zur Registrierungspflicht machen.
-        this.logger.warn(`displayName-Update fehlgeschlagen: ${String(e)}`);
-      }
-    }
-    return session;
+    await this.provisionUser(data.user.id, dto.email, dto.displayName);
+    return this.toSession(data.session, data.user);
   }
 
   async refresh(refreshToken: string): Promise<AuthSession> {

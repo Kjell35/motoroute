@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
+import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/presentation/chat_hub_screen.dart';
 import 'package:motoroute_app/features/map/presentation/map_screen.dart';
 import 'package:motoroute_app/features/settings/settings_screen.dart';
@@ -57,6 +59,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     // Auth-Chat-Brücke am Leben halten (schreibt den Token in den Chat).
     ref.watch(authChatBridgeProvider);
 
+    // In-App-"Benachrichtigung": Ungelesen-Badge am Chat-Tab. Der
+    // Nutzer kann ihn in den Einstellungen abschalten - es gibt bewusst
+    // keinen Google-Push-Dienst.
+    final notifications = ref.watch(notificationsEnabledProvider);
+    final totalUnread = ref.watch(chatOverviewProvider).totalUnread;
+    final showChatBadge = notifications && totalUnread > 0;
+
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
       body: IndexedStack(
@@ -85,23 +94,29 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             }
             setState(() => _tab = index);
           },
-          destinations: const [
-            NavigationDestination(
+          destinations: [
+            const NavigationDestination(
               icon: Icon(Icons.map_outlined, color: AppColors.textSecondaryDark),
               selectedIcon: Icon(Icons.map, color: AppColors.accentPrimaryDark),
               label: 'Karte',
             ),
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.route_outlined, color: AppColors.textSecondaryDark),
               selectedIcon: Icon(Icons.route, color: AppColors.accentPrimaryDark),
               label: 'Touren',
             ),
             NavigationDestination(
-              icon: Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: Icon(Icons.forum, color: AppColors.accentPrimaryDark),
+              icon: showChatBadge
+                  ? Badge(
+                      label: Text('$totalUnread'),
+                      backgroundColor: AppColors.statusDanger,
+                      child: const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark),
+                    )
+                  : const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.forum, color: AppColors.accentPrimaryDark),
               label: 'Chat',
             ),
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.settings_outlined, color: AppColors.textSecondaryDark),
               selectedIcon: Icon(Icons.settings, color: AppColors.accentPrimaryDark),
               label: 'Einstellungen',

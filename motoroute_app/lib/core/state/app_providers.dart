@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _kVehicleType = 'settings.vehicleType';
 const _kDistanceUnit = 'settings.distanceUnit';
 const _kPoiCategories = 'settings.poiCategories';
+const _kNotifications = 'settings.notifications';
 
 /// Persistierte Werte laden (in main() VOR runApp aufrufen).
 Future<void> initSessionSettings() async {
@@ -35,6 +36,7 @@ Future<void> initSessionSettings() async {
             ))
         .toSet();
   }
+  persistedNotificationsEnabled = prefs.getBool(_kNotifications) ?? true;
 }
 
 /// Von initSessionSettings gesetzte Startwerte (Riverpod-Provider
@@ -43,6 +45,7 @@ Future<void> initSessionSettings() async {
 VehicleType persistedVehicleType = VehicleType.motorcycle;
 DistanceUnit persistedDistanceUnit = DistanceUnit.kilometers;
 Set<PoiCategory> persistedPoiCategories = {PoiCategory.fuel};
+bool persistedNotificationsEnabled = true;
 
 final vehicleTypeProvider =
     StateProvider<VehicleType>((ref) => persistedVehicleType);
@@ -55,6 +58,12 @@ final distanceUnitProvider =
 /// Startwert kommt aus den Persistenz-Einstellungen.
 final activePoiCategoriesProvider =
     StateProvider<Set<PoiCategory>>((ref) => persistedPoiCategories);
+
+/// In-App-Nachrichten-Hinweise (ungelesen-Badge am Chat-Tab). Es gibt
+/// KEINE Push-Benachrichtigungen (keine Google-Dienste nötig) - dieser
+/// Schalter steuert nur den sichtbaren Hinweis in der App.
+final notificationsEnabledProvider =
+    StateProvider<bool>((ref) => persistedNotificationsEnabled);
 
 /// Persistenz-Schreiber: Fahrzeugtyp, Einheit und POI-Kategorien.
 /// Die Screens rufen diese nach der State-Änderung auf (bewusst
@@ -71,6 +80,10 @@ Future<void> persistDistanceUnit(DistanceUnit value) async {
 Future<void> persistPoiCategories(Set<PoiCategory> value) async {
   (await SharedPreferences.getInstance())
       .setStringList(_kPoiCategories, value.map((c) => c.name).toList());
+}
+
+Future<void> persistNotificationsEnabled(bool value) async {
+  (await SharedPreferences.getInstance()).setBool(_kNotifications, value);
 }
 
 /// Ergebnis der zuletzt berechneten Route - wird zwischen

@@ -17,6 +17,7 @@ import { GroupRidesModule } from './modules/group-rides/group-rides.module';
 import { BikerPoisModule } from './modules/biker-pois/biker-pois.module';
 import { HazardsModule } from './modules/hazards/hazards.module';
 import { WeatherModule } from './modules/weather/weather.module';
+import { HealthController } from './modules/health/health.controller';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { WeatherModule } from './modules/weather/weather.module';
     HazardsModule,
     WeatherModule,
   ],
+  controllers: [HealthController],
   providers: [LoggingInterceptor],
 })
 export class AppModule {}

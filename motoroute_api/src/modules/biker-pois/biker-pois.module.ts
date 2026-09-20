@@ -19,5 +19,7 @@ import { BikerPoisGateway } from './biker-pois.gateway';
   imports: [SupabaseModule, ChatModule],
   controllers: [BikerPoisController],
   providers: [BikerPoisService, BikerPoisRealtimeBridge, BikerPoisGateway, AuthProvider, SupabaseAuthService],
+  // Bridge-Export fuer GroupRidesService (Live-Gruppenfahrt-Positionsuplink).
+  exports: [BikerPoisRealtimeBridge],
 })
 export class BikerPoisModule {}
