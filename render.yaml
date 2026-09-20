@@ -36,6 +36,14 @@
 #   - OPENWEATHER_API_KEY / OVERPASS_URL / BIKER_POI_SERVICE_URL:
 #     optionale Features (Wetter laeuft ab Werk keyless ueber Open-Meteo).
 
+# BEWUSST KEIN envVars:-Block mehr: Bei Blueprint-managed Services
+# mit sync:false-Eintraegen ohne Werte scheitert der Blueprint-Sync
+# (Deploy-Status "update_failed") und die Env-Injection der Laufzeit
+# bleibt KOMPLETT leer - selbst Render-eigene RENDER_*-Variablen
+# fehlen. Die Variablen werden stattdessen auf Service-Ebene verwaltet
+# (Render-Dashboard -> Environment, oder API PUT .../env-vars) - dort
+# sind sie gesetzt und werden zuverlaessig injiziert.
+
 services:
   - type: web
     name: motoroute-api
@@ -46,18 +54,3 @@ services:
     startCommand: node dist/main.js
     healthCheckPath: /v1/health
     autoDeploy: true
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: AUTH_AUTO_CONFIRM
-        value: "true"
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: TRAFFIC_API_KEY
-        sync: false
-      - key: RIDE_RELAY_SECRET
-        sync: false
