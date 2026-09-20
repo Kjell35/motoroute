@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:motoroute_app/core/network/api_client.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
@@ -41,12 +44,31 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Restore parallel zur Animation starten.
     _restoreFuture = ref.read(authControllerProvider.notifier).restore();
 
+    // Kaltstart-Warmup: Die Free-Tier-Instanz des Backends schläft nach
+    // ~15 min Leerlauf ein (30-60 s Aufwachzeit). Der Fire-and-Forget-
+    // Ping weckt sie JETZT - während der Nutzer Begrüßung/Formular
+    // sieht, ist der Server schon wach. Scheitern ist egal; der echte
+    // Request hat zusätzlich den Auto-Retry.
+    unawaited(_warmupServer());
+
     // Mindestdauer 900 ms (Marke + Test-Timing) UND Restore fertig,
     // dann EINMALIG weiterleiten (Navigation nie im Build auslösen).
     Future.wait([
       _restoreFuture!,
       Future<void>.delayed(const Duration(milliseconds: 900)),
     ]).then((_) => _navigateOnce());
+  }
+
+  /// Fire-and-Forget-Warmup (siehe initState). try/catch statt
+  /// catchError: Bei Future<void> muss der catchError-Handler selbst
+  /// void zurückgeben - eine lambda-Kurzfassung tut das nicht immer
+  /// (ArgumentError im Test-Frame). So ist es eindeutig.
+  Future<void> _warmupServer() async {
+    try {
+      await ApiClient.create().get<void>('/v1/health');
+    } catch (_) {
+      // Bewusst ignoriert - der Ping dient nur dem Aufwecken.
+    }
   }
 
   Future<void> _navigateOnce() async {

@@ -64,13 +64,17 @@ class ApiClient {
     return _normalized(prefs.getString(_overrideKey));
   }
 
-  /// Dio-Client mit der effektiven Basis-URL.
+  /// Dio-Client mit der effektiven Basis-URL. Connect-Timeout 20 s:
+  /// Auf dem Render-Free-Tier schläft die Instanz nach ~15 min Leerlauf
+  /// ein - der erste Request muss den Kaltstart (30-60 s) abwarten
+  /// koennen. Receive 45 s: Routing-Berechnungen (OSRM-Fallback) dauern
+  /// auf der Free-Instanz sichtbar laenger als lokal.
   static Dio create() {
     return Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 45),
       ),
     );
   }

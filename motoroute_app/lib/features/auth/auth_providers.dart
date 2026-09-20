@@ -61,6 +61,31 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+/// Führt [request] mit bis zu [attempts] Versuchen aus, wenn die
+/// Verbindung NICHT zustande kommt (ConnectionTimeout/Error) - das
+/// typische Muster beim Kaltstart des Render-Free-Tier-Servers: Der
+/// erste Versuch weckt die Instanz, der zweite geht durch. 4xx/5xx
+/// werden NICHT wiederholt (echte Serverantworten).
+Future<T> _retryOnConnectionFailure<T>(
+  Future<T> Function() request, {
+  int attempts = 3,
+}) async {
+  var lastError;
+  for (var i = 1; i <= attempts; i++) {
+    try {
+      return await request();
+    } on DioException catch (e) {
+      final isConnectionIssue = e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.receiveTimeout;
+      if (!isConnectionIssue || i == attempts) rethrow;
+      lastError = e;
+      await Future<void>.delayed(Duration(seconds: 2 * i));
+    }
+  }
+  throw lastError;
+}
+
 class AuthController extends StateNotifier<AuthState> {
   AuthController() : super(const AuthState());
 
@@ -112,14 +137,16 @@ class AuthController extends StateNotifier<AuthState> {
     state = const AuthState(step: AuthStep.busy);
     final dio = ApiClient.create();
     try {
-      final response = await dio.post<Map<String, dynamic>>(
-        register ? '/v1/auth/register' : '/v1/auth/login',
-        data: {
-          'email': email,
-          'password': password,
-          if (register && displayName != null && displayName.isNotEmpty)
-            'displayName': displayName,
-        },
+      final response = await _retryOnConnectionFailure(
+        () => dio.post<Map<String, dynamic>>(
+          register ? '/v1/auth/register' : '/v1/auth/login',
+          data: {
+            'email': email,
+            'password': password,
+            if (register && displayName != null && displayName.isNotEmpty)
+              'displayName': displayName,
+          },
+        ),
       );
       final data = response.data;
       if (data == null) throw AuthException('Ungültige Serverantwort');
@@ -161,6 +188,10 @@ class AuthController extends StateNotifier<AuthState> {
         message = 'Anmeldung auf diesem Server nicht verfügbar';
       } else if (data is Map && data['message'] is String) {
         message = data['message'] as String;
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        message =
+            'Server wacht gerade auf (Free-Hosting) - bitte nochmal versuchen';
       } else {
         message = 'Server nicht erreichbar - Verbindung prüfen';
       }
@@ -188,9 +219,11 @@ class AuthController extends StateNotifier<AuthState> {
     if (refresh == null || !state.isAuthenticated) return;
     try {
       final dio = ApiClient.create();
-      final response = await dio.post<Map<String, dynamic>>(
-        '/v1/auth/refresh',
-        data: {'refreshToken': refresh},
+      final response = await _retryOnConnectionFailure(
+        () => dio.post<Map<String, dynamic>>(
+          '/v1/auth/refresh',
+          data: {'refreshToken': refresh},
+        ),
       );
       final data = response.data;
       if (data != null) {
