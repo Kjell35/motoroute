@@ -69,14 +69,11 @@ Bikertreffs fehlen und das Biker-Radar/Ride-Radar sind aus.
 1. **Datenbank anlegen** (einmalig): Supabase-Dashboard → SQL-Editor →
    Inhalt von `motoroute_api/supabase/migrations/0001_full_setup.sql`
    einfügen → Run. Idempotent, mehrfach ausführen ist harmlos.
-2. **Backend dauerhaft online** (2 Minuten): https://dashboard.render.com/select-repo?type=blueprint
-   öffnen → Repo `Kjell35/motoroute` verbinden → Render liest `render.yaml`
-   und fragt 5 Werte ab (aus der lokalen `motoroute_api/.env` kopieren:
-   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
-   `TRAFFIC_API_KEY`, `RIDE_RELAY_SECRET`). Danach läuft das Backend
-   dauerhaft unter `https://motoroute-api.onrender.com` — Free Tier,
-   keine Kreditkarte. Routing läuft dort automatisch über den
-   OSRM-Fallback (Auto-Profil).
+2. **Backend dauerhaft online** (erledigt): Der Service läuft auf Render
+   Free Tier unter **`https://motoroute-api-8fi9.onrender.com`**
+   (Blueprint-Datei `render.yaml` dient nur noch als Referenz — die
+   Env-Vars liegen auf Service-Ebene, das APK baut die URL fest ein).
+   Routing läuft dort automatisch über den OSRM-Fallback (Auto-Profil).
 
    ⚠️ **Wichtig:** Dienst wirklich über **„New + Blueprint“** anlegen —
    bei „New + Web Service“ auto-erkennt Render sonst den falschen
