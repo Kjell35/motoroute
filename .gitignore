@@ -13,6 +13,9 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 yarn.lock
+# Ausnahme: Das deploybare Backend braucht seine Lockfile im Repo
+# (Render: npm ci ohne Lockfile schlaegt fehl) - reproduzierbare Builds.
+!motoroute_api/package-lock.json
 
 # Flutter / Dart
 .flutter/
