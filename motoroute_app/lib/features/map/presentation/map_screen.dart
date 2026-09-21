@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
@@ -14,35 +14,13 @@ import 'package:motoroute_app/features/chat/data/chat_realtime.dart';
 import 'package:motoroute_app/features/hazards/hazard_repository.dart';
 import 'package:motoroute_app/features/hazards/presentation/hazard_report_sheet.dart';
 import 'package:motoroute_app/features/map/data/location_repository.dart';
+import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/poi/biker_poi_sync.dart';
 import 'package:motoroute_app/features/poi/poi_map_layer.dart';
 import 'package:motoroute_app/features/poi/poi_providers.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/features/search/search_providers.dart';
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
-
-/// CARTO-API-Key (Basemap-Lizenz): Wird beim Build via
-/// --dart-define=CARTO_BASEMAP_KEY=... eingesetzt und zur Laufzeit in
-/// den gebündelten Stil eingesetzt (Platzhalter __CARTO_KEY__).
-/// Kein Key im Repo, kein Key im App-Store-Listing - nur im Build.
-const _cartoBasemapKey = String.fromEnvironment('CARTO_BASEMAP_KEY');
-
-/// Lädt den gebündelten Karten-Stil: CARTO Dark Matter (Vektor, 93
-/// Layer, scharf auf jedem Display). Die Raster-Variante
-/// (moto-route-dark.json) ist Stilllegungs-kandidat: CARTO brennt dort
-/// ohne gültigen Key ein "API KEY REQUIRED"-Wasserzeichen in die
-/// Kacheln. Vektor-Tiles laufen (Stand Sep 2026) auch ohne Key.
-Future<String> _loadLocalStyle() async {
-  final raw = await rootBundle.loadString('assets/styles/carto-dark-matter.json');
-  if (_cartoBasemapKey.isEmpty) {
-    // Ohne Build-Key: Key-Parameter komplett entfernen (Vektor-Tiles
-    // funktionieren auch ohne - nur ohne Quota-Absicherung).
-    return raw
-        .replaceAll('?key=__CARTO_KEY__', '')
-        .replaceAll('&key=__CARTO_KEY__', '');
-  }
-  return raw.replaceAll('__CARTO_KEY__', _cartoBasemapKey);
-}
 
 /// Screen 3+4 aus Phase 3, Teil C: Startseite und Kartenseite sind
 /// bewusst DERSELBE Screen. Diese Version zeigt POI-Kreise (je nach
@@ -129,19 +107,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _loadStyle() async {
-    const styleUrl = String.fromEnvironment('MAP_STYLE_URL', defaultValue: '');
-    if (styleUrl.isNotEmpty) {
-      setState(() => _styleString = styleUrl);
-    } else {
-      try {
-        final local = await _loadLocalStyle();
-        if (mounted) setState(() => _styleString = local);
-      } catch (_) {
-        // Style-Asset fehlt: leerer Stil statt Crash - Routing bleibt
-        // nutzbar, auch ohne Tile-Anbieter.
-        if (mounted) setState(() => _styleString = '');
-      }
-    }
+    final style = await loadMapStyle();
+    if (mounted) setState(() => _styleString = style);
   }
 
   Future<void> _requestLocationPermission() async {
@@ -619,8 +586,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 MaplibreMap(
                   // Fallback: leerer Stil - maplibre_gl verlangt einen
                   // nicht-leeren String. Routing bleibt trotzdem nutzbar.
-                  styleString: _styleString!.isEmpty
-                      ? '{"version":8,"sources":{},"layers":[]}'
+                  styleString: isPlaceholderStyle(_styleString!)
+                      ? emptyMapStyle
                       : _styleString!,
                   initialCameraPosition: const CameraPosition(
                     target: LatLng(48.1351, 11.5820), // München als Startpunkt
@@ -651,7 +618,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   left: AppSpacing.sm,
                   bottom: AppSpacing.xs,
                   child: Text(
-                    _styleString!.isEmpty
+                    isPlaceholderStyle(_styleString!)
                         ? 'Karte offline - POIs, Routing und Navigation funktionieren weiter'
                         : '© OpenStreetMap-Mitwirkende © CARTO',
                     style: const TextStyle(

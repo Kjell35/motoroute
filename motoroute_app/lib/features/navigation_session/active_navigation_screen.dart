@@ -6,6 +6,7 @@ import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
+import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/navigation_session/navigation_providers.dart';
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
 import 'package:motoroute_app/features/weather/route_weather_providers.dart';
@@ -27,16 +28,26 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
   bool _routeDrawn = false;
   Set<String> _drawnIncidentIds = {};
   final List<Circle> _incidentCircles = [];
+  String? _styleString;
 
   @override
   void initState() {
     super.initState();
+    _loadStyle();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final route = ref.read(activeRouteProvider);
       if (route != null) {
         ref.read(navigationControllerProvider.notifier).start(route);
       }
     });
+  }
+
+  /// Gleicher Stil wie die Hauptkarte (geteilter Loader) - die Navigation
+  /// hatte zuvor einen eigenen, nie gesetzten Stil-Eingang (MAP_STYLE_URL)
+  /// und fuhr deshalb mit leerem Stil auf (schwarzer Hintergrund).
+  Future<void> _loadStyle() async {
+    final style = await loadMapStyle();
+    if (mounted) setState(() => _styleString = style);
   }
 
   @override
@@ -124,32 +135,41 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
             if (state.isRerouting || state.error != null || state.rerouteReason != null)
               _buildReroutingBanner(state),
             Expanded(
-              child: Stack(
-                children: [
-                  MaplibreMap(
-                    styleString: String.fromEnvironment('MAP_STYLE_URL', defaultValue: ''),
-                    initialCameraPosition: CameraPosition(
-                      target: route == null || route.geometry.isEmpty
-                          ? const LatLng(48.1351, 11.5820)
-                          : LatLng(route.geometry.first[1], route.geometry.first[0]),
-                      zoom: 14,
+              child: _styleString == null
+                  // Stil lädt (Millisekunden, gebündelt): Ladeanzeige statt
+                  // schwarzer Karte - gleiche Logik wie die Hauptkarte.
+                  ? const Center(child: CircularProgressIndicator())
+                  : Stack(
+                      children: [
+                        MaplibreMap(
+                          // Gleicher Stil wie Hauptkarte (geteilter
+                          // Loader); leerer Stil nur als Fallback, wenn
+                          // das Asset fehlt.
+                          styleString: isPlaceholderStyle(_styleString!)
+                              ? emptyMapStyle
+                              : _styleString!,
+                          initialCameraPosition: CameraPosition(
+                            target: route == null || route.geometry.isEmpty
+                                ? const LatLng(48.1351, 11.5820)
+                                : LatLng(route.geometry.first[1], route.geometry.first[0]),
+                            zoom: 14,
+                          ),
+                          myLocationEnabled: true,
+                          myLocationTrackingMode: MyLocationTrackingMode.tracking,
+                          onMapCreated: (controller) {
+                            _mapController = controller;
+                            if (route != null) _drawRoute(route);
+                          },
+                        ),
+                        if (state.isOffRoute)
+                          const Positioned(
+                            top: AppSpacing.md,
+                            left: AppSpacing.lg,
+                            right: AppSpacing.lg,
+                            child: _OffRouteBadge(),
+                          ),
+                      ],
                     ),
-                    myLocationEnabled: true,
-                    myLocationTrackingMode: MyLocationTrackingMode.tracking,
-                    onMapCreated: (controller) {
-                      _mapController = controller;
-                      if (route != null) _drawRoute(route);
-                    },
-                  ),
-                  if (state.isOffRoute)
-                    const Positioned(
-                      top: AppSpacing.md,
-                      left: AppSpacing.lg,
-                      right: AppSpacing.lg,
-                      child: _OffRouteBadge(),
-                    ),
-                ],
-              ),
             ),
             _buildBottomZone(state, unit),
             _buildControlButtons(context),
