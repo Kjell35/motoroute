@@ -62,6 +62,20 @@ export class UpdateProfileDtoChat {
 
   @IsOptional()
   @IsString()
+  @Length(0, 80)
+  firstName?: string;
+
+  @IsOptional()
+  @IsIn(['username', 'first_name', 'custom'])
+  chatNameMode?: 'username' | 'first_name' | 'custom';
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 80)
+  chatDisplayName?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   vehicleDesc?: string;
 

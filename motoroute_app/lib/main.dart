@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/auth/welcome_screen.dart';
@@ -11,6 +13,7 @@ import 'package:motoroute_app/features/onboarding/onboarding_screen.dart';
 import 'package:motoroute_app/features/onboarding/splash_screen.dart';
 import 'package:motoroute_app/features/settings/legal_screens.dart';
 import 'package:motoroute_app/features/poi/poi_selection_screen.dart';
+import 'package:motoroute_app/features/routing/presentation/start_point_selection_screen.dart';
 import 'package:motoroute_app/features/routing/route_overview_screen.dart';
 import 'package:motoroute_app/features/routing/route_style_selection.dart';
 import 'package:motoroute_app/features/search/search_screen.dart';
@@ -46,8 +49,19 @@ class MotoRouteApp extends StatelessWidget {
   Widget build(BuildContext context) {
     // ProviderScope GEHÖRT zur App (nicht zu main): Damit starten auch
     // Widget-Tests, die MotoRouteApp direkt pumpen, in einem Scope.
-    return ProviderScope(
-      child: MaterialApp(
+    return const ProviderScope(child: _MotoRouteAppBody());
+  }
+}
+
+class _MotoRouteAppBody extends ConsumerWidget {
+  const _MotoRouteAppBody();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Sprachwahl (DE/EN): aus den Einstellungen, geräteweit persistiert.
+    final language = ref.watch(languageControllerProvider);
+    final i18n = I18n(language);
+    return MaterialApp(
       title: 'MotoRoute',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
@@ -55,6 +69,15 @@ class MotoRouteApp extends StatelessWidget {
       // Automatische System-Umschaltung - Dark bleibt aber der
       // Startpunkt der visuellen Identität (Phase 3 Teil B.1).
       themeMode: ThemeMode.dark,
+      // Sprachwahl: locale steuert auch die Material-Systemtexte
+      // (Auswahlmenüs, Barrierefreiheit), der eigene Katalog die UI.
+      locale: i18n.locale,
+      supportedLocales: const [Locale('de'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       initialRoute: '/',
       routes: {
         // Splash entscheidet: Willkommen/Login, Onboarding oder Shell.
@@ -74,7 +97,16 @@ class MotoRouteApp extends StatelessWidget {
         '/about': (context) => const AboutScreen(),
         '/search': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
-          return SearchScreen(addWaypointMode: args?['addWaypoint'] == true);
+          return SearchScreen(
+            addWaypointMode: args?['addWaypoint'] == true,
+            returnResult: args?['returnResult'] == true,
+          );
+        },
+        '/route-start': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          return StartPointSelectionScreen(
+            destination: args?['destination'] as Waypoint,
+          );
         },
         '/route-style': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
@@ -136,7 +168,6 @@ class MotoRouteApp extends StatelessWidget {
           return GroupRideScreen(routeId: args?['routeId'] as String);
         },
       },
-      ),
     );
   }
 }

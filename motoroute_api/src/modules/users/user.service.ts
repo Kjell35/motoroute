@@ -33,7 +33,9 @@ export class UserService {
     }
     const { data, error } = await this.supabase
       .from(this.table)
-      .select('id, email, display_name, avatar_url, plan, updated_at')
+      .select(
+        'id, email, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc, bio, plan, updated_at',
+      )
       .eq('id', user.id)
       .maybeSingle();
 
@@ -62,8 +64,14 @@ export class UserService {
       data ?? {
         id: user.id,
         email: user.email ?? null,
+        username: null,
         display_name: null,
+        first_name: null,
+        chat_name_mode: 'username',
+        chat_display_name: null,
         avatar_url: null,
+        vehicle_desc: null,
+        bio: null,
         plan: 'free' as const,
         updated_at: null,
       };
@@ -93,18 +101,53 @@ export class UserService {
    * User-ID kommt IMMER aus dem validierten JWT, nie aus dem Body -
    * sonst könnte ein Nutzer fremde Profile überschreiben.
    */
-  async updateMe(user: AuthenticatedUser, dto: { displayName?: string; avatarUrl?: string }): Promise<unknown> {
+  async updateMe(
+    user: AuthenticatedUser,
+    dto: {
+      displayName?: string;
+      avatarUrl?: string;
+      username?: string;
+      firstName?: string;
+      chatNameMode?: string;
+      chatDisplayName?: string;
+    },
+  ): Promise<unknown> {
     if (this.supabase == null) {
       throw new HttpException(
         { error: 'DB_NOT_CONFIGURED', message: 'User storage is not configured' },
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
+
+    // Chat-Anzeigename-Modus serverseitig validieren (Client-Vertrag):
+    // Modus 'custom' ohne nicht-leeren Namen ist ungueltig - sonst
+    // waere der Chat-Namen jeder Person "leer".
+    let mode = dto.chatNameMode;
+    if (mode !== undefined && !['username', 'first_name', 'custom'].includes(mode)) {
+      throw new HttpException(
+        { error: 'VALIDATION_ERROR', message: 'chatNameMode must be username | first_name | custom' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (mode === 'custom') {
+      const customName = dto.chatDisplayName?.trim() ?? '';
+      if (customName.length === 0) {
+        throw new HttpException(
+          { error: 'VALIDATION_ERROR', message: 'chatDisplayName required when chatNameMode = custom' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const { data, error } = await this.supabase
       .from(this.table)
       .update({
         ...(dto.displayName !== undefined ? { display_name: dto.displayName } : {}),
         ...(dto.avatarUrl !== undefined ? { avatar_url: dto.avatarUrl } : {}),
+        ...(dto.username !== undefined ? { username: dto.username } : {}),
+        ...(dto.firstName !== undefined ? { first_name: dto.firstName } : {}),
+        ...(mode !== undefined ? { chat_name_mode: mode } : {}),
+        ...(dto.chatDisplayName !== undefined ? { chat_display_name: dto.chatDisplayName } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
@@ -119,6 +162,10 @@ export class UserService {
           email: user.email,
           displayName: dto.displayName,
           avatarUrl: dto.avatarUrl,
+          username: dto.username,
+          firstName: dto.firstName,
+          chatNameMode: dto.chatNameMode,
+          chatDisplayName: dto.chatDisplayName,
         });
         return created;
       }
@@ -197,7 +244,16 @@ export class UserService {
     }
     return { deleted: true };
   }
-  async upsert(body: { id: string; email?: string; displayName?: string; avatarUrl?: string }): Promise<unknown> {
+  async upsert(body: {
+    id: string;
+    email?: string;
+    displayName?: string;
+    avatarUrl?: string;
+    username?: string;
+    firstName?: string;
+    chatNameMode?: string;
+    chatDisplayName?: string;
+  }): Promise<unknown> {
     if (this.supabase == null) {
       throw new HttpException(
         { error: 'DB_NOT_CONFIGURED', message: 'User storage is not configured' },
@@ -212,6 +268,10 @@ export class UserService {
           email: body.email ?? null,
           display_name: body.displayName ?? null,
           ...(body.avatarUrl !== undefined ? { avatar_url: body.avatarUrl } : {}),
+          ...(body.username !== undefined ? { username: body.username } : {}),
+          ...(body.firstName !== undefined ? { first_name: body.firstName } : {}),
+          ...(body.chatNameMode !== undefined ? { chat_name_mode: body.chatNameMode } : {}),
+          ...(body.chatDisplayName !== undefined ? { chat_display_name: body.chatDisplayName } : {}),
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'id' },

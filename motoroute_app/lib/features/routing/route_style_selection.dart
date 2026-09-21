@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
@@ -64,7 +65,7 @@ class _RouteStyleSelectionScreenState extends ConsumerState<RouteStyleSelectionS
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: Text('Fahrstil wählen', style: AppTypography.title),
+        title: Text(ref.watch(i18nProvider).routeStyleTitle, style: AppTypography.title),
       ),
       body: SafeArea(
         child: Column(
@@ -97,7 +98,7 @@ class _RouteStyleSelectionScreenState extends ConsumerState<RouteStyleSelectionS
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Vermeiden', style: AppTypography.caption),
+                  Text(ref.watch(i18nProvider).avoid, style: AppTypography.caption),
                   const SizedBox(height: AppSpacing.sm),
                   Wrap(
                     spacing: AppSpacing.sm,
@@ -108,9 +109,10 @@ class _RouteStyleSelectionScreenState extends ConsumerState<RouteStyleSelectionS
                           selected: _avoid.contains(option),
                           label: Text(
                             switch (option) {
-                              AvoidOption.highway => 'Autobahn',
-                              AvoidOption.ferry => 'Fähre',
-                              AvoidOption.toll => 'Maut',
+                              AvoidOption.highway =>
+                                ref.watch(i18nProvider).avoidHighway,
+                              AvoidOption.ferry => ref.watch(i18nProvider).avoidFerry,
+                              AvoidOption.toll => ref.watch(i18nProvider).avoidToll,
                             },
                             style: AppTypography.caption,
                           ),

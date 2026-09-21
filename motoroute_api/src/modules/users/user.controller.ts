@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Put, Post, Req, UseGuards } from '@nestjs/common';
-import { IsOptional, IsString, Length, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, Length, Matches, MaxLength, MinLength } from 'class-validator';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
 import { UserService } from './user.service';
 
@@ -17,6 +17,28 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(500)
   avatarUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(3, 40)
+  @Matches(/^[a-zA-Z0-9_-]+$/, {
+    message: 'username darf nur Buchstaben, Zahlen, _ und - enthalten',
+  })
+  username?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 80)
+  firstName?: string;
+
+  @IsOptional()
+  @IsIn(['username', 'first_name', 'custom'])
+  chatNameMode?: 'username' | 'first_name' | 'custom';
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 80)
+  chatDisplayName?: string;
 }
 
 /**

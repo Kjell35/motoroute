@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
@@ -91,20 +92,18 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
           children: [
             const Icon(Icons.phone_iphone, color: AppColors.accentPrimaryDark),
             const SizedBox(width: AppSpacing.sm),
-            Text('Gerät merken?', style: AppTypography.title),
+            Text(ref.read(i18nProvider).tr('auth.rememberQuestion'), style: AppTypography.title),
           ],
         ),
         content: Text(
-          'Wenn du das Gerät merkst, bleibst du nach einem App-Neustart '
-          'angemeldet. Andernfalls musst du dich beim nächsten Start '
-          'erneut anmelden.\n\nWir fragen dich bei jeder Anmeldung neu.',
+          ref.read(i18nProvider).tr('auth.rememberExplanation'),
           style: AppTypography.caption,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Nur diese Sitzung',
-                style: TextStyle(color: AppColors.textSecondaryDark)),
+            child: Text(ref.read(i18nProvider).tr('auth.sessionOnly'),
+                style: const TextStyle(color: AppColors.textSecondaryDark)),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -112,7 +111,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
               backgroundColor: AppColors.accentPrimaryDark,
               foregroundColor: AppColors.textPrimaryDark,
             ),
-            child: const Text('Gerät merken'),
+            child: Text(ref.read(i18nProvider).rememberDevice),
           ),
         ],
       ),
@@ -122,6 +121,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
+    final i18n = ref.watch(i18nProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
@@ -150,7 +150,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  _isRegister ? 'Willkommen an Bord!' : 'Willkommen zurück!',
+                  _isRegister ? i18n.tr('auth.welcomeRegister') : i18n.tr('auth.welcomeLogin'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 26,
@@ -161,8 +161,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   _isRegister
-                      ? 'Erstelle dein MotoRoute-Konto'
-                      : 'Schön, dass du wieder fährst.',
+                      ? i18n.tr('auth.welcomeRegisterSub')
+                      : i18n.tr('auth.welcomeLoginSub'),
                   textAlign: TextAlign.center,
                   style: AppTypography.caption,
                 ),
@@ -171,7 +171,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                   TextField(
                     controller: _nameController,
                     textCapitalization: TextCapitalization.words,
-                    decoration: _inputDecoration('Dein Name (optional)'),
+                    decoration: _inputDecoration(i18n.tr('auth.yourName')),
                   ),
                   const SizedBox(height: AppSpacing.md),
                 ],
@@ -179,13 +179,13 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
-                  decoration: _inputDecoration('E-Mail'),
+                  decoration: _inputDecoration(i18n.email),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscure,
-                  decoration: _inputDecoration('Passwort').copyWith(
+                  decoration: _inputDecoration(i18n.password).copyWith(
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscure ? Icons.visibility_off : Icons.visibility,
@@ -227,7 +227,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : Text(
-                            _isRegister ? 'Konto erstellen' : 'Anmelden',
+                            _isRegister ? i18n.register : i18n.login,
                             style: const TextStyle(
                                 fontWeight: FontWeight.w800, fontSize: 16),
                           ),
@@ -243,17 +243,17 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                         }),
                   child: Text(
                     _isRegister
-                        ? 'Ich habe schon ein Konto - Anmelden'
-                        : 'Neu hier? Konto erstellen',
+                        ? i18n.tr('auth.hasAccount')
+                        : i18n.tr('auth.newHere'),
                     style: const TextStyle(color: AppColors.accentSecondary),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 TextButton(
                   onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
-                  child: const Text(
-                    'Erstmal ohne Konto ansehen',
-                    style: TextStyle(color: AppColors.textMutedDark),
+                  child: Text(
+                    i18n.tr('auth.browseWithoutAccount'),
+                    style: const TextStyle(color: AppColors.textMutedDark),
                   ),
                 ),
               ],

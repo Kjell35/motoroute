@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
@@ -57,6 +58,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _requestLocationPermission();
     _loadStyle();
     _startBikerPoiSync();
+    // Hell/Dunkel-Umschaltung aus den Einstellungen: Karte lädt den
+    // anderen Vektor-Stil sofort nach (ohne Screen-Neustart).
+    ref.listenManual<MapStyleChoice>(mapStyleChoiceProvider, (prev, next) {
+      if (prev != next) _loadStyle();
+    });
   }
 
   /// Biker-POI-Live-Anbindung: 1) WS-Push (bikerpoi.batch über die
@@ -107,7 +113,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _loadStyle() async {
-    final style = await loadMapStyle();
+    final choice = ref.read(mapStyleChoiceProvider);
+    final style = await loadMapStyle(choice);
     if (mounted) setState(() => _styleString = style);
   }
 
@@ -514,31 +521,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  /// POI als Ziel: Start = aktueller Standort, dann Fahrstil-Auswahl.
+  /// POI als Ziel: Der Nutzer wählt den Startpunkt (GPS oder Adresse)
+  /// im Auswahl-Screen - kein stiller GPS-Zwang mehr.
   Future<void> _startRoutingFrom(Poi poi) async {
-    try {
-      final position = await LocationRepository().getCurrentPosition();
-      final destination = Waypoint(
-        lat: poi.lat,
-        lng: poi.lng,
-        label: poi.name,
+    final destination = Waypoint(
+      lat: poi.lat,
+      lng: poi.lng,
+      label: poi.name,
+    );
+    ref.read(waypointListProvider.notifier).state = [destination];
+    if (mounted) {
+      Navigator.of(context).pushNamed(
+        '/route-start',
+        arguments: {'destination': destination},
       );
-      ref.read(waypointListProvider.notifier).state = [
-        Waypoint(lat: position.latitude, lng: position.longitude, label: 'Start'),
-        destination,
-      ];
-      if (mounted) {
-        Navigator.of(context).pushNamed('/route-style', arguments: {
-          'start': ref.read(waypointListProvider).first,
-          'destination': destination,
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Standort nicht verfügbar - Ziel kann nicht gesetzt werden')),
-        );
-      }
     }
   }
 
@@ -619,8 +615,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   bottom: AppSpacing.xs,
                   child: Text(
                     isPlaceholderStyle(_styleString!)
-                        ? 'Karte offline - POIs, Routing und Navigation funktionieren weiter'
-                        : '© OpenStreetMap-Mitwirkende © CARTO',
+                        ? ref.watch(i18nProvider).mapOfflineNote
+                        : ref.watch(i18nProvider).attribution,
                     style: const TextStyle(
                       color: AppColors.textMutedDark,
                       fontSize: 10,

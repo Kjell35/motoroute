@@ -64,8 +64,14 @@ describe('UserService', () => {
     expect(result).toEqual({
       id: 'u-1',
       email: null,
+      username: null,
       display_name: null,
+      first_name: null,
+      chat_name_mode: 'username',
+      chat_display_name: null,
       avatar_url: null,
+      vehicle_desc: null,
+      bio: null,
       plan: 'free',
       updated_at: null,
       entitlements: {

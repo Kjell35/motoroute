@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
@@ -65,6 +66,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final notifications = ref.watch(notificationsEnabledProvider);
     final totalUnread = ref.watch(chatOverviewProvider).totalUnread;
     final showChatBadge = notifications && totalUnread > 0;
+    final i18n = ref.watch(i18nProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
@@ -95,15 +97,15 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             setState(() => _tab = index);
           },
           destinations: [
-            const NavigationDestination(
-              icon: Icon(Icons.map_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: Icon(Icons.map, color: AppColors.accentPrimaryDark),
-              label: 'Karte',
+            NavigationDestination(
+              icon: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.map, color: AppColors.accentPrimaryDark),
+              label: i18n.mapTab,
             ),
-            const NavigationDestination(
-              icon: Icon(Icons.route_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: Icon(Icons.route, color: AppColors.accentPrimaryDark),
-              label: 'Touren',
+            NavigationDestination(
+              icon: const Icon(Icons.route_outlined, color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.route, color: AppColors.accentPrimaryDark),
+              label: i18n.toursTab,
             ),
             NavigationDestination(
               icon: showChatBadge
@@ -114,12 +116,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                     )
                   : const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark),
               selectedIcon: const Icon(Icons.forum, color: AppColors.accentPrimaryDark),
-              label: 'Chat',
+              label: i18n.chatTab,
             ),
-            const NavigationDestination(
-              icon: Icon(Icons.settings_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: Icon(Icons.settings, color: AppColors.accentPrimaryDark),
-              label: 'Einstellungen',
+            NavigationDestination(
+              icon: const Icon(Icons.settings_outlined, color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.settings, color: AppColors.accentPrimaryDark),
+              label: i18n.settingsTab,
             ),
           ],
         ),

@@ -21,6 +21,13 @@ class ChatUser {
   final String id;
   final String? username;
   final String? displayName;
+
+  /// Chat-Anzeigename-Steuerung (Profil-Einstellung des Senders):
+  /// 'username' | 'first_name' | 'custom'. null = Legacy/Default
+  /// (username). Serverseitig validiert (user.service.updateMe).
+  final String? chatNameMode;
+  final String? firstName;
+  final String? chatDisplayName;
   final String? avatarUrl;
   final String? vehicleDesc;
   final String? bio;
@@ -31,6 +38,9 @@ class ChatUser {
     required this.id,
     this.username,
     this.displayName,
+    this.chatNameMode,
+    this.firstName,
+    this.chatDisplayName,
     this.avatarUrl,
     this.vehicleDesc,
     this.bio,
@@ -42,6 +52,9 @@ class ChatUser {
         id: json['id'] as String,
         username: json['username'] as String?,
         displayName: json['display_name'] as String?,
+        chatNameMode: json['chat_name_mode'] as String?,
+        firstName: json['first_name'] as String?,
+        chatDisplayName: json['chat_display_name'] as String?,
         avatarUrl: json['avatar_url'] as String?,
         vehicleDesc: json['vehicle_desc'] as String?,
         bio: json['bio'] as String?,
@@ -49,10 +62,37 @@ class ChatUser {
         lastSeenAt: json['last_seen_at'] as String?,
       );
 
-  /// Anzeigename mit Fallback-Kette (Abschnitt 3: Profilansicht).
+  /// Anzeigename GEMAESS der Profil-Einstellung des Users: Benutzername,
+  /// Vorname oder eigener Anzeigename - mit robuster Fallback-Kette,
+  /// falls die gewählte Quelle leer ist (z. B. Modus 'first_name', aber
+  /// kein Vorname hinterlegt -> username -> 'Biker').
+  ///
+  /// WICHTIG (Rückwärtskompatibilität): chat_name_mode == null (Bestand
+  /// vor der Einführung) behält das bisherige Verhalten
+  /// (display_name ?? username) - niemandes Chat-Name ändert sich
+  /// stillschweigend, bis er selbst einen Modus wählt.
   String get effectiveName {
-    final n = displayName ?? username;
-    return (n == null || n.isEmpty) ? 'Biker' : n;
+    final mode = chatNameMode;
+    final String? primary;
+    if (mode == null) {
+      // Legacy: bisherige Kette unverändert.
+      primary = displayName ?? username;
+    } else {
+      primary = switch (mode) {
+        'first_name' => firstName,
+        'custom' => chatDisplayName,
+        _ => username ?? displayName,
+      };
+    }
+    if (primary != null && primary.trim().isNotEmpty) return primary.trim();
+    // Fallback-Kette über die anderen Quellen.
+    final others = [
+      username,
+      displayName,
+      firstName,
+      chatDisplayName,
+    ].where((n) => n != null && n.trim().isNotEmpty).toList();
+    return others.isEmpty ? 'Biker' : others.first!.trim();
   }
 }
 
@@ -197,13 +237,27 @@ class ChatRepository {
     return ChatUser.fromJson(res.data!);
   }
 
-  Future<ChatUser> updateMe(String token, {String? displayName, String? bio, String? vehicleDesc, bool? showOnline}) async {
+  Future<ChatUser> updateMe(
+    String token, {
+    String? displayName,
+    String? bio,
+    String? vehicleDesc,
+    bool? showOnline,
+    String? username,
+    String? firstName,
+    String? chatNameMode,
+    String? chatDisplayName,
+  }) async {
     _auth(token);
     final res = await _dio.put<Map<String, dynamic>>('/v1/chat/me', data: {
       if (displayName != null) 'displayName': displayName,
       if (bio != null) 'bio': bio,
       if (vehicleDesc != null) 'vehicleDesc': vehicleDesc,
       if (showOnline != null) 'showOnline': showOnline,
+      if (username != null) 'username': username,
+      if (firstName != null) 'firstName': firstName,
+      if (chatNameMode != null) 'chatNameMode': chatNameMode,
+      if (chatDisplayName != null) 'chatDisplayName': chatDisplayName,
     });
     return ChatUser.fromJson(res.data!);
   }

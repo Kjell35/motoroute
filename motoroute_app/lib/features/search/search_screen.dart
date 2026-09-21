@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
@@ -22,7 +23,16 @@ class SearchScreen extends ConsumerStatefulWidget {
   /// starten (verdrahtet mit Screen 9 "Wegpunkt hinzufügen").
   final bool addWaypointMode;
 
-  const SearchScreen({super.key, this.addWaypointMode = false});
+  /// Wenn true: Ergebnis an den Aufrufer ZURÜCKGEBEN (pop) statt einen
+  /// Routing-Flow zu starten - genutzt von der Startpunkt-Auswahl
+  /// ("Adresse als Startpunkt").
+  final bool returnResult;
+
+  const SearchScreen({
+    super.key,
+    this.addWaypointMode = false,
+    this.returnResult = false,
+  });
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -50,6 +60,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _selectResult(SearchResult result) {
     final destination = Waypoint(lat: result.lat, lng: result.lng, label: result.label);
 
+    // Startpunkt-Auswahl: Ergebnis zurückgeben, kein eigener Flow.
+    if (widget.returnResult) {
+      Navigator.of(context).pop(result);
+      return;
+    }
+
     if (widget.addWaypointMode) {
       final waypoints = [...ref.read(waypointListProvider)];
       if (waypoints.length < 2) {
@@ -70,19 +86,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     final waypoints = ref.read(waypointListProvider);
+    // Kein hartcodierter München-Start mehr: Der Nutzer wählt den
+    // Startpunkt (GPS oder Adresse) im nächsten Schritt.
     ref.read(waypointListProvider.notifier).state = [
-      if (waypoints.isEmpty)
-        const Waypoint(lat: 48.1351, lng: 11.5820, label: 'München')
-      else
-        waypoints.first,
+      if (waypoints.isNotEmpty) waypoints.first,
       destination,
     ];
-    Navigator.of(context).pushNamed(
-      '/route-style',
-      arguments: {
-        'start': ref.read(waypointListProvider).first,
-        'destination': destination,
-      },
+    Navigator.of(context).pushReplacementNamed(
+      '/route-start',
+      arguments: {'destination': destination},
     );
   }
 
@@ -95,7 +107,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
         title: Text(
-          widget.addWaypointMode ? 'Wegpunkt suchen' : 'Zielsuche',
+          widget.addWaypointMode
+              ? ref.watch(i18nProvider).searchWaypointTitle
+              : ref.watch(i18nProvider).searchTitle,
           style: AppTypography.title,
         ),
       ),
@@ -146,7 +160,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       },
                     ),
                     hintStyle: AppTypography.caption,
-                    hintText: 'Ort, PLZ oder POI suchen',
+                    hintText: ref.watch(i18nProvider).searchHint,
                   ),
                 ),
               ),

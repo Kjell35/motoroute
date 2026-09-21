@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
@@ -13,6 +14,7 @@ import 'package:motoroute_app/core/utils/formatters.dart' show DistanceUnit;
 import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
+import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
 
 /// Screen 11: Einstellungen (vollständig).
@@ -197,21 +199,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             _buildChatStatusSection(),
             const SizedBox(height: AppSpacing.lg),
+            _buildChatNameSection(),
+            const SizedBox(height: AppSpacing.lg),
             _buildServerSection(),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection('Sprache & Erscheinungsbild', [
-              ListTile(
-                leading: const Icon(Icons.language, color: AppColors.textSecondaryDark, size: 20),
-                title: Text('Sprache', style: AppTypography.body),
-                trailing: Text('Deutsch', style: AppTypography.caption),
-              ),
-              ListTile(
-                leading: const Icon(Icons.dark_mode_outlined, color: AppColors.textSecondaryDark, size: 20),
-                title: Text('Erscheinungsbild', style: AppTypography.body),
-                subtitle: Text('Dunkles Cockpit (für Sonne im Visier optimiert)', style: AppTypography.caption),
-                trailing: const Icon(Icons.lock_outline, size: 16, color: AppColors.textMutedDark),
-              ),
-            ]),
+            _buildLanguageAppearanceSection(),
             const SizedBox(height: AppSpacing.lg),
             _buildSection('Datenschutz & Recht', [
               _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Welche Daten MotoRoute verarbeitet', () {
@@ -552,6 +544,189 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Chat-Status (read-only): Token kommt automatisch aus der App-
   // Anmeldung (Auth-Brücke) - hier gibt es bewusst kein Eingabefeld mehr.
   // ------------------------------------------------------------------
+  /// Sprache (DE/EN) + Kartenstil (HELL als Standard / Dunkel). Beide
+  /// Wahlem werden GERAETEWEIT persistiert und wirken sofort (Provider).
+  Widget _buildLanguageAppearanceSection() {
+    final i18n = ref.watch(i18nProvider);
+    final currentLanguage = ref.watch(languageControllerProvider);
+    final currentStyle = ref.watch(mapStyleChoiceProvider);
+
+    return _buildSection(i18n.tr('settings.languageAndAppearance'), [
+      ListTile(
+        leading: const Icon(Icons.language, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.languageLabel, style: AppTypography.body),
+        trailing: SegmentedButton<AppLanguage>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: AppLanguage.de, label: const Text('🇩🇪 DE')),
+            ButtonSegment(value: AppLanguage.en, label: const Text('🇬🇧 EN')),
+          ],
+          selected: {currentLanguage},
+          onSelectionChanged: (selection) {
+            ref.read(languageControllerProvider.notifier).set(selection.first);
+          },
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.mapStyleTitle, style: AppTypography.body),
+        trailing: SegmentedButton<MapStyleChoice>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: MapStyleChoice.light, label: Text(i18n.light)),
+            ButtonSegment(value: MapStyleChoice.dark, label: Text(i18n.dark)),
+          ],
+          selected: {currentStyle},
+          onSelectionChanged: (selection) {
+            ref.read(mapStyleChoiceProvider.notifier).set(selection.first);
+          },
+        ),
+      ),
+    ]);
+  }
+
+  /// Chat-Anzeigename: welcher Name in ALLEN Chats erscheint
+  /// (Benutzername / Vorname / eigener Name). Persistiert im Profil
+  /// (users-Tabelle) - gilt damit geräteübergreifend.
+  Widget _buildChatNameSection() {
+    final i18n = ref.watch(i18nProvider);
+    final me = ref.watch(chatMeProvider).value;
+    final token = ref.watch(chatSessionTokenProvider);
+
+    return _buildSection(i18n.tr('settings.chatName'), [
+      ListTile(
+        leading: const Icon(Icons.badge_outlined, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.tr('settings.chatName.mode'), style: AppTypography.body),
+        subtitle: Text(
+          me?.effectiveName ?? '–',
+          style: AppTypography.caption,
+        ),
+        trailing: token == null
+            ? null
+            : SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: 'username', label: Text(i18n.tr('settings.chatName.username'))),
+                  ButtonSegment(value: 'first_name', label: Text(i18n.tr('settings.chatName.firstName'))),
+                  ButtonSegment(value: 'custom', label: Text(i18n.tr('settings.chatName.custom'))),
+                ],
+                selected: {(me?.chatNameMode ?? 'username')},
+                onSelectionChanged: (selection) async {
+                  final mode = selection.first;
+                  if (mode == 'custom') {
+                    await _editChatDisplayName();
+                    return;
+                  }
+                  await _saveChatNameSettings(chatNameMode: mode);
+                },
+              ),
+      ),
+      if (me?.chatNameMode == 'custom')
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.edit_outlined, color: AppColors.textSecondaryDark, size: 20),
+          title: Text(i18n.tr('settings.chatName.customLabel'), style: AppTypography.body),
+          subtitle: Text(me?.chatDisplayName ?? '–', style: AppTypography.caption),
+          trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.textMutedDark),
+          onTap: _editChatDisplayName,
+        ),
+      ListTile(
+        dense: true,
+        leading: const Icon(Icons.person_outline, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.firstName, style: AppTypography.body),
+        subtitle: Text(me?.firstName ?? '–', style: AppTypography.caption),
+        trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.textMutedDark),
+        onTap: token == null ? null : _editFirstName,
+      ),
+    ]);
+  }
+
+  Future<void> _saveChatNameSettings({String? chatNameMode, String? chatDisplayName, String? firstName}) async {
+    final token = ref.read(chatSessionTokenProvider);
+    if (token == null) return;
+    try {
+      await ref.read(chatRepositoryProvider).updateMe(
+            token,
+            chatNameMode: chatNameMode,
+            chatDisplayName: chatDisplayName,
+            firstName: firstName,
+          );
+      ref.invalidate(chatMeProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ref.read(i18nProvider).tr('settings.saved'))),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ref.read(i18nProvider).tr('errors.saveFailed'))),
+      );
+    }
+  }
+
+  Future<void> _editChatDisplayName() async {
+    final me = ref.read(chatMeProvider).value;
+    final controller = TextEditingController(text: me?.chatDisplayName ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.bgSurfaceDark,
+        title: Text(ref.read(i18nProvider).tr('settings.chatName.customLabel'), style: AppTypography.title),
+        content: TextField(
+          controller: controller,
+          maxLength: 80,
+          autofocus: true,
+          style: AppTypography.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(ref.read(i18nProvider).cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            child: Text(ref.read(i18nProvider).save),
+          ),
+        ],
+      ),
+    );
+    if (name == null || !mounted) return;
+    if (name.isEmpty) return;
+    await _saveChatNameSettings(chatNameMode: 'custom', chatDisplayName: name);
+  }
+
+  Future<void> _editFirstName() async {
+    final me = ref.read(chatMeProvider).value;
+    final controller = TextEditingController(text: me?.firstName ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.bgSurfaceDark,
+        title: Text(ref.read(i18nProvider).firstName, style: AppTypography.title),
+        content: TextField(
+          controller: controller,
+          maxLength: 80,
+          autofocus: true,
+          style: AppTypography.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(ref.read(i18nProvider).cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            child: Text(ref.read(i18nProvider).save),
+          ),
+        ],
+      ),
+    );
+    if (name == null || !mounted) return;
+    await _saveChatNameSettings(firstName: name);
+  }
+
   Widget _buildChatStatusSection() {
     final token = ref.watch(chatSessionTokenProvider);
     final me = ref.watch(chatMeProvider).value;

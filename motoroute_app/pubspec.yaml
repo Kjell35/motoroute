@@ -37,6 +37,9 @@ dependencies:
   battery_plus: ^7.1.1
   web_socket_channel: ^3.0.3
   shared_preferences: ^2.5.5
+  intl: any
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
@@ -56,6 +59,7 @@ flutter:
     # moto-route-dark (Raster-Fallback). Ohne Registrierung hier liefert
     # rootBundle.loadString einen Fehler -> leerer Stil = Blackscreen.
     - assets/styles/carto-dark-matter.json
+    - assets/styles/carto-positron-gl-style.json
     - assets/styles/moto-route-dark.json
 
 # Launcher-Icon aus tool/motoroute_icon.png (generiert durch

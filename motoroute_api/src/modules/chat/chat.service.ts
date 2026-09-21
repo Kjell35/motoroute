@@ -1,6 +1,8 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -246,7 +248,7 @@ export class ChatService {
     const db = this.scoped(user);
     const { data, error } = await db
       .from('users')
-      .select('id, username, display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
+      .select('id, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -257,7 +259,7 @@ export class ChatService {
     const { data: created, error: insertError } = await db
       .from('users')
       .insert({ id: user.id, email: user.email ?? null })
-      .select('id, username, display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
+      .select('id, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
       .single();
     if (insertError) mapSupabaseError('getProfile.create', insertError);
     return created;
@@ -273,11 +275,30 @@ export class ChatService {
     if (dto['vehicleDesc'] !== undefined) patch['vehicle_desc'] = dto['vehicleDesc'];
     if (dto['bio'] !== undefined) patch['bio'] = dto['bio'];
     if (dto['showOnline'] !== undefined) patch['show_online'] = dto['showOnline'];
+    if (dto['firstName'] !== undefined) patch['first_name'] = dto['firstName'];
+    if (dto['chatNameMode'] !== undefined) patch['chat_name_mode'] = dto['chatNameMode'];
+    if (dto['chatDisplayName'] !== undefined) patch['chat_display_name'] = dto['chatDisplayName'];
+    // Serverseitiger Vertrag: Modus 'custom' ohne nicht-leeren Namen ist
+    // ungueltig - sonst erschiene der Nutzer im Chat ohne Namen.
+    if (patch['chat_name_mode'] === 'custom') {
+      const custom = String(
+        patch['chat_display_name'] ?? dto['chat_display_name'] ?? '',
+      ).trim();
+      if (custom.length === 0) {
+        throw new HttpException(
+          {
+            error: 'VALIDATION_ERROR',
+            message: 'chatDisplayName required when chatNameMode = custom',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
 
     const { data, error } = await db
       .from('users')
       .upsert({ id: user.id, ...patch }, { onConflict: 'id' })
-      .select('id, username, display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
+      .select('id, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
       .single();
     if (error) mapSupabaseError('updateProfile', error);
     return data;
@@ -290,7 +311,7 @@ export class ChatService {
     if (term.length < 2) return [];
     const { data, error } = await db
       .from('users')
-      .select('id, username, display_name, avatar_url, vehicle_desc')
+      .select('id, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc')
       .or(`username.ilike.%${term}%,display_name.ilike.%${term}%`)
       .neq('id', user.id)
       .limit(limit);
@@ -303,7 +324,7 @@ export class ChatService {
     const db = this.scoped(user);
     const { data, error } = await db
       .from('users')
-      .select('id, username, display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
+      .select('id, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc, bio, show_online, last_seen_at')
       .eq('id', userId)
       .maybeSingle();
     if (error) mapSupabaseError('getUserProfile', error);
@@ -409,7 +430,7 @@ export class ChatService {
     const db = this.scoped(user);
     const { data, error } = await db
       .from('conversation_members')
-      .select('user_id, role, joined_at, users:users!inner(id, username, display_name, avatar_url, show_online, last_seen_at)')
+      .select('user_id, role, joined_at, users:users!inner(id, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, show_online, last_seen_at)')
       .eq('conversation_id', conversationId);
     if (error) mapSupabaseError('listMembers', error);
     return (data ?? []).map((row: Record<string, unknown>) => ({
@@ -443,7 +464,7 @@ export class ChatService {
     let query = db
       .from('messages')
       .select(
-        'id, conversation_id, sender_id, content, attachment, reply_to_id, created_at, updated_at, deleted_at, sender:users!sender_id(username, display_name, avatar_url)',
+        'id, conversation_id, sender_id, content, attachment, reply_to_id, created_at, updated_at, deleted_at, sender:users!sender_id(username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url)',
       )
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: false })

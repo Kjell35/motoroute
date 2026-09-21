@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
@@ -44,9 +45,11 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
 
   /// Gleicher Stil wie die Hauptkarte (geteilter Loader) - die Navigation
   /// hatte zuvor einen eigenen, nie gesetzten Stil-Eingang (MAP_STYLE_URL)
-  /// und fuhr deshalb mit leerem Stil auf (schwarzer Hintergrund).
+  /// und fuhr deshalb mit leerem Stil auf (schwarzer Hintergrund). Die
+  /// Hell/Dunkel-Wahl aus den Einstellungen gilt auch hier.
   Future<void> _loadStyle() async {
-    final style = await loadMapStyle();
+    final choice = ref.read(mapStyleChoiceProvider);
+    final style = await loadMapStyle(choice);
     if (mounted) setState(() => _styleString = style);
   }
 
@@ -182,7 +185,7 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
   Widget _buildTopZone(ComputedRoute? route, NavigationState state) {
     final nextInstruction = (route != null && route.segments.isNotEmpty)
         ? route.segments.first.instruction
-        : 'Route folgen';
+        : ref.watch(i18nProvider).navFollowRoute;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
@@ -244,7 +247,7 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
       bg = AppColors.statusWarning.withValues(alpha: 0.15);
       fg = AppColors.statusWarning;
       icon = Icons.refresh;
-      text = 'Route wird angepasst…';
+      text = ref.watch(i18nProvider).navRerouting;
     } else if (state.rerouteReason != null) {
       bg = AppColors.accentSecondary.withValues(alpha: 0.15);
       fg = AppColors.accentSecondary;
@@ -311,7 +314,7 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
           Expanded(
             child: _CircleButton(
               icon: Icons.stop,
-              label: 'Beenden',
+              label: ref.watch(i18nProvider).navEnd,
               onTap: () {
                 ref.read(navigationControllerProvider.notifier).stop();
                 Navigator.of(context).popUntil((r) => r.settings.name == '/map' || r.isFirst);
@@ -324,23 +327,23 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
   }
 }
 
-class _OffRouteBadge extends StatelessWidget {
+class _OffRouteBadge extends ConsumerWidget {
   const _OffRouteBadge();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: AppColors.statusWarning.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.route, color: AppColors.textPrimaryDark, size: 18),
-          SizedBox(width: AppSpacing.sm),
-          Text('Von der Route abgewichen', style: AppTypography.caption),
+          const Icon(Icons.route, color: AppColors.textPrimaryDark, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Text(ref.watch(i18nProvider).navOffRoute, style: AppTypography.caption),
         ],
       ),
     );
