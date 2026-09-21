@@ -52,7 +52,9 @@ jobs:
 
       - name: Tests
         working-directory: motoroute_app
-        run: flutter test
+        # machine-Reporter + unvollständige Ausgabe: Damit der echte
+        # Fehlertext im CI-Log sichtbar bleibt (statt nur "exit 1").
+        run: flutter test --reporter github
 
       - name: Debug-APK bauen
         working-directory: motoroute_app
