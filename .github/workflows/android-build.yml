@@ -80,7 +80,7 @@ jobs:
 
       - name: APK-Größe im Log
         working-directory: motoroute_app
-        run: ls -lh build/app/outputs/flutter-apk/app-debug.apk
+        run: ls -lh build/app/outputs/flutter-apk/ || find . -name "app-debug.apk" -exec ls -lh {} \;
 
       - name: APK als Artefakt hochladen
         uses: actions/upload-artifact@v4
