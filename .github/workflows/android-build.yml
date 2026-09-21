@@ -79,8 +79,8 @@ jobs:
             --body-file build-failure-tail.txt || echo "Issue nicht erstellt"
 
       - name: APK-Größe im Log
-        working-directory: motoroute_app/build/app/outputs/flutter-apk
-        run: ls -lh app-debug.apk
+        working-directory: motoroute_app
+        run: ls -lh build/app/outputs/flutter-apk/app-debug.apk
 
       - name: APK als Artefakt hochladen
         uses: actions/upload-artifact@v4
