@@ -46,6 +46,10 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Piniert: Neu erscheinende Stable-Varianten (z. B. 3.47.5)
+          # dürfen Builds nicht unvorhersehbar brechen. Upgrade bewusst
+          # per Commit (Version hier ändern + Tests beobachten).
+          flutter-version: 3.47.4
 
       - name: Pub-Abhängigkeiten
         working-directory: motoroute_app
