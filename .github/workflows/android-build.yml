@@ -52,9 +52,15 @@ jobs:
 
       - name: Tests
         working-directory: motoroute_app
-        # machine-Reporter + unvollständige Ausgabe: Damit der echte
-        # Fehlertext im CI-Log sichtbar bleibt (statt nur "exit 1").
-        run: flutter test --reporter github
+        # Ausgabe DOPPELT: ins Log und in die Step-Summary (öffentlich
+        # lesbar), damit der echte Fehlertext auch ohne Admin-Zugriff
+        # einsehbar ist.
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded 2>&1 | tee test-output.txt
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          tail -100 test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Debug-APK bauen
         working-directory: motoroute_app
