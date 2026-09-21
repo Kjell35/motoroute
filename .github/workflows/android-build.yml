@@ -66,7 +66,17 @@ jobs:
 
       - name: Debug-APK bauen
         working-directory: motoroute_app
-        run: flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }}
+        run: flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }} 2>&1 | tee build-output.txt
+      - name: Build-Fehler oeffentlich sichtbar machen (Issue)
+        if: failure()
+        working-directory: motoroute_app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail -80 build-output.txt > build-failure-tail.txt
+          gh issue create \
+            --title "CI-Build-Fehler @ ${{ github.sha }}" \
+            --body-file build-failure-tail.txt || echo "Issue nicht erstellt"
 
       - name: APK-Größe im Log
         working-directory: motoroute_app/build/app/outputs/flutter-apk
