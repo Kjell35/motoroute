@@ -52,7 +52,9 @@ jobs:
 
       - name: Tests
         working-directory: motoroute_app
-        run: flutter test 2>&1 | tee test-output.txt
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee test-output.txt
       - name: Test-Fehler oeffentlich sichtbar machen (Issue)
         if: failure()
         working-directory: motoroute_app
@@ -66,7 +68,9 @@ jobs:
 
       - name: Debug-APK bauen
         working-directory: motoroute_app
-        run: flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }} 2>&1 | tee build-output.txt
+        run: |
+          set -o pipefail
+          flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }} 2>&1 | tee build-output.txt
       - name: Build-Fehler oeffentlich sichtbar machen (Issue)
         if: failure()
         working-directory: motoroute_app
@@ -86,6 +90,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: motoRoute-debug-apk
-          path: motoroute_app/build/app/outputs/flutter-apk/app-debug.apk
+          path: motoroute_app/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
           retention-days: 30
