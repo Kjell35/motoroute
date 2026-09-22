@@ -661,16 +661,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
             const SizedBox(width: AppSpacing.sm),
             _VehicleSwitcher(current: vehicleType),
-            const SizedBox(width: AppSpacing.sm),
-            GestureDetector(
-              onTap: () => Navigator.of(context).pushNamed('/chat'),
-              child: const _ChatEntryButton(),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            GestureDetector(
-              onTap: () => Navigator.of(context).pushNamed('/settings'),
-              child: _buildIconBox(Icons.person_outline),
-            ),
           ],
         ),
       ),
@@ -812,57 +802,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         PoiCategory.pub => Icons.sports_bar,
         PoiCategory.snack => Icons.fastfood,
       };
-}
-
-/// 💬 Chat-Einstieg auf der Karte mit Unread-Badge (Abschnitt 17:
-/// „💬 Chat 🔴 3“) - liest den Overview-Controller, der auch ohne
-/// geöffneten Chat im Hintergrund aktuelle Zähler hält, sobald
-/// eine Session existiert.
-class _ChatEntryButton extends ConsumerWidget {
-  const _ChatEntryButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final unread = ref.watch(chatOverviewProvider).totalUnread;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: AppSpacing.touchTargetPlanning,
-          height: AppSpacing.touchTargetPlanning,
-          decoration: BoxDecoration(
-            color: AppColors.bgSurfaceDark,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderHairlineDark),
-          ),
-          child: const Icon(Icons.forum_outlined, color: AppColors.textPrimaryDark),
-        ),
-        if (unread > 0)
-          Positioned(
-            top: -4,
-            right: -4,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: AppColors.statusDanger,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.bgBaseDark, width: 2),
-              ),
-              constraints: const BoxConstraints(minWidth: 18),
-              child: Text(
-                unread > 99 ? '99+' : '$unread',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.textPrimaryDark,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }
 
 /// Fahrzeugtyp-Segment-Control - schreibt in den globalen

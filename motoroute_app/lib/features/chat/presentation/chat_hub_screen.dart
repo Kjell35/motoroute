@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
+import 'package:motoroute_app/core/theme/app_typography.dart';
 
 import '../chat_providers.dart';
 import '../data/chat_repository.dart';
@@ -41,6 +43,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
   Widget build(BuildContext context) {
     final state = ref.watch(chatOverviewProvider);
     final token = ref.watch(chatSessionTokenProvider);
+    final i18n = ref.watch(i18nProvider);
 
     if (token == null) {
       return const _NotSignedIn();
@@ -49,17 +52,18 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
-        title: const Text('💬 Chat'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text('💬 ${i18n.chatTab}', style: AppTypography.title),
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: AppColors.accentPrimaryDark,
           labelColor: AppColors.textPrimaryDark,
           unselectedLabelColor: AppColors.textSecondaryDark,
-          tabs: const [
-            Tab(text: '🌍 Öffentlich'),
-            Tab(text: '🔒 Privat'),
-            Tab(text: '👥 Gruppen'),
+          tabs: [
+            Tab(text: '🌍 ${i18n.chatPublic}'),
+            Tab(text: '🔒 ${i18n.chatPrivate}'),
+            Tab(text: '👥 ${i18n.chatGroups}'),
           ],
         ),
       ),

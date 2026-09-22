@@ -45,13 +45,35 @@ class AuthState {
   final AuthStep step;
   final String? error;
 
-  const AuthState({this.user, this.step = AuthStep.idle, this.error});
+  /// Wird bei JEDEM Tokenwechsel erhöht (Login, Restore, Silent-Refresh).
+  /// Die Auth→Chat-Brücke lauscht darauf und spiegelt den frischen Token
+  /// in den Chat-Session-Provider - sonst würde der Chat nach ~50 min
+  /// (Refresh) bzw. nach App-Neustart (Restore) mit einem veralteten
+  /// Token arbeiten.
+  final int tokenEpoch;
+
+  const AuthState({
+    this.user,
+    this.step = AuthStep.idle,
+    this.error,
+    this.tokenEpoch = 0,
+  });
 
   bool get isAuthenticated => user != null;
   bool get isBusy => step == AuthStep.busy;
 
-  AuthState copyWith({AuthUser? user, AuthStep? step, String? error}) =>
-      AuthState(user: user ?? this.user, step: step ?? this.step, error: error);
+  AuthState copyWith({
+    AuthUser? user,
+    AuthStep? step,
+    String? error,
+    int? tokenEpoch,
+  }) =>
+      AuthState(
+        user: user ?? this.user,
+        step: step ?? this.step,
+        error: error,
+        tokenEpoch: tokenEpoch ?? this.tokenEpoch,
+      );
 }
 
 class AuthException implements Exception {
@@ -118,7 +140,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
       _accessToken = access;
       _refreshToken = refresh;
-      state = AuthState(user: user);
+      state = AuthState(user: user, tokenEpoch: 1);
       _scheduleRefresh();
     } catch (_) {
       await _clearPersisted(prefs);
@@ -172,7 +194,7 @@ class AuthController extends StateNotifier<AuthState> {
         await _clearPersisted(prefs);
       }
 
-      state = AuthState(user: user);
+      state = AuthState(user: user, tokenEpoch: state.tokenEpoch + 1);
       _scheduleRefresh();
     } on DioException catch (e) {
       final code = e.response?.statusCode;
@@ -234,6 +256,8 @@ class AuthController extends StateNotifier<AuthState> {
           await prefs.setString(_kAccessToken, _accessToken!);
           await prefs.setString(_kRefreshToken, _refreshToken!);
         }
+        // Frischer Token an alle Mitläufer (Chat WS + REST) signalisieren.
+        state = state.copyWith(tokenEpoch: state.tokenEpoch + 1);
       }
       _scheduleRefresh();
     } catch (_) {
@@ -358,11 +382,24 @@ final authControllerProvider =
 /// Provider (WS + REST laufen automatisch mit) und meldet den Chat beim
 /// Logout ab. Die Chat-Schicht bleibt nichtswissend - der Token kommt
 /// aus EINEM Store (Architekturregel). In der HomeShell beobachtet.
+///
+/// WICHTIG - Sofort-Spiegelung beim ersten Lesen: Die Sitzung kann SCHON
+/// wiederhergestellt sein (Splash-Restore), bevor die Brücke erstmals
+/// aktiv wird. Ein reiner Listener würde diese "Änderung" verpassen und
+/// der Chat bliebe nach App-Neustart mit gemerktem Gerät tot.
 final authChatBridgeProvider = Provider<void>((ref) {
-  ref.listen<AuthState>(authControllerProvider, (prev, next) {
+  void mirror(AuthState next) {
     ref.read(chatSessionTokenProvider.notifier).state =
         next.user != null
             ? ref.read(authControllerProvider.notifier).accessToken
             : null;
-  });
+  }
+
+  // Sofort-Spiegel in einen Mikrotask verschoben: Riverpod verbietet
+  // Provider-Modifikationen während der eigenen Initialisierung - der
+  // Mikrotask läuft unmittelbar nach der Aktivierung, vor dem ersten
+  // Frame.
+  final restored = ref.read(authControllerProvider);
+  Future.microtask(() => mirror(restored));
+  ref.listen<AuthState>(authControllerProvider, (_, next) => mirror(next));
 });

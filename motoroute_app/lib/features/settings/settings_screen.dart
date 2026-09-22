@@ -16,6 +16,7 @@ import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// Screen 11: Einstellungen (vollständig).
 ///
@@ -38,10 +39,17 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _runningHealthCheck = false;
   String? _healthResult; // null = noch nicht getestet
+  String _appVersion = '…';
 
   @override
   void initState() {
     super.initState();
+    // Echte Version aus der APK (pubspec versionName) statt hardcodierter
+    // Zahl - die Anzeige stimmt dann mit dem Release-Tag überein.
+    PackageInfo.fromPlatform().then((info) {
+      if (!mounted) return;
+      setState(() => _appVersion = info.version);
+    }).catchError((_) {});
   }
 
   /// Echter Verbindungstest: GET /v1/health (anonym, kein Auth nötig).
@@ -88,12 +96,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final categories = ref.watch(activePoiCategoriesProvider);
     final energy = ref.watch(energySaverControllerProvider);
     final notifications = ref.watch(notificationsEnabledProvider);
+    final i18n = ref.watch(i18nProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
-        title: Text('Einstellungen', style: AppTypography.title),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(i18n.tabSettings, style: AppTypography.title),
       ),
       body: SafeArea(
         child: ListView(
@@ -101,7 +111,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           children: [
             _buildAccountSection(context, ref, auth),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection('Navigation', [
+            _buildSection(i18n.navigation, [
               ListTile(
                 leading: const Icon(Icons.motorcycle, color: AppColors.textSecondaryDark, size: 20),
                 title: Text('Fahrzeugstandard', style: AppTypography.body),
@@ -177,7 +187,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             _buildPoiSection(categories),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection('Benachrichtigungen', [
+            _buildSection(i18n.tr('settings.notifications'), [
               _buildSwitchTile(
                 Icons.notifications_outlined,
                 'Ungelesen-Hinweis am Chat-Tab',
@@ -205,7 +215,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             _buildLanguageAppearanceSection(),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection('Datenschutz & Recht', [
+            _buildSection(i18n.tr('settings.legal'), [
               _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Welche Daten MotoRoute verarbeitet', () {
                 Navigator.of(context).pushNamed('/privacy');
               }),
@@ -217,10 +227,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }),
             ]),
             const SizedBox(height: AppSpacing.lg),
-            const ListTile(
+            ListTile(
               dense: true,
-              title: Text('App-Version', style: AppTypography.body),
-              trailing: Text('0.3.0', style: AppTypography.caption),
+              title: Text(i18n.appVersion, style: AppTypography.body),
+              trailing: Text(_appVersion, style: AppTypography.caption),
             ),
           ],
         ),
@@ -455,7 +465,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Karte: POI-Kategorien (persistent).
   // ------------------------------------------------------------------
   Widget _buildPoiSection(Set<PoiCategory> categories) {
-    return _buildSection('Karte - POI-Kategorien', [
+    final i18n = ref.watch(i18nProvider);
+    return _buildSection(i18n.tr('settings.mapPoiSection'), [
       Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
         child: Wrap(
@@ -730,7 +741,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildChatStatusSection() {
     final token = ref.watch(chatSessionTokenProvider);
     final me = ref.watch(chatMeProvider).value;
-    return _buildSection('Chat & Community', [
+    final i18n = ref.watch(i18nProvider);
+    return _buildSection(i18n.tr('settings.chatCommunity'), [
       ListTile(
         leading: const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark, size: 20),
         title: const Text('Chat-Konto', style: AppTypography.body),
@@ -795,13 +807,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: AppTypography.caption),
+        // Section-Header mit Akzent-Marker - klarere Hierarchie als
+        // der alte reine Caption-Text.
+        Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.xs),
+          child: Row(
+            children: [
+              Container(
+                width: 3,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: AppColors.accentPrimaryDark,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                title.toUpperCase(),
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondaryDark,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: AppSpacing.sm),
         Container(
           decoration: BoxDecoration(
             color: AppColors.bgSurfaceDark,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.borderHairlineDark),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
           child: Column(children: children),
         ),

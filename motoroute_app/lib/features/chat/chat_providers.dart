@@ -81,6 +81,12 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
       state = state.copyWith(connected: up);
       if (up) _refreshSoon(); // Reconnect -> Liste frisch ziehen.
     });
+    // Tokenwechsel (Login, Restore, Silent-Refresh nach ~50 min): WS
+    // sofort mit dem FRISCHEN Token neu verbinden und Listen neu laden -
+    // sonst läuft der Chat nach Token-Rotation ins Leere.
+    _ref.listen<String?>(chatSessionTokenProvider, (_, token) {
+      if (token != null) load();
+    });
   }
 
   /// Lädt die Liste initial und verdrahtet Realtime + Polling-Fallback.

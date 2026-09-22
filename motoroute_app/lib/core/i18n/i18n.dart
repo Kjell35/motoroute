@@ -69,6 +69,8 @@ class I18n {
   String get chatNameCustom => tr('settings.chatName.custom');
   String get chatNameCustomLabel => tr('settings.chatName.customLabel');
   String get firstName => tr('settings.firstName');
+  String get navigation => tr('settings.navigation');
+  String get tabSettings => tr('tab.settings');
   String get save => tr('common.save');
   String get cancel => tr('common.cancel');
   String get ok => tr('common.ok');
@@ -208,6 +210,11 @@ const _catalog = <String, Map<String, String>>{
     'settings.chatName.custom': 'Benutzerdefinierter Anzeigename',
     'settings.chatName.customLabel': 'Eigener Anzeigename',
     'settings.firstName': 'Vorname',
+    'settings.navigation': 'Navigation',
+    'settings.notifications': 'Benachrichtigungen',
+    'settings.mapPoiSection': 'Karte - POI-Kategorien',
+    'settings.chatCommunity': 'Chat & Community',
+    'settings.legal': 'Datenschutz & Recht',
     // Suche & Routing
     'search.hint': 'Ort, PLZ oder POI suchen',
     'search.title': 'Zielsuche',
@@ -313,6 +320,11 @@ const _catalog = <String, Map<String, String>>{
     'settings.chatName.custom': 'Custom display name',
     'settings.chatName.customLabel': 'Custom name',
     'settings.firstName': 'First name',
+    'settings.navigation': 'Navigation',
+    'settings.notifications': 'Notifications',
+    'settings.mapPoiSection': 'Map - POI categories',
+    'settings.chatCommunity': 'Chat & community',
+    'settings.legal': 'Privacy & legal',
     // Suche & Routing
     'search.hint': 'Search place, postcode or POI',
     'search.title': 'Destination search',
