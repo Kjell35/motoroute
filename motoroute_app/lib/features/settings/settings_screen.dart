@@ -15,6 +15,7 @@ import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
+import 'package:motoroute_app/features/ride_history/ride_history_settings.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -210,6 +211,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildChatStatusSection(),
             const SizedBox(height: AppSpacing.lg),
             _buildChatNameSection(),
+            const SizedBox(height: AppSpacing.lg),
+            _buildRideHistorySection(),
             const SizedBox(height: AppSpacing.lg),
             _buildServerSection(),
             const SizedBox(height: AppSpacing.lg),
@@ -876,6 +879,81 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
     );
+  }
+
+  // ------------------------------------------------------------------
+  // Fahrhistorie: 5 Privatsphäre-Schalter (Default alles privat).
+  // Server ist die Wahrheit, optimistische UI mit Rollback.
+  // ------------------------------------------------------------------
+  Widget _buildRideHistorySection() {
+    final settings = ref.watch(rideHistorySettingsProvider);
+    final controller = ref.read(rideHistorySettingsProvider.notifier);
+    final i18n = ref.watch(i18nProvider);
+
+    Future<void> change(Future<bool> Function() call) async {
+      final ok = await call();
+      if (mounted && !ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Konnte nicht gespeichert werden - offline?')),
+        );
+      }
+    }
+
+    return _buildSection(i18n.tr('settings.rideHistory'), [
+      if (!ref.read(authControllerProvider).isAuthenticated)
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
+          title: Text(
+            i18n.tr('rideHistory.requiresLogin'),
+            style: AppTypography.caption,
+          ),
+        )
+      else ...[
+        _buildSwitchTile(
+          Icons.history,
+          i18n.tr('rideHistory.enabled'),
+          settings.rideHistoryEnabled,
+          (v) => change(() => controller.update(rideHistoryEnabled: v)),
+        ),
+        _buildSwitchTile(
+          Icons.public,
+          i18n.tr('rideHistory.publicProfile'),
+          settings.isPublic,
+          (v) => change(() => controller.update(authPrivacy: v ? 'public' : 'private')),
+        ),
+        if (settings.isPublic) ...[
+          _buildSwitchTile(
+            Icons.route,
+            i18n.tr('rideHistory.shareRides'),
+            settings.shareRides,
+            (v) => change(() => controller.update(shareRides: v)),
+          ),
+          _buildSwitchTile(
+            Icons.place_outlined,
+            i18n.tr('rideHistory.sharePlaces'),
+            settings.sharePlaces,
+            (v) => change(() => controller.update(sharePlaces: v)),
+          ),
+          _buildSwitchTile(
+            Icons.visibility_off_outlined,
+            i18n.tr('rideHistory.hideStartEnd'),
+            settings.hideStartEnd,
+            (v) => change(() => controller.update(hideStartEnd: v)),
+          ),
+        ],
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.lock_outline, color: AppColors.textMutedDark, size: 18),
+          title: Text(
+            settings.isPublic
+                ? i18n.tr('rideHistory.hintPublic')
+                : i18n.tr('rideHistory.hintPrivate'),
+            style: AppTypography.caption,
+          ),
+        ),
+      ],
+    ]);
   }
 }
 

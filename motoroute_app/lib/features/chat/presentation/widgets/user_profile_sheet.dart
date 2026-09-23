@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../ride_history/presentation/profile_history_screen.dart';
 import '../../chat_providers.dart';
 import '../../data/chat_repository.dart';
 import 'avatar.dart';
@@ -95,6 +96,24 @@ class _UserProfileSheet extends StatelessWidget {
               Text(user.bio!, style: const TextStyle(color: AppColors.textSecondaryDark)),
             ],
             const SizedBox(height: 20),
+            // Fahrhistorie (ÖFFENTLICHes Profil des Nutzers - zeigt nur,
+            // was er freigegeben hat; private Profile zeigen das als
+            // Hinweis im Screen selbst).
+            ListTile(
+              leading: const Icon(Icons.route, color: AppColors.accentPrimaryDark),
+              title: const Text('Fahrhistorie',
+                  style: TextStyle(color: AppColors.textPrimaryDark)),
+              subtitle: const Text('Touren & Orte (nur Freigegebenes)',
+                  style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProfileHistoryScreen(userId: user.id),
+                  ),
+                );
+              },
+            ),
             // Private Nachricht (Abschnitt 3/4): erstellt/findet den
             // 1:1-Chat und öffnet ihn.
             ListTile(

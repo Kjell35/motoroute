@@ -9,6 +9,7 @@ import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/navigation_session/navigation_providers.dart';
+import 'package:motoroute_app/features/ride_history/ride_history_sync.dart';
 import 'package:motoroute_app/features/tour_diary/domain/tour_entities.dart';
 import 'package:motoroute_app/features/tour_diary/tour_diary_providers.dart';
 import 'package:motoroute_app/features/tour_diary/tour_recorder.dart';
@@ -395,6 +396,11 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
         } catch (_) {}
       }
       ref.read(tourDiaryProvider.notifier).refresh();
+      // Auto-Sync der beendeten Fahrt ins Profil (best-effort, nur mit
+      // Anmeldung; Sichtbarkeit regelt serverseitig die Privatsphäre).
+      await ref
+          .read(rideHistorySyncProvider)
+          .syncFinishedTour(tour, description: name);
     }
   }
 }

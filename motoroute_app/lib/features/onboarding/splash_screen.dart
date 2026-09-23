@@ -8,6 +8,7 @@ import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
+import 'package:motoroute_app/features/ride_history/ride_history_settings.dart';
 
 /// Screen 1: Splash - Markenmoment + Entscheider. Während der Animation
 /// läuft parallel die Auth-Wiederherstellung; nach Minimum 900 ms und
@@ -43,6 +44,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     // Restore parallel zur Animation starten.
     _restoreFuture = ref.read(authControllerProvider.notifier).restore();
+    // Fahrhistorie-Einstellungen laden (lokaler Spiegel sofort,
+    // Server-Stand best-effort - Fehler sind hier egal).
+    ref.read(rideHistorySettingsProvider.notifier).load().catchError((_) {});
 
     // Kaltstart-Warmup: Die Free-Tier-Instanz des Backends schläft nach
     // ~15 min Leerlauf ein (30-60 s Aufwachzeit). Der Fire-and-Forget-
