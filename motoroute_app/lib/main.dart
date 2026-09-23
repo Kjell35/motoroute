@@ -17,6 +17,7 @@ import 'package:motoroute_app/features/routing/route_style_selection.dart';
 import 'package:motoroute_app/features/search/search_screen.dart';
 import 'package:motoroute_app/features/shell/home_shell.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart' show ConversationType;
+import 'package:motoroute_app/core/network/server_keep_alive.dart';
 import 'package:motoroute_app/features/chat/presentation/conversation_screen.dart';
 import 'package:motoroute_app/features/chat/presentation/group_create_screen.dart';
 import 'package:motoroute_app/features/chat/presentation/group_info_screen.dart';
@@ -37,6 +38,10 @@ Future<void> main() async {
   // erste Widget gebaut wird (Provider-Startwerte lesen die Werte;
   // ApiClient.baseUrl muss vor dem ersten Request korrekt sein).
   await initSessionSettings();
+  // Backend wachhalten, solange die App offen ist (GitHub-Cron wird
+  // massiv verzögert - ohne In-App-Ping schläft der Free-Tier-Server
+  // ein und jede erste Aktion läuft in "Verbindung prüfen").
+  ServerKeepAlive.instance.start();
   runApp(const MotoRouteApp());
 }
 

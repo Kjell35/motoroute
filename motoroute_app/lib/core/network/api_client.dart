@@ -64,23 +64,66 @@ class ApiClient {
     return _normalized(prefs.getString(_overrideKey));
   }
 
-  /// Dio-Client mit der effektiven Basis-URL. Connect-Timeout 20 s:
-  /// Auf dem Render-Free-Tier schläft die Instanz nach ~15 min Leerlauf
-  /// ein - der erste Request muss den Kaltstart (30-60 s) abwarten
-  /// koennen. Receive 45 s: Routing-Berechnungen (OSRM-Fallback) dauern
-  /// auf der Free-Instanz sichtbar laenger als lokal.
+  /// Dio-Client mit der effektiven Basis-URL und KALTSTART-Toleranz.
+  ///
+  /// Render-Free-Tier: Die Instanz schläft nach ~15 min Leerlauf ein,
+  /// der erste Request wartet 30-60 s (bzw. scheitert an Connect-Timeout).
+  /// Der Interceptor wiederholt deshalb VERBINDUNGS-Fehler automatisch
+  /// (bis zu 3 Versuche, mit Backoff 2 s/4 s) - Timeouts beim Aufwecken
+  /// werden so unsichtbar gefressen, statt "Verbindung prüfen" zu zeigen.
+  /// 4xx/5xx werden NICHT wiederholt (echte Serverantworten).
   static Dio create() {
-    return Dio(
+    final dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 20),
+        connectTimeout: const Duration(seconds: 25),
         receiveTimeout: const Duration(seconds: 45),
       ),
     );
+    dio.interceptors.add(_ColdStartRetryInterceptor(dio));
+    return dio;
   }
 
   /// Basis-URL zur WebSocket-URL umformen (http->ws, https->wss).
   static String asWebSocketUrl(String baseUrl) => baseUrl
       .replaceFirst('http://', 'ws://')
       .replaceFirst('https://', 'wss://');
+}
+
+/// Wiederholt VERBINDUNGS-Fehler (Kaltstart des Render-Free-Tiers).
+/// Bewusst nur Netzwerk-Layer-Fehler: connectionTimeout/connectionError/
+/// receiveTimeout. Ein 404/500 ist eine echte Antwort und wird nicht
+/// wiederholt. Maximal 3 Versuche mit wachsendem Abstand (2 s, 4 s) -
+/// ein 60-s-Kaltstart passt damit in Versuch 1+2 (25 s Timeout + Pause
+/// + 25 s) oder Versuch 3.
+class _ColdStartRetryInterceptor extends Interceptor {
+  _ColdStartRetryInterceptor(this._dio);
+  final Dio _dio;
+
+  static const _maxAttempts = 3;
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    final isConnectionIssue = err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.connectionError ||
+        err.type == DioExceptionType.receiveTimeout;
+
+    final attempts = (err.requestOptions.extra['__retryCount'] as int?) ?? 0;
+    if (!isConnectionIssue || attempts >= _maxAttempts - 1) {
+      handler.next(err);
+      return;
+    }
+
+    final delay = Duration(seconds: 2 * (attempts + 1));
+    await Future<void>.delayed(delay);
+
+    final options = err.requestOptions;
+    options.extra['__retryCount'] = attempts + 1;
+    try {
+      final response = await _dio.fetch<void>(options);
+      handler.resolve(response);
+    } on DioException catch (e) {
+      handler.next(e);
+    }
+  }
 }
