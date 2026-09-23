@@ -124,7 +124,7 @@ interface UploadedPhoto {
 }
 
 @UseGuards(AuthProvider)
-@Controller('marketplace')
+@Controller('v1/marketplace')
 export class MarketplaceController {
   constructor(
     private readonly marketplace: MarketplaceService,
