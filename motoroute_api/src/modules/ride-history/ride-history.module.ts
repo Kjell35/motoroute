@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SupabaseModule } from '../../supabase/supabase.module';
+import { AuthProvider, SupabaseAuthService } from '../../guards';
 import { SearchModule } from '../search/search.module';
 import { RideHistoryController } from './ride-history.controller';
 import { RideHistoryService } from './ride-history.service';
@@ -12,6 +13,9 @@ import { RideHistoryService } from './ride-history.service';
 @Module({
   imports: [SupabaseModule, SearchModule],
   controllers: [RideHistoryController],
-  providers: [RideHistoryService],
+  // AuthProvider + SupabaseAuthService: jedes guard-genutzte Modul
+  // stellt den JWT-Guard selbst bereit (Projektkonvention, siehe
+  // biker-pois/chat/group-rides Module).
+  providers: [RideHistoryService, AuthProvider, SupabaseAuthService],
 })
 export class RideHistoryModule {}
