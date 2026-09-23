@@ -20,11 +20,13 @@ export interface GraphHopperRouteResult {
  * damit Kurven-Präferenzen (Schnell/Kurvig/...) und Vermeidungsregeln.
  *
  * OHNE konfigurierten GraphHopper - oder wenn er nicht erreichbar ist -
- * fällt der Client auf OSRM zurück (ROUTING_FALLBACK_URL, Default:
- * öffentlicher OSRM-Demo-Server). Der Fallback fährt NUR Auto-Profil:
- * Kurven-Präferenzen und Vermeidungen werden dort ignoriert (ehrliche
- * Degradation - die Navigation funktioniert trotzdem). Das ist der
- * Zero-Config-Weg für Cloud-Deployments ohne lokale Java-Instanz.
+ * fällt der Client auf OSRM zurück. Der Fallback ist FAHRZEUGSPEZIFISCH:
+ * car -> driving (OSRM-Standard), bicycle -> FOSSGIS-Bike-Instanz,
+ * motorcycle -> driving (Motorräder folgen dem PKW-Netz; die
+ * Kurven-Präferenzen der GraphHopper-Profile fehlen hier - ehrliche
+ * Degradation, die Navigation funktioniert trotzdem fahrzeuggerecht).
+ * Das ist der Zero-Config-Weg für Cloud-Deployments ohne lokale
+ * Java-Instanz.
  *
  * This is the ONLY place in the backend that knows the engines'
  * request/response shapes - everything else (RoutingService,
@@ -77,6 +79,25 @@ export class GraphHopperClient {
       }
     }
     return this.routeOsrm(params);
+  }
+
+  /**
+   * OSRM-Ziel-URL je Fahrzeugprofil. Das bicycle-Profil kommt von der
+   * FOSSGIS-Instanz (echtes Rad-Netz mit Einbahn-Richtungen für Räder),
+   * Auto/Motorrad vom driving-Profil. Ein konfiguriertes
+   * ROUTING_FALLBACK_URL (eigener OSRM) überschreibt beides - dann
+   * muss der Betreiber die Profile dort bereitstellen.
+   */
+  private osrmBaseUrlFor(vehicleType: string): string {
+    const custom = this.config.get<string>('ROUTING_FALLBACK_URL')?.trim();
+    if (custom) return custom.replace(/\/+$/, '');
+    return vehicleType === 'bicycle_fast' || vehicleType === 'bicycle_curvy'
+      ? 'https://routing.openstreetmap.de/routed-bike'
+      : 'https://router.project-osrm.org';
+  }
+
+  private osrmProfileFor(vehicleType: string): string {
+    return vehicleType.startsWith('bicycle') ? 'bike' : 'driving';
   }
 
   private async routeGraphHopper(params: {
@@ -134,10 +155,13 @@ export class GraphHopperClient {
     avoidPriorityRules: Array<Record<string, string>>;
   }): Promise<GraphHopperRouteResult> {
     const coords = params.waypoints.map((w) => `${w.lng},${w.lat}`).join(';');
+    const baseUrl = this.osrmBaseUrlFor(params.profile);
+    const osrmProfile = this.osrmProfileFor(params.profile);
 
     try {
-      const { data } = await this.osrmHttp.get(
-        `/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true`,
+      const { data } = await axios.get(
+        `${baseUrl}/route/v1/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=true`,
+        { timeout: 12000 },
       );
       if (data.code !== 'Ok' || !data.routes?.[0]) {
         throw new HttpException('No route found for the given waypoints', HttpStatus.NOT_FOUND);
@@ -165,10 +189,18 @@ export class GraphHopperClient {
     const out: Array<{ text: string; distanceMeters: number; durationSeconds: number }> = [];
     for (const leg of legs ?? []) {
       for (const step of leg.steps ?? []) {
-        const text = this.osrmManeuverText(step.maneuver ?? {});
+        const maneuver = step.maneuver ?? {};
+        const text = this.osrmManeuverText(maneuver);
         if (text) {
+          // Straßennamen anhängen, wo es orientiert ("Rechts abbiegen auf
+          // B123") - OSRM liefert step.name als Straßen-/Nummern-Feld.
+          const street = typeof step.name === 'string' ? step.name.trim() : '';
+          const withStreet =
+            street && !/losfahren|ziel|wenden|kreisverkehr|weiterfahren/i.test(text)
+              ? `${text} auf ${street}`
+              : text;
           out.push({
-            text,
+            text: withStreet,
             distanceMeters: step.distance ?? 0,
             durationSeconds: step.duration ?? 0,
           });

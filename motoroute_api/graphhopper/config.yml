@@ -37,8 +37,17 @@ graphhopper:
     - name: car_fast
       custom_model_files: [car_base.json, style_fast.json]
 
+    - name: car_curvy
+      custom_model_files: [car_base.json, style_curvy.json]
+
+    - name: car_fast_curvy
+      custom_model_files: [car_base.json, style_fast_curvy.json]
+
     - name: bicycle_fast
       custom_model_files: [bicycle_base.json, style_fast.json]
+
+    - name: bicycle_curvy
+      custom_model_files: [bicycle_base.json, style_curvy.json]
 
   profiles_ch:
     # Contraction Hierarchies (speed mode) only for the "fast" profiles,
@@ -49,6 +58,9 @@ graphhopper:
     - profile: motorcycle_fast
     - profile: car_fast
     - profile: bicycle_fast
+    - profile: car_curvy
+    - profile: bicycle_curvy
+    - profile: car_fast_curvy
 
   graph.encoded_values: road_class, road_environment, surface, toll, ferry, average_slope, curvature
 

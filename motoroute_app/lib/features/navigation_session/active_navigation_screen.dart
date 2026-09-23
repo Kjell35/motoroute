@@ -35,6 +35,22 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
   final List<Circle> _incidentCircles = [];
   String? _styleString;
 
+  /// Karte-Objekte der AKTUELLEN Route (Linien + Marker). Bei Rerouting
+  /// wird alles entfernt und neu gezeichnet - so zeigt die Karte immer
+  /// die berechnete Route mit dem Fahrzeugprofil der Präferenz.
+  final List<Line> _routeLines = [];
+  final List<Symbol> _routeSymbols = [];
+  Symbol? _gpsSymbol;
+
+  /// Letzter GPS-Fix als LatLng (für den Standort-Marker).
+  LatLng? _lastGps;
+
+  /// Letzter gezeichneter Zustand, um unnötiges Neuzeichnen zu vermeiden
+  /// (build läuft bei jedem GPS-Tick; gezeichnet wird nur bei
+  /// Routenwechsel oder signifikantem Fortschritt).
+  ComputedRoute? _lastDrawnRoute;
+  int _lastDrawnIdx = -1;
+
   @override
   void initState() {
     super.initState();
@@ -109,17 +125,140 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
 
   Future<void> _drawRoute(ComputedRoute route) async {
     final controller = _mapController;
-    if (controller == null || _routeDrawn) return;
-    _routeDrawn = true;
-    // maplibre_gl 0.20: addLine nimmt LineOptions inkl. Geometrie.
-    await controller.addLine(
-      LineOptions(
-        geometry: route.geometry.map((p) => LatLng(p[1], p[0])).toList(),
-        lineColor: '#FF5A1F',
-        lineWidth: 6.0,
-        lineOpacity: 0.9,
-      ),
-    );
+    if (controller == null) return;
+
+    // Neu berechnete Route (Rerouting): alte Linien/Marker entfernen,
+    // damit die Karte die AKTUELLE Route zeigt - neu berechnet mit dem
+    // Fahrzeugprofil der ursprünglichen Präferenz.
+    for (final line in _routeLines) {
+      try {
+        await controller.removeLine(line);
+      } catch (_) {}
+    }
+    _routeLines.clear();
+    for (final sym in _routeSymbols) {
+      try {
+        await controller.removeSymbol(sym);
+      } catch (_) {}
+    }
+    _routeSymbols.clear();
+    _gpsSymbol = null;
+
+    final geometry = route.geometry;
+    if (geometry.isEmpty) return;
+
+    // Gefahrene vs. verbleibende Strecke: am Fortschritt geteilt. Der
+    // Index kommt aus der kumulierten Distanz (identisch zur Off-Route-
+    // Erkennung im NavigationController).
+    final navState = ref.read(navigationControllerProvider);
+    final isCurrentRoute = identical(navState.route, route);
+    final traveledIdx = isCurrentRoute
+        ? _indexForDistance(route, navState.traveledMeters)
+        : 0;
+
+    // Verbleibende Strecke (kräftiges Orange, gut sichtbar).
+    final remaining = geometry
+        .sublist(traveledIdx.clamp(0, geometry.length - 1))
+        .map((p) => LatLng(p[1], p[0]))
+        .toList();
+    if (remaining.length >= 2) {
+      try {
+        final line = await controller.addLine(
+          LineOptions(
+            geometry: remaining,
+            lineColor: '#FF5A1F',
+            lineWidth: 6.0,
+            lineOpacity: 0.95,
+          ),
+        );
+        _routeLines.add(line);
+      } catch (_) {}
+    }
+
+    // Bereits gefahrene Strecke (grau-transparent) - nur, wenn Fortschritt.
+    if (traveledIdx > 0) {
+      final traveled = geometry
+          .sublist(0, traveledIdx + 1)
+          .map((p) => LatLng(p[1], p[0]))
+          .toList();
+      if (traveled.length >= 2) {
+        try {
+          final line = await controller.addLine(
+            LineOptions(
+              geometry: traveled,
+              lineColor: '#6B7280',
+              lineWidth: 4.0,
+              lineOpacity: 0.55,
+            ),
+          );
+          _routeLines.add(line);
+        } catch (_) {}
+      }
+    }
+
+    // Marker: Start (grün), Ziel (rot), Wegpunkte/Stopps (orange).
+    final waypoints = route.waypoints;
+    for (var i = 0; i < waypoints.length; i++) {
+      final wp = waypoints[i];
+      final isFirst = i == 0;
+      final isLast = i == waypoints.length - 1;
+      try {
+        final sym = await controller.addSymbol(
+          SymbolOptions(
+            geometry: LatLng(wp.lat, wp.lng),
+            iconImage: 'circle-15',
+            iconSize: isFirst || isLast ? 1.4 : 1.1,
+            iconColor: isFirst
+                ? '#3DD68C'
+                : isLast
+                    ? '#E5484D'
+                    : '#FF5A1F',
+            textField: wp.label ??
+                (isFirst
+                    ? 'Start'
+                    : isLast
+                        ? 'Ziel'
+                        : '${i + 1}'),
+            textOffset: const Offset(0, 1.2),
+            textSize: 12,
+            textColor: '#FFFFFF',
+            textHaloColor: '#0B0E11',
+            textHaloWidth: 1.2,
+          ),
+        );
+        _routeSymbols.add(sym);
+      } catch (_) {}
+    }
+
+    // Aktueller GPS-Standort (blau). myLocationEnabled zeigt ihn auch,
+    // aber als Karten-Objekt bleibt er über Stil-Reloads hinweg sichtbar.
+    final pos = _lastGps;
+    if (pos != null) {
+      try {
+        final sym = await controller.addSymbol(
+          SymbolOptions(
+            geometry: pos,
+            iconImage: 'circle-15',
+            iconSize: 1.2,
+            iconColor: '#3B82F6',
+          ),
+        );
+        _routeSymbols.add(sym);
+        _gpsSymbol = sym;
+      } catch (_) {}
+    }
+  }
+
+  /// Geometrie-Index zur kumulierten Distanz (für die Aufteilung
+  /// gefahren/verbleibend). Nutzt dieselbe Kumulativ-Logik wie der
+  /// NavigationController, ohne seinen internen Zustand zu brauchen.
+  int _indexForDistance(ComputedRoute route, double traveledMeters) {
+    final cumulative = route.cumulativeDistances();
+    var best = 0;
+    for (var i = 0; i < cumulative.length; i++) {
+      if (cumulative[i] <= traveledMeters) best = i;
+    }
+    return best;
   }
 
   @override
@@ -129,8 +268,26 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
     final unit = ref.watch(distanceUnitProvider);
     final route = state.route;
 
+    // GPS-Position für den Marker mitschreiben.
+    final pos = state.position;
+    if (pos != null) {
+      _lastGps = LatLng(pos.latitude, pos.longitude);
+    }
+
+    // Neu zeichnen nur bei Routenwechsel (auch Rerouting) oder wenn der
+    // Fortschritt-Index springt (>= 5 Geometrie-Punkte) - nicht bei jedem
+    // GPS-Tick (Karte würde flackern).
     if (route != null) {
-      _drawRoute(route);
+      final idx = route == state.route
+          ? _indexForDistance(route, state.traveledMeters)
+          : 0;
+      final needsRedraw = !identical(_lastDrawnRoute, route) ||
+          (idx - _lastDrawnIdx).abs() >= 5;
+      if (needsRedraw) {
+        _lastDrawnRoute = route;
+        _lastDrawnIdx = idx;
+        _drawRoute(route);
+      }
     }
     _drawIncidents(traffic.incidents);
 
@@ -190,9 +347,53 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
   }
 
   Widget _buildTopZone(ComputedRoute? route, NavigationState state) {
-    final nextInstruction = (route != null && route.segments.isNotEmpty)
-        ? route.segments.first.instruction
-        : ref.watch(i18nProvider).navFollowRoute;
+    final i18n = ref.watch(i18nProvider);
+    if (route == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: const BoxDecoration(
+          color: AppColors.bgSurfaceDark,
+          border: Border(bottom: BorderSide(color: AppColors.borderHairlineDark)),
+        ),
+        child: Text(i18n.navFollowRoute, style: AppTypography.navInstruction),
+      );
+    }
+
+    // Dynamischer Hinweis: das nächste Manöver aus der ROUTE (nicht
+    // immer das erste Segment) + Distanz dahin. "Danach"-Vorschau gibt
+    // dem Fahrer Planungssicherheit (z. B. "Danach links auf B123").
+    final next = route.nextTurn(state.traveledMeters);
+    final segments = route.segments;
+    String? afterwards;
+    if (next != null && segments.isNotEmpty) {
+      var segStart = 0.0;
+      var found = false;
+      for (var i = 0; i < segments.length; i++) {
+        final seg = segments[i];
+        if (!found) {
+          if (segStart + 5 >= state.traveledMeters &&
+              seg.instruction == next.text) {
+            found = true;
+            // Nächster Nicht-Ziel-Hinweis danach.
+            for (var j = i + 1; j < segments.length; j++) {
+              final s2 = segments[j];
+              if (!s2.instruction.toLowerCase().contains('ziel')) {
+                afterwards = s2.instruction;
+                break;
+              }
+            }
+            break;
+          }
+          segStart += seg.distanceMeters;
+        }
+      }
+    }
+
+    final distanceText = next == null
+        ? null
+        : (next.distanceMeters < 1000
+            ? '${next.distanceMeters.round()} m'
+            : '${(next.distanceMeters / 1000).toStringAsFixed(next.distanceMeters < 10000 ? 1 : 0)} km');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
@@ -209,7 +410,22 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(nextInstruction, style: AppTypography.navInstruction),
+                Text(
+                  next == null
+                      ? i18n.navFollowRoute
+                      : distanceText == '0 m'
+                          ? next.text
+                          : 'In $distanceText: ${next.text}',
+                  style: AppTypography.navInstruction,
+                ),
+                if (afterwards != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      'Danach: $afterwards',
+                      style: AppTypography.caption,
+                    ),
+                  ),
               ],
             ),
           ),

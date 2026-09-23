@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
+import 'package:motoroute_app/core/utils/geo.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -187,4 +188,40 @@ class ComputedRoute {
         durationSeconds: route.durationSeconds as double,
         segments: List<RouteSegment>.from(route.segments as List),
       );
+
+  /// Kumulierte Distanzen entlang der Geometrie (Meter). Index 0 ist 0;
+  /// Punkt i hat die Distanz ab Start. Wird für Fortschritt (gefahrene
+  /// Strecke), Turn-by-Turn-Distanzen und die Karten-Aufteilung genutzt.
+  List<double> cumulativeDistances() {
+    if (geometry.length < 2) return [0];
+    final out = List<double>.filled(geometry.length, 0);
+    for (var i = 1; i < geometry.length; i++) {
+      out[i] = out[i - 1] + haversineMeters(
+        geometry[i - 1][1], geometry[i - 1][0],
+        geometry[i][1], geometry[i][0],
+      );
+    }
+    return out;
+  }
+
+  /// Nächster Abbiegehinweis ab der Strecken-Position [traveledMeters].
+  /// Semantik (GraphHopper + OSRM identisch): Der Anweisungstext eines
+  /// Segments beschreibt das Manöver am SEGMENT-ANFANG - "Rechts
+  /// abbiegen" mit 400 m Segmentlänge heißt: jetzt abbiegen, dann 400 m.
+  /// Das nächste Manöver ist das erste Segment, dessen Startpunkt vor
+  /// oder maximal 5 m hinter dem Fahrer liegt.
+  ({String text, double distanceMeters})? nextTurn(double traveledMeters) {
+    if (segments.isEmpty) return null;
+    var segStart = 0.0;
+    for (final seg in segments) {
+      if (segStart + 5 >= traveledMeters) {
+        return (
+          text: seg.instruction,
+          distanceMeters: (segStart - traveledMeters).clamp(0, double.infinity).toDouble(),
+        );
+      }
+      segStart += seg.distanceMeters;
+    }
+    return null;
+  }
 }

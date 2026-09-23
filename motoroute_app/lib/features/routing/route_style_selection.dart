@@ -29,13 +29,36 @@ class RouteStyleSelectionScreen extends ConsumerStatefulWidget {
 class _RouteStyleSelectionScreenState extends ConsumerState<RouteStyleSelectionScreen> {
   final Set<AvoidOption> _avoid = {};
 
-  static final _styles = [
+  /// Nur Styles, die das GEWÄHLTE Fahrzeug wirklich berechnen kann
+  /// (Motorrad: alle 5, Auto: schnell/kurvig/schnell+kurvig, Fahrrad:
+  /// schnell/kurvig). Der Server verifiziert das zusätzlich - doppelte
+  /// Absicherung statt stiller Fallbacks.
+  static const _allStyles = [
     (RouteStyle.fast, Icons.speed, 'Schnell', 'Kürzeste Zeit'),
     (RouteStyle.curvy, Icons.route, 'Kurvig', 'Schöne Straßen'),
     (RouteStyle.extraCurvy, Icons.alt_route, 'Extra kurvig', 'Abenteuer pur'),
     (RouteStyle.fastAndCurvy, Icons.tune, 'Schnell & kurvig', 'Ausgewogen'),
     (RouteStyle.unpaved, Icons.terrain, 'Unbefestigt', 'Schotter & Natur'),
   ];
+
+  List<(RouteStyle, IconData, String, String)> _stylesFor(VehicleType type) {
+    final supported = switch (type) {
+      VehicleType.motorcycle => const [
+          RouteStyle.fast,
+          RouteStyle.curvy,
+          RouteStyle.extraCurvy,
+          RouteStyle.fastAndCurvy,
+          RouteStyle.unpaved,
+        ],
+      VehicleType.car => const [
+          RouteStyle.fast,
+          RouteStyle.curvy,
+          RouteStyle.fastAndCurvy,
+        ],
+      VehicleType.bicycle => const [RouteStyle.fast, RouteStyle.curvy],
+    };
+    return _allStyles.where((s) => supported.contains(s.$1)).toList();
+  }
 
   Future<void> _selectStyle(RouteStyle style) async {
     final controller = ref.read(routingFlowProvider.notifier);
@@ -81,17 +104,20 @@ class _RouteStyleSelectionScreenState extends ConsumerState<RouteStyleSelectionS
               ),
             ),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                itemCount: _styles.length,
-                itemBuilder: (context, index) {
-                  final (style, icon, title, description) = _styles[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: _buildStyleCard(style, icon, title, description, flow.isCalculating),
-                  );
-                },
-              ),
+              child: Builder(builder: (context) {
+                final styles = _stylesFor(ref.watch(vehicleTypeProvider));
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  itemCount: styles.length,
+                  itemBuilder: (context, index) {
+                    final (style, icon, title, description) = styles[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: _buildStyleCard(style, icon, title, description, flow.isCalculating),
+                    );
+                  },
+                );
+              }),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),

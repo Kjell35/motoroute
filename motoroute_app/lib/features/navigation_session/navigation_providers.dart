@@ -28,6 +28,9 @@ class NavigationState {
   /// Aktuelle Geschwindigkeit (m/s, von GPS gemeldet).
   final double speedMps;
 
+  /// Letzter GPS-Fix (für den Standort-Marker auf der Karte).
+  final Position? position;
+
   final bool isOffRoute;
   final bool isRerouting;
   final String? error;
@@ -47,6 +50,7 @@ class NavigationState {
     this.route,
     this.traveledMeters = 0,
     this.speedMps = 0,
+    this.position,
     this.isOffRoute = false,
     this.isRerouting = false,
     this.error,
@@ -65,6 +69,7 @@ class NavigationState {
     ComputedRoute? route,
     double? traveledMeters,
     double? speedMps,
+    Position? position,
     bool? isOffRoute,
     bool? isRerouting,
     String? error,
@@ -76,6 +81,7 @@ class NavigationState {
         route: route ?? this.route,
         traveledMeters: traveledMeters ?? this.traveledMeters,
         speedMps: speedMps ?? this.speedMps,
+        position: position ?? this.position,
         isOffRoute: isOffRoute ?? this.isOffRoute,
         isRerouting: isRerouting ?? this.isRerouting,
         error: error,
@@ -274,6 +280,7 @@ class NavigationController extends StateNotifier<NavigationState> {
     state = state.copyWith(
       traveledMeters: traveled,
       speedMps: position.speed.isNegative ? 0 : position.speed,
+      position: position,
       isOffRoute: offRoute,
       error: null,
     );

@@ -7,6 +7,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
+import 'package:motoroute_app/features/routing/routing_flow.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
@@ -811,6 +812,70 @@ class _VehicleSwitcher extends ConsumerWidget {
 
   const _VehicleSwitcher({required this.current});
 
+  /// Neuberechnung der aktiven Route mit dem NEUEN Fahrzeugprofil.
+  /// Gleiche Wegpunkte; der Style fällt auf den nächsten unterstützten
+  /// des Fahrzeugs zurück (Motorrad-"Extra kurvig" -> Auto "Schnell &
+  /// kurvig"). Die neue Route ersetzt die aktive sofort.
+  Future<void> _recalculateForVehicle(
+    BuildContext context,
+    WidgetRef ref,
+    VehicleType type,
+  ) async {
+    final active = ref.read(activeRouteProvider);
+    if (active == null) return;
+
+    final fallbackStyle = switch (type) {
+      VehicleType.motorcycle => RouteStyle.fastAndCurvy,
+      VehicleType.car => RouteStyle.fast,
+      VehicleType.bicycle => RouteStyle.fast,
+    };
+    final style = switch (type) {
+      VehicleType.motorcycle => active.preference.style,
+      // Auto/Fahrrad unterstützen nicht alle Motorrad-Styles.
+      VehicleType.car => switch (active.preference.style) {
+          RouteStyle.fast => RouteStyle.fast,
+          RouteStyle.curvy => RouteStyle.curvy,
+          RouteStyle.fastAndCurvy => RouteStyle.fastAndCurvy,
+          _ => fallbackStyle,
+        },
+      VehicleType.bicycle => switch (active.preference.style) {
+          RouteStyle.fast => RouteStyle.fast,
+          RouteStyle.curvy => RouteStyle.curvy,
+          _ => RouteStyle.fast,
+        },
+    };
+
+    final controller = ref.read(routingFlowProvider.notifier);
+    final newRoute = await controller.calculate(
+      waypoints: active.waypoints,
+      preference: RoutePreference(
+        style: style,
+        vehicleType: type,
+        avoid: active.preference.avoid,
+      ),
+    );
+    if (newRoute != null) {
+      ref.read(activeRouteProvider.notifier).state = newRoute;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Route für ${switch (type) {
+                VehicleType.motorcycle => 'Motorrad',
+                VehicleType.car => 'Auto',
+                VehicleType.bicycle => 'Fahrrad',
+              }} neu berechnet (${(newRoute.distanceMeters / 1000).toStringAsFixed(1)} km)',
+            ),
+          ),
+        );
+      }
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Neuberechnung fehlgeschlagen - alte Route bleibt')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
@@ -825,10 +890,20 @@ class _VehicleSwitcher extends ConsumerWidget {
         children: [
           for (final type in VehicleType.values)
             GestureDetector(
-              onTap: () {
+              onTap: () async {
                 HapticFeedback.selectionClick();
+                if (type == current) return;
                 ref.read(vehicleTypeProvider.notifier).state = type;
-                persistVehicleType(type);
+                await persistVehicleType(type);
+                // Fahrzeugwechsel = NEUE BERECHNUNG: eine aktive Route
+                // wird mit dem neuen Fahrzeugprofil neu berechnet (gleiche
+                // Wegpunkte; Style fällt auf den nächsten unterstützten
+                // zurück, z. B. "Extra kurvig" beim Auto -> "Schnell &
+                // kurvig"). Nur die UI umzuschalten wäre Kosmetik.
+                final active = ref.read(activeRouteProvider);
+                if (active != null && context.mounted) {
+                  await _recalculateForVehicle(context, ref, type);
+                }
               },
               child: Container(
                 width: AppSpacing.touchTargetPlanning,

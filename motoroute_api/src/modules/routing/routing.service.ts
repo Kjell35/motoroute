@@ -1,9 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CreateRouteDto } from './dto/create-route.dto';
 import { Route } from './entities/route.entity';
 import { GraphHopperClient } from './graphhopper.client';
-import { resolveGraphHopperProfile } from './profile-mapping';
+import {
+  isStyleSupported,
+  resolveGraphHopperProfile,
+  UnsupportedStyleForVehicleError,
+} from './profile-mapping';
 import { buildAvoidPriorityRules } from './avoid-overrides';
 
 @Injectable()
@@ -11,7 +15,23 @@ export class RoutingService {
   constructor(private readonly graphHopper: GraphHopperClient) {}
 
   async createRoute(dto: CreateRouteDto): Promise<Route> {
-    const profile = resolveGraphHopperProfile(dto.preference.style, dto.preference.vehicleType);
+    const style = dto.preference.style;
+    const vehicleType = dto.preference.vehicleType;
+
+    // Style/Fahrzeug-Kombination (z. B. "Unbefestigt" mit Fahrrad) wird
+    // abgewiesen, statt still auf ein anderes Profil zu fallen - die App
+    // filtert die Auswahl bereits, dies ist die Server-Verifikation.
+    if (!isStyleSupported(style, vehicleType)) {
+      throw new HttpException(
+        {
+          error: 'STYLE_NOT_SUPPORTED',
+          message: `Fahrstil "${style}" ist für Fahrzeug "${vehicleType}" nicht verfügbar`,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const profile = resolveGraphHopperProfile(style, vehicleType);
     const avoidPriorityRules = buildAvoidPriorityRules(dto.preference.avoid);
 
     const result = await this.graphHopper.route({
