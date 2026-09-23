@@ -5,13 +5,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/utils/geo.dart';
 import 'package:motoroute_app/features/map/data/location_repository.dart';
+import 'package:motoroute_app/features/navigation_session/speed_camera_warner.dart';
 import 'package:motoroute_app/features/routing/data/routing_providers.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart'
     show EnergySaverMode, energySaverControllerProvider;
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
 import 'package:motoroute_app/features/weather/route_weather_providers.dart';
-import 'dart:async' show StreamSubscription;
 
 /// Ab der diese Distanz zur Routen-Geometrie eine Abweichung gilt
 /// (GPS-Ungenauigkeit + Karten-Generalisierung einpreisen). Bewusst
@@ -122,6 +122,9 @@ class NavigationController extends StateNotifier<NavigationState> {
     // und auf BLOCKIERENDE Vorfälle prüfen -> proaktives Rerouting.
     _ref.read(trafficControllerProvider.notifier).startNavigationMonitoring(route.geometry);
     _watchBlockingIncidents();
+    // Blitzer-Fahrtwarnung: Kameras entlang der Route laden und bei
+    // jedem GPS-Fix die Annäherung prüfen (optisch + haptisch).
+    _ref.read(speedCameraWarnerProvider.notifier).loadForRoute(route.geometry);
     // Wetter-Radar: Sturm-Frühwarnung entlang der Route (15-min-Refresh
     // im Controller). Stop passiert im Screen-dispose wie beim GPS.
     _ref
@@ -288,6 +291,15 @@ class NavigationController extends StateNotifier<NavigationState> {
     if (offRoute && !state.isRerouting) {
       _reroute(position);
     }
+
+    // Blitzer-Warnung: Fire-and-forget, blockiert den GPS-Pfad nie.
+    unawaited(
+      _ref.read(speedCameraWarnerProvider.notifier).onPosition(
+            position.latitude,
+            position.longitude,
+            speedMps: position.speed.isNegative ? 0 : position.speed,
+          ),
+    );
   }
 
   /// Neuberechnung ab aktueller Position - mit DERSELBEN Präferenz wie

@@ -40,6 +40,10 @@ class I18n {
   String get chatTab => tr('tab.chat');
   String get settingsTab => tr('tab.settings');
   String get languageLabel => tr('settings.language');
+  String get themeModeTitle => tr('settings.themeMode');
+  String get themeModeSystem => tr('settings.themeMode.system');
+  String get themeModeLight => tr('settings.themeMode.light');
+  String get themeModeDark => tr('settings.themeMode.dark');
   String get german => tr('settings.language.de');
   String get english => tr('settings.language.en');
   String get appearance => tr('settings.appearance');
@@ -167,6 +171,15 @@ const _catalog = <String, Map<String, String>>{
     'settings.languageAndAppearance': 'Sprache & Erscheinungsbild',
     'settings.saved': 'Gespeichert',
     'errors.saveFailed': 'Speichern fehlgeschlagen - bitte später erneut versuchen',
+    'settings.themeMode': 'Erscheinungsbild (UI)',
+    'settings.themeMode.system': 'Auto',
+    'settings.themeMode.light': 'Hell',
+    'settings.themeMode.dark': 'Dunkel',
+    'settings.offlineMaps': 'Offline-Karten',
+    'settings.offlineMaps.add': 'Region herunterladen',
+    'settings.offlineMaps.addHint': 'Kartenbereich für offline Navigation speichern',
+    'settings.offlineMaps.dialogTitle': 'Offline-Karte herunterladen',
+    'settings.offlineMaps.radius': 'Radius um die aktuelle Position',
     'tab.map': 'Karte',
     'tab.tours': 'Touren',
     'tab.chat': 'Chat',
@@ -321,6 +334,15 @@ const _catalog = <String, Map<String, String>>{
     'tour.exportFailed': 'GPX-Export fehlgeschlagen',
   },
   'en': {
+    'settings.themeMode': 'Appearance (UI)',
+    'settings.themeMode.system': 'Auto',
+    'settings.themeMode.light': 'Light',
+    'settings.themeMode.dark': 'Dark',
+    'settings.offlineMaps': 'Offline maps',
+    'settings.offlineMaps.add': 'Download region',
+    'settings.offlineMaps.addHint': 'Save a map area for offline navigation',
+    'settings.offlineMaps.dialogTitle': 'Download offline map',
+    'settings.offlineMaps.radius': 'Radius around the current position',
     // Tabs
     'settings.languageAndAppearance': 'Language & appearance',
     'settings.saved': 'Saved',

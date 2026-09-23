@@ -8,6 +8,12 @@ export enum PoiCategory {
   CAMPSITE = 'CAMPSITE',
   ICE_CREAM = 'ICE_CREAM',
   SPEED_CAMERA = 'SPEED_CAMERA',
+  // Kategorien des Biker-Kuratieurngs-Dienstes - die App sendet sie
+  // bereits; ohne sie hier würde die @IsEnum-Validierung jeden
+  // Karten-Layer-Request mit 400 abweisen.
+  RESTAURANT = 'RESTAURANT',
+  PUB = 'PUB',
+  SNACK = 'SNACK',
 }
 
 /**

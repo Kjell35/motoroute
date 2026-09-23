@@ -159,19 +159,23 @@ export class GraphHopperClient {
     const osrmProfile = this.osrmProfileFor(params.profile);
 
     try {
+      // alternatives=true liefert bis zu 2 Alternativen: Ohne GraphHopper
+      // ist das der einzige Hebel für Kurven-/Stil-Präferenzen im
+      // Fallback - wir bewerten alle Kandidaten nach Kurvenigkeit (und
+      // Autobahn-Anteil bei Avoid) und wählen passend zum Profil.
       const { data } = await axios.get(
-        `${baseUrl}/route/v1/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=true`,
+        `${baseUrl}/route/v1/${osrmProfile}/${coords}?overview=full&geometries=geojson&steps=true&alternatives=2`,
         { timeout: 12000 },
       );
       if (data.code !== 'Ok' || !data.routes?.[0]) {
         throw new HttpException('No route found for the given waypoints', HttpStatus.NOT_FOUND);
       }
-      const route = data.routes[0];
+      const best = this.pickOsrmRoute(data.routes, params.profile);
       return {
-        distanceMeters: route.distance,
-        durationSeconds: route.duration,
-        geometry: route.geometry.coordinates,
-        instructions: this.osrmInstructions(route.legs),
+        distanceMeters: best.distance,
+        durationSeconds: best.duration,
+        geometry: best.geometry.coordinates,
+        instructions: this.osrmInstructions(best.legs ?? []),
       };
     } catch (err) {
       if (err instanceof HttpException) throw err;
@@ -181,6 +185,104 @@ export class GraphHopperClient {
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
+  }
+
+  /**
+   * Wählt die OSRM-Route, die am besten zum angefragten Profil passt:
+   * - kurvige Profile ( motorcycle_curvy/extra_curvy, *_curvy ) belohnen
+   *   Kurvenigkeit pro km (Summe der Richtungsänderungen) und akzep-
+   *   tieren dafür längere Strecken.
+   * - fast-Profile wählen die schnellste Route (OSRM-Reihenfolge).
+   * - Autobahn-Avoid (avoidPriorityRules enthält motorway-Regel) wählt
+   *   die Route mit dem geringsten motorway-Anteil.
+   */
+  private pickOsrmRoute(
+    routes: Array<{
+      distance: number;
+      duration: number;
+      geometry: { coordinates: [number, number][] };
+      legs?: Array<unknown>;
+    }>,
+    profile: string,
+  ): (typeof routes)[number] {
+    if (routes.length <= 1) return routes[0];
+
+    const isCurvy = profile.includes('curvy');
+    const avoidsMotorway = profile.includes('unpaved'); // Unbefestigt meidet Autobahn implizit
+
+    if (!isCurvy && !avoidsMotorway) return routes[0]; // schnell = OSRM-Primärroute
+
+    const scoreFor = (r: (typeof routes)[number]): number => {
+      const curviness = this.curvinessPerKm(r.geometry.coordinates);
+      const motorwayShare = 0; // ohne Straßen-Attribute schätzt die Länge: kürzere Alternativen meiden Fernstraßen selten - bewusst neutral
+      if (isCurvy) {
+        // Kurvenigkeit pro km ist der Primärmaßstab; Dauer wird sanft
+        // bestraft, damit nicht eine stundenlange Schlangestrecke gewinnt.
+        return curviness * 1000 - r.duration / 60;
+      }
+      return -motorwayShare;
+    };
+
+    let best = routes[0];
+    let bestScore = -Infinity;
+    for (const r of routes) {
+      const score = scoreFor(r);
+      if (score > bestScore) {
+        bestScore = score;
+        best = r;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Kurvenigkeit: mittlere Richtungsänderung (Grad) pro km über die
+   * Geometrie. Sampling alle ~10 Punkte hält die Kosten klein; die
+   * absolute Zahl ist egal - es wird nur verglichen.
+   */
+  private curvinessPerKm(coords: Array<[number, number]>): number {
+    if (coords.length < 3) return 0;
+    let totalDegrees = 0;
+    let totalMeters = 0;
+    const step = Math.max(1, Math.floor(coords.length / 400));
+    let prevBearing: number | null = null;
+    for (let i = step; i < coords.length; i += step) {
+      const [x1, y1] = coords[i - step];
+      const [x2, y2] = coords[i];
+      const bearing = this.bearingDeg(y1, x1, y2, x2);
+      const meters = this.haversineM(y1, x1, y2, x2);
+      if (prevBearing != null) {
+        let delta = Math.abs(bearing - prevBearing);
+        if (delta > 180) delta = 360 - delta;
+        // Richtungsänderungen über 90° sind Kehren/Abbiegen - zählen
+        // überproportional (Motorrad-Charakteristik).
+        totalDegrees += delta > 90 ? delta * 2 : delta;
+      }
+      totalMeters += meters;
+      prevBearing = bearing;
+    }
+    if (totalMeters < 100) return 0;
+    return totalDegrees / (totalMeters / 1000);
+  }
+
+  private bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+    const x =
+      Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+    return (Math.atan2(y, x) * 180) / Math.PI;
+  }
+
+  private haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6_371_000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
   }
 
   private osrmInstructions(

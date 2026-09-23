@@ -161,4 +161,60 @@ describe('GraphHopperClient', () => {
     ).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND });
     expect(osrmGet).not.toHaveBeenCalled();
   });
+
+  // ---------------------------------------------------------------------
+  // Kurven-Präferenzen im OSRM-Fallback (Alternativrouten-Bewertung)
+  // ---------------------------------------------------------------------
+
+  /** Gerade Route: ~100 km nahezu ohne Kurven. */
+  function straightRoute(distance: number, duration: number) {
+    const coords: [number, number][] = [];
+    for (let i = 0; i <= 100; i++) coords.push([7.84 + i * 0.03, 47.99]);
+    return { distance, duration, geometry: { coordinates: coords }, legs: [] };
+  }
+
+  /** Kurvige Route: Zickzack mit vielen Richtungswechseln. */
+  function curvyRoute(distance: number, duration: number) {
+    const coords: [number, number][] = [];
+    for (let i = 0; i <= 200; i++) {
+      const zig = i % 2 === 0 ? 0.02 : -0.02;
+      coords.push([7.84 + i * 0.015, 47.99 + zig]);
+    }
+    return { distance, duration, geometry: { coordinates: coords }, legs: [] };
+  }
+
+  function osrmEnvelope(routes: unknown[]) {
+    return { data: { code: 'Ok', routes } };
+  }
+
+  it('wählt bei kurvigem Profil die kurvigere OSRM-Alternative (auch wenn länger)', async () => {
+    const client = new GraphHopperClient(configWith({}));
+    const fast = straightRoute(100_000, 3_600);
+    const curvy = curvyRoute(120_000, 5_400);
+    osrmGet.mockResolvedValue(osrmEnvelope([fast, curvy]));
+
+    const r = await client.route({ profile: 'motorcycle_curvy', waypoints, avoidPriorityRules: [] });
+
+    expect(r.geometry).toBe(curvy.geometry.coordinates);
+  });
+
+  it('wählt bei FAST-Profil die erste (schnellste) OSRM-Route, ungeachtet der Kurven', async () => {
+    const client = new GraphHopperClient(configWith({}));
+    const fast = straightRoute(100_000, 3_600);
+    const curvy = curvyRoute(120_000, 5_400);
+    osrmGet.mockResolvedValue(osrmEnvelope([fast, curvy]));
+
+    const r = await client.route({ profile: 'motorcycle_fast', waypoints, avoidPriorityRules: [] });
+
+    expect(r.geometry).toBe(fast.geometry.coordinates);
+  });
+
+  it('fordert Alternativen an (alternatives=2 in der OSRM-URL)', async () => {
+    const client = new GraphHopperClient(configWith({}));
+    osrmGet.mockResolvedValue(osrmEnvelope([straightRoute(1000, 60)]));
+
+    await client.route({ profile: 'motorcycle_curvy', waypoints, avoidPriorityRules: [] });
+
+    expect(String(osrmGet.mock.calls[0][0])).toContain('alternatives=2');
+  });
 });

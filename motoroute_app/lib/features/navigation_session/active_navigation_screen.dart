@@ -9,6 +9,7 @@ import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/navigation_session/navigation_providers.dart';
+import 'package:motoroute_app/features/navigation_session/speed_camera_warner.dart';
 import 'package:motoroute_app/features/ride_history/ride_history_sync.dart';
 import 'package:motoroute_app/features/tour_diary/domain/tour_entities.dart';
 import 'package:motoroute_app/features/tour_diary/tour_diary_providers.dart';
@@ -301,6 +302,7 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
             if (state.energySaverCritical) _buildEnergySaverWarning(),
             if (state.isRerouting || state.error != null || state.rerouteReason != null)
               _buildReroutingBanner(state),
+            _buildSpeedCameraBanner(),
             Expanded(
               child: _styleString == null
                   // Stil lädt (Millisekunden, gebündelt): Ladeanzeige statt
@@ -451,6 +453,32 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
             child: Text(
               'Kritischer Akku - GPS gedrosselt, Off-Route-Warnung verzögert',
               style: AppTypography.caption,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Blitzer-Fahrtwarnung: schmaler roter Banner über der Karte, mit
+  /// Entfernungsangabe. Verschwindet automatisch nach dem Passieren
+  /// (Controller räumt auf). Kein Modal - der Fahrer braucht die Straße.
+  Widget _buildSpeedCameraBanner() {
+    final warning = ref.watch(speedCameraWarnerProvider).activeWarning;
+    if (warning == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      color: AppColors.statusDanger,
+      child: Row(
+        children: [
+          const Icon(Icons.speed, color: Colors.white, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            speedCameraBannerText(warning),
+            style: AppTypography.body.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],

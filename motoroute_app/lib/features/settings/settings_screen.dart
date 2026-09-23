@@ -11,6 +11,9 @@ import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart' show DistanceUnit;
+import 'package:motoroute_app/features/map/data/location_repository.dart';
+import 'package:motoroute_app/features/settings/offline_maps.dart';
+import 'package:motoroute_app/features/settings/theme_mode.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
@@ -211,6 +214,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildChatStatusSection(),
             const SizedBox(height: AppSpacing.lg),
             _buildChatNameSection(),
+            const SizedBox(height: AppSpacing.lg),
+            _buildOfflineMapsSection(),
             const SizedBox(height: AppSpacing.lg),
             _buildRideHistorySection(),
             const SizedBox(height: AppSpacing.lg),
@@ -467,6 +472,119 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ------------------------------------------------------------------
   // Karte: POI-Kategorien (persistent).
   // ------------------------------------------------------------------
+  /// Offline-Karten: Region rund um Position/Ort herunterladen,
+  /// Liste der Regionen, Löschen. Gekapselt in [_OfflineMapsCard] -
+  /// die Dialoglogik (Ort/Radius) wäre sonst 200 Zeilen im Screen.
+  Widget _buildOfflineMapsSection() {
+    final i18n = ref.watch(i18nProvider);
+    final state = ref.watch(offlineMapsProvider);
+
+    return _buildSection(i18n.tr('settings.offlineMaps'), [
+      ListTile(
+        leading: const Icon(Icons.download_for_offline_outlined,
+            color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.tr('settings.offlineMaps.add'), style: AppTypography.body),
+        subtitle: state.isDownloading
+            ? LinearProgressIndicator(value: state.activeDownloadProgress)
+            : Text(i18n.tr('settings.offlineMaps.addHint'), style: AppTypography.caption),
+        onTap: state.isDownloading ? null : () => _showOfflineRegionDialog(),
+      ),
+      if (state.error != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+          child: Text(state.error!, style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
+        ),
+      ...state.regions.map(
+        (r) => ListTile(
+          leading: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark, size: 20),
+          title: Text(r.name, style: AppTypography.body),
+          subtitle: Text(
+            '${r.createdAt.day}.${r.createdAt.month}.${r.createdAt.year} · '
+            '(${r.southWest.lat.toStringAsFixed(2)}, ${r.southWest.lng.toStringAsFixed(2)}) → '
+            '(${r.northEast.lat.toStringAsFixed(2)}, ${r.northEast.lng.toStringAsFixed(2)})',
+            style: AppTypography.caption,
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: () => ref.read(offlineMapsProvider.notifier).delete(r),
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  Future<void> _showOfflineRegionDialog() async {
+    final i18n = ref.watch(i18nProvider);
+    final nameController = TextEditingController(text: 'Meine Region');
+    var radius = 50.0;
+    double centerLat = 48.1351;
+    double centerLng = 11.5820;
+    try {
+      final position = await LocationRepository().getCurrentPosition();
+      centerLat = position.latitude;
+      centerLng = position.longitude;
+    } catch (_) {
+      // Kein GPS (Berechtigungen/Aus): Dialog mit Fallback-Mitte (München).
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(i18n.tr('settings.offlineMaps.dialogTitle'), style: AppTypography.title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(i18n.tr('settings.offlineMaps.radius'), style: AppTypography.caption),
+              SegmentedButton<double>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: 25.0, label: Text('25 km')),
+                  ButtonSegment(value: 50.0, label: Text('50 km')),
+                  ButtonSegment(value: 100.0, label: Text('100 km')),
+                ],
+                selected: {radius},
+                onSelectionChanged: (s) => setDialogState(() => radius = s.first),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                '${centerLat.toStringAsFixed(4)}, ${centerLng.toStringAsFixed(4)}',
+                style: AppTypography.caption,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(i18n.tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(i18n.tr('common.save')),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(offlineMapsProvider.notifier).download(
+            name: nameController.text.trim().isEmpty
+                ? 'Region'
+                : nameController.text.trim(),
+            centerLat: centerLat,
+            centerLng: centerLng,
+            radiusKm: radius,
+          );
+    }
+  }
+
   Widget _buildPoiSection(Set<PoiCategory> categories) {
     final i18n = ref.watch(i18nProvider);
     return _buildSection(i18n.tr('settings.mapPoiSection'), [
@@ -565,6 +683,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final currentLanguage = ref.watch(languageControllerProvider);
     final currentStyle = ref.watch(mapStyleChoiceProvider);
 
+    final currentThemeMode = ref.watch(themeModeControllerProvider);
+
     return _buildSection(i18n.tr('settings.languageAndAppearance'), [
       ListTile(
         leading: const Icon(Icons.language, color: AppColors.textSecondaryDark, size: 20),
@@ -578,6 +698,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           selected: {currentLanguage},
           onSelectionChanged: (selection) {
             ref.read(languageControllerProvider.notifier).set(selection.first);
+          },
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.brightness_6_outlined, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.themeModeTitle, style: AppTypography.body),
+        trailing: SegmentedButton<AppThemeMode>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: AppThemeMode.system, label: Text(i18n.themeModeSystem)),
+            ButtonSegment(value: AppThemeMode.light, label: Text(i18n.themeModeLight)),
+            ButtonSegment(value: AppThemeMode.dark, label: Text(i18n.themeModeDark)),
+          ],
+          selected: {currentThemeMode},
+          onSelectionChanged: (selection) {
+            ref.read(themeModeControllerProvider.notifier).set(selection.first);
           },
         ),
       ),

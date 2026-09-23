@@ -10,6 +10,7 @@ import 'package:motoroute_app/features/navigation_session/active_navigation_scre
 import 'package:motoroute_app/features/onboarding/onboarding_screen.dart';
 import 'package:motoroute_app/features/onboarding/splash_screen.dart';
 import 'package:motoroute_app/features/settings/legal_screens.dart';
+import 'package:motoroute_app/features/settings/theme_mode.dart';
 import 'package:motoroute_app/features/poi/poi_selection_screen.dart';
 import 'package:motoroute_app/features/routing/presentation/start_point_selection_screen.dart';
 import 'package:motoroute_app/features/routing/route_overview_screen.dart';
@@ -64,14 +65,14 @@ class _MotoRouteAppBody extends ConsumerWidget {
     // Sprachwahl (DE/EN): aus den Einstellungen, geräteweit persistiert.
     final language = ref.watch(languageControllerProvider);
     final i18n = I18n(language);
+    // Hell/Dunkel/System: echter UI-Toggle, geräteweit persistiert.
+    final themeMode = ref.watch(themeModeControllerProvider).flutterMode;
     return MaterialApp(
       title: 'MotoRoute',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      // Automatische System-Umschaltung - Dark bleibt aber der
-      // Startpunkt der visuellen Identität (Phase 3 Teil B.1).
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       // Sprachwahl: locale steuert auch die Material-Systemtexte
       // (Auswahlmenüs, Barrierefreiheit), der eigene Katalog die UI.
       locale: i18n.locale,
