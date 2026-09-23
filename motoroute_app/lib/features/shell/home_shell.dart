@@ -8,12 +8,13 @@ import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/presentation/chat_hub_screen.dart';
 import 'package:motoroute_app/features/map/presentation/map_screen.dart';
+import 'package:motoroute_app/features/marketplace/marketplace_screen.dart';
 import 'package:motoroute_app/features/settings/settings_screen.dart';
 import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
 
-/// Tab-Shell: Karte, Touren (Wegpunkt-Planung), Chat und Einstellungen
-/// als echte Bottom-Navigation. IndexedStack hält alle Screens alive -
-/// Karten- und Chat-Verbindungen überleben Tab-Wechsel.
+/// Tab-Shell: Karte, Marktplatz, Touren (Wegpunkt-Planung), Chat und
+/// Einstellungen als echte Bottom-Navigation. IndexedStack hält alle
+/// Screens alive - Karten- und Chat-Verbindungen überleben Tab-Wechsel.
 class HomeShell extends ConsumerStatefulWidget {
   final int initialTab;
 
@@ -29,7 +30,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   void initState() {
     super.initState();
-    _tab = widget.initialTab.clamp(0, 3);
+    _tab = widget.initialTab.clamp(0, 4);
     // Begrüßung beim Start (Anforderung: App begrüßt den Nutzer), nur
     // wenn eine Sitzung existiert - einmal pro Shell-Instanz.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -72,6 +73,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         index: _tab,
         children: const [
           MapScreen(),
+          MarketplaceScreen(),
           WaypointManagementScreen(),
           ChatHubScreen(),
           SettingsScreen(),
@@ -99,6 +101,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               icon: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark),
               selectedIcon: const Icon(Icons.map, color: AppColors.accentPrimaryDark),
               label: i18n.mapTab,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.storefront_outlined, color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.storefront, color: AppColors.accentPrimaryDark),
+              label: i18n.marketplaceTab,
             ),
             NavigationDestination(
               icon: const Icon(Icons.route_outlined, color: AppColors.textSecondaryDark),

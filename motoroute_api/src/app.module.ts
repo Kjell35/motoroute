@@ -18,6 +18,7 @@ import { BikerPoisModule } from './modules/biker-pois/biker-pois.module';
 import { HazardsModule } from './modules/hazards/hazards.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { RideHistoryModule } from './modules/ride-history/ride-history.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -60,6 +61,7 @@ import { HealthController } from './modules/health/health.controller';
     HazardsModule,
     WeatherModule,
     RideHistoryModule,
+    MarketplaceModule,
   ],
   controllers: [HealthController],
   providers: [LoggingInterceptor],

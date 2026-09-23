@@ -60,6 +60,12 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   PUBLIC_URL?: string;
+
+  /** Marktplatz-KI (Gemini): optional - ohne Key degradiert die Pruefung
+   *  auf Text-Klassifikator + manuelle Pruefung, statt zu crashen. */
+  @IsOptional()
+  @IsString()
+  GEMINI_API_KEY?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

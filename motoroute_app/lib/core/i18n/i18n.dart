@@ -38,6 +38,51 @@ class I18n {
   String get mapTab => tr('tab.map');
   String get toursTab => tr('tab.tours');
   String get chatTab => tr('tab.chat');
+
+  // Marktplatz (mp.*)
+  String get marketplaceTab => tr('tab.marketplace');
+  String get mpTitle => tr('mp.title');
+  String get mpNotLoggedIn => tr('mp.notLoggedIn');
+  String get mpLoadFailed => tr('mp.loadFailed');
+  String get mpSearchHint => tr('mp.searchHint');
+  String get mpFavorites => tr('mp.favorites');
+  String get mpMyListings => tr('mp.myListings');
+  String get mpAdmin => tr('mp.admin');
+  String get mpCreateListing => tr('mp.createListing');
+  String get mpResubmitTitle => tr('mp.resubmitTitle');
+  String get mpEmpty => tr('mp.empty');
+  String get mpFilters => tr('mp.filters');
+  String get mpFiltersApply => tr('mp.filtersApply');
+  String get mpFiltersReset => tr('mp.filtersReset');
+  String get mpFilterCondition => tr('mp.filterCondition');
+  String get mpMaxPrice => tr('mp.maxPrice');
+  String get mpShipping => tr('mp.shipping');
+  String get mpShippingHint => tr('mp.shippingHint');
+  String get mpSortNewest => tr('mp.sortNewest');
+  String get mpSortPriceAsc => tr('mp.sortPriceAsc');
+  String get mpSortPriceDesc => tr('mp.sortPriceDesc');
+  String get mpSubcategory => tr('mp.subcategory');
+  String get mpStepCategory => tr('mp.stepCategory');
+  String get mpStepSubcategory => tr('mp.stepSubcategory');
+  String get mpStepPhotos => tr('mp.stepPhotos');
+  String get mpStepDetails => tr('mp.stepDetails');
+  String get mpStepPrice => tr('mp.stepPrice');
+  String get mpCategoryRequired => tr('mp.categoryRequired');
+  String get mpTitleField => tr('mp.titleField');
+  String get mpTitleShort => tr('mp.titleShort');
+  String get mpDescription => tr('mp.description');
+  String get mpBrand => tr('mp.brand');
+  String get mpModel => tr('mp.model');
+  String get mpYear => tr('mp.year');
+  String get mpOptional => tr('mp.optional');
+  String get mpLocation => tr('mp.location');
+  String get mpLocationRequired => tr('mp.locationRequired');
+  String get mpCondition => tr('mp.condition');
+  String get mpPrice => tr('mp.price');
+  String get mpPriceInvalid => tr('mp.priceInvalid');
+  String get mpAiCheckNote => tr('mp.aiCheckNote');
+  String get mpSubmitForReview => tr('mp.submitForReview');
+  String get mpSubmitFailed => tr('mp.submitFailed');
   String get settingsTab => tr('tab.settings');
   String get languageLabel => tr('settings.language');
   String get themeModeTitle => tr('settings.themeMode');
@@ -181,6 +226,7 @@ const _catalog = <String, Map<String, String>>{
     'settings.offlineMaps.dialogTitle': 'Offline-Karte herunterladen',
     'settings.offlineMaps.radius': 'Radius um die aktuelle Position',
     'tab.map': 'Karte',
+    'tab.marketplace': 'Marktplatz',
     'tab.tours': 'Touren',
     'tab.chat': 'Chat',
     'tab.settings': 'Einstellungen',
@@ -332,6 +378,49 @@ const _catalog = <String, Map<String, String>>{
     'tour.deleteConfirm': 'Diese Tour endgültig aus dem Tagebuch löschen?',
     'tour.export': 'Als GPX teilen',
     'tour.exportFailed': 'GPX-Export fehlgeschlagen',
+    // Marktplatz
+    'mp.title': 'Marktplatz',
+    'mp.notLoggedIn': 'Bitte melde dich an, um den Marktplatz zu nutzen.',
+    'mp.loadFailed': 'Laden fehlgeschlagen',
+    'mp.searchHint': 'Angebot suchen',
+    'mp.favorites': 'Meine Favoriten',
+    'mp.myListings': 'Meine Angebote',
+    'mp.admin': 'Admin',
+    'mp.createListing': '+ Angebot erstellen',
+    'mp.resubmitTitle': 'Angebot ändern & erneut einreichen',
+    'mp.empty': 'Keine Angebote gefunden',
+    'mp.filters': 'Filter',
+    'mp.filtersApply': 'Filter anwenden',
+    'mp.filtersReset': 'Alles zurücksetzen',
+    'mp.filterCondition': 'Zustand',
+    'mp.maxPrice': 'Max. Preis',
+    'mp.shipping': '📦 Versand möglich',
+    'mp.sortNewest': 'Neueste',
+    'mp.sortPriceAsc': 'Preis ↑',
+    'mp.sortPriceDesc': 'Preis ↓',
+    'mp.subcategory': 'Unterkategorie',
+    'mp.stepCategory': '1. Hauptkategorie',
+    'mp.stepSubcategory': '2. Unterkategorie',
+    'mp.stepPhotos': '3. Fotos',
+    'mp.stepDetails': '4. Artikelinformationen',
+    'mp.stepPrice': '5. Preis',
+    'mp.categoryRequired': 'Bitte Hauptkategorie und Unterkategorie wählen',
+    'mp.titleField': 'Titel',
+    'mp.titleShort': 'Mindestens 3 Zeichen',
+    'mp.description': 'Beschreibung',
+    'mp.brand': 'Marke',
+    'mp.model': 'Modell',
+    'mp.year': 'Baujahr',
+    'mp.optional': 'optional',
+    'mp.location': 'Standort',
+    'mp.locationRequired': 'Standort angeben',
+    'mp.condition': 'Zustand',
+    'mp.shippingHint': 'Versand an den Käufer ist möglich',
+    'mp.price': 'Preis',
+    'mp.priceInvalid': 'Ungültiger Preis',
+    'mp.aiCheckNote': 'Jedes Angebot wird vor der Veröffentlichung automatisch geprüft (KI). Nur Fahrzeugteile und Fahrzeugzubehör sind erlaubt. Unklare Fälle werden manuell geprüft.',
+    'mp.submitForReview': '🤖 Zur KI-Prüfung einreichen',
+    'mp.submitFailed': 'Einreichen fehlgeschlagen',
   },
   'en': {
     'settings.themeMode': 'Appearance (UI)',
@@ -348,6 +437,7 @@ const _catalog = <String, Map<String, String>>{
     'settings.saved': 'Saved',
     'errors.saveFailed': 'Saving failed - please try again later',
     'tab.map': 'Map',
+    'tab.marketplace': 'Market',
     'tab.tours': 'Tours',
     'tab.chat': 'Chat',
     'tab.settings': 'Settings',
@@ -498,5 +588,48 @@ const _catalog = <String, Map<String, String>>{
     'tour.deleteConfirm': 'Permanently delete this tour from the diary?',
     'tour.export': 'Share as GPX',
     'tour.exportFailed': 'GPX export failed',
+    // Marketplace
+    'mp.title': 'Marketplace',
+    'mp.notLoggedIn': 'Please sign in to use the marketplace.',
+    'mp.loadFailed': 'Loading failed',
+    'mp.searchHint': 'Search listings',
+    'mp.favorites': 'My favorites',
+    'mp.myListings': 'My listings',
+    'mp.admin': 'Admin',
+    'mp.createListing': '+ Create listing',
+    'mp.resubmitTitle': 'Edit & resubmit listing',
+    'mp.empty': 'No listings found',
+    'mp.filters': 'Filters',
+    'mp.filtersApply': 'Apply filters',
+    'mp.filtersReset': 'Reset all',
+    'mp.filterCondition': 'Condition',
+    'mp.maxPrice': 'Max. price',
+    'mp.shipping': '📦 Shipping available',
+    'mp.sortNewest': 'Newest',
+    'mp.sortPriceAsc': 'Price ↑',
+    'mp.sortPriceDesc': 'Price ↓',
+    'mp.subcategory': 'Subcategory',
+    'mp.stepCategory': '1. Main category',
+    'mp.stepSubcategory': '2. Subcategory',
+    'mp.stepPhotos': '3. Photos',
+    'mp.stepDetails': '4. Listing details',
+    'mp.stepPrice': '5. Price',
+    'mp.categoryRequired': 'Please pick main category and subcategory',
+    'mp.titleField': 'Title',
+    'mp.titleShort': 'At least 3 characters',
+    'mp.description': 'Description',
+    'mp.brand': 'Brand',
+    'mp.model': 'Model',
+    'mp.year': 'Year',
+    'mp.optional': 'optional',
+    'mp.location': 'Location',
+    'mp.locationRequired': 'Enter a location',
+    'mp.condition': 'Condition',
+    'mp.shippingHint': 'Shipping to the buyer is possible',
+    'mp.price': 'Price',
+    'mp.priceInvalid': 'Invalid price',
+    'mp.aiCheckNote': 'Every listing is checked automatically (AI) before publication. Only vehicle parts and accessories are allowed. Unclear cases go to manual review.',
+    'mp.submitForReview': '🤖 Submit for AI review',
+    'mp.submitFailed': 'Submission failed',
   },
 };

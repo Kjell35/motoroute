@@ -39,6 +39,9 @@ class AppColors {
   static const Color statusWarningLight = Color(0xFFC97F0E);
   static const Color statusDanger = Color(0xFFE5484D);
   static const Color statusDangerLight = Color(0xFFC7333A);
+  /// Erfolg (Freigabe, Bestätigung) - Marktplatz & Moderation.
+  static const Color statusSuccess = Color(0xFF46A758);
+  static const Color statusSuccessLight = Color(0xFF3B8A4A);
 
   static const Color borderHairlineDark = Color(0x14FFFFFF); // rgba(255,255,255,0.08)
   static const Color borderHairlineLight = Color(0x14000000); // rgba(0,0,0,0.08)
