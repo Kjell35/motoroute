@@ -1,20 +1,21 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Post, Put, Query, Req, UseGuards, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
+import { Transform, Type } from 'class-transformer';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
 import { MarketplaceService } from './marketplace.service';
 import { ChatService } from '../chat/chat.service';
 import {
-  IsArray,
   IsBoolean,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   Length,
   Max,
   MaxLength,
   Min,
-  MinLength,
 } from 'class-validator';
 
 /**
@@ -33,6 +34,8 @@ class CreateListingDto {
   @MaxLength(4000)
   description?: string;
 
+  /** Multipart liefert ALLES als String - explizite Conversion für Zahlen. */
+  @Transform(({ value }) => Number(value))
   @IsInt()
   @Min(0)
   @Max(1_000_000_00)
@@ -58,6 +61,7 @@ class CreateListingDto {
   model?: string;
 
   @IsOptional()
+  @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Math.trunc(Number(value))))
   @IsInt()
   @Min(1900)
   @Max(2100)
@@ -67,9 +71,19 @@ class CreateListingDto {
   @Length(1, 120)
   locationLabel!: string;
 
-  @IsOptional() lat?: number;
-  @IsOptional() lng?: number;
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined || value === '' ? undefined : Number(value)))
+  @IsLatitude()
+  lat?: number;
 
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined || value === '' ? undefined : Number(value)))
+  @IsLongitude()
+  lng?: number;
+
+  /** Multipart: 'true'/'false' kommen als String an -> vor der Validierung
+   *  auf echtes Boolean normalisieren (IsBoolean lehnt Strings ab). */
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
   @IsBoolean()
   shipping!: boolean;
 }
@@ -78,6 +92,8 @@ class StatusDto {
   @IsString()
   status!: 'active' | 'paused' | 'sold';
 }
+
+/** year kommt als String an: nach Number konvertieren. */
 
 class ReportDto {
   @IsString()
