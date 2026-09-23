@@ -21,7 +21,19 @@ class WaypointManagementScreen extends ConsumerWidget {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: Text('Wegpunkte', style: AppTypography.title),
+        title: Text('Touren', style: AppTypography.title),
+        actions: [
+          IconButton(
+            tooltip: 'Tour-Tagebuch',
+            icon: const Icon(Icons.auto_stories_outlined, color: AppColors.textSecondaryDark),
+            onPressed: () => Navigator.of(context).pushNamed('/tour-diary'),
+          ),
+          IconButton(
+            tooltip: 'GPX importieren',
+            icon: const Icon(Icons.upload_file_outlined, color: AppColors.textSecondaryDark),
+            onPressed: () => Navigator.of(context).pushNamed('/tour-import'),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -129,6 +141,23 @@ class WaypointManagementScreen extends ConsumerWidget {
                       ),
                       icon: const Icon(Icons.add_location_alt_outlined),
                       label: const Text('Auf Karte antippen'),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    height: AppSpacing.touchTargetPlanning,
+                    child: OutlinedButton.icon(
+                      // Tour-Tagebuch: vergangene Fahrten, Statistiken,
+                      // GPX-Export/Import (Calimoto/Kurviger-kompatibel).
+                      onPressed: () => Navigator.of(context).pushNamed('/tour-diary'),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.borderHairlineDark),
+                        foregroundColor: AppColors.textPrimaryDark,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.auto_stories_outlined),
+                      label: const Text('Tour-Tagebuch'),
                     ),
                   ),
                 ],

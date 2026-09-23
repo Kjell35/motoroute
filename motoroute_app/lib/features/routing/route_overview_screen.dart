@@ -8,7 +8,6 @@ import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
-import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 
 /// Screen 7: Routenübersicht - zeigt die tatsächlich berechnete Route
 /// AUF DER KARTE (Linie + Start-/Ziel-/Wegpunkt-Marker, automatisch

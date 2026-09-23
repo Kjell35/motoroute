@@ -9,6 +9,9 @@ import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/navigation_session/navigation_providers.dart';
+import 'package:motoroute_app/features/tour_diary/domain/tour_entities.dart';
+import 'package:motoroute_app/features/tour_diary/tour_diary_providers.dart';
+import 'package:motoroute_app/features/tour_diary/tour_recorder.dart';
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
 import 'package:motoroute_app/features/weather/route_weather_providers.dart';
 import 'package:motoroute_app/features/weather/route_weather_widget.dart';
@@ -40,6 +43,9 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
       if (route != null) {
         ref.read(navigationControllerProvider.notifier).start(route);
       }
+      // Tour-Aufzeichnung läuft parallel zur Navigation - jede Fahrt
+      // wird aufgezeichnet und landet nach dem Beenden im Tagebuch.
+      ref.read(tourRecorderProvider.notifier).start();
     });
   }
 
@@ -315,15 +321,81 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
             child: _CircleButton(
               icon: Icons.stop,
               label: ref.watch(i18nProvider).navEnd,
-              onTap: () {
-                ref.read(navigationControllerProvider.notifier).stop();
-                Navigator.of(context).popUntil((r) => r.settings.name == '/map' || r.isFirst);
-              },
+              onTap: () => _endNavigation(context),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Navigation beenden + aufgezeichnete Tour ins Tagebuch speichern.
+  /// Fehler beim Speichern dürfen das Beenden NICHT blockieren - die
+  /// Fahrt ist vorbei, der Fahrer will raus.
+  Future<void> _endNavigation(BuildContext context) async {
+    final recorder = ref.read(tourRecorderProvider.notifier);
+    ref.read(navigationControllerProvider.notifier).stop();
+
+    RecordedTour? tour;
+    try {
+      tour = await recorder.stop();
+    } catch (_) {
+      tour = null;
+    }
+    ref.read(routeWeatherControllerProvider.notifier).stop();
+
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((r) => r.settings.name == '/map' || r.isFirst);
+
+    if (tour != null && context.mounted) {
+      // Name abfragen (leer = Standardtitel), dann im Tagebuch auffrischen.
+      final i18n = ref.read(i18nProvider);
+      final controller = TextEditingController(text: tour.title);
+      final name = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: AppColors.bgSurfaceDark,
+          title: Text(i18n.tr('tour.saveTitle'), style: AppTypography.title),
+          content: TextField(
+            controller: controller,
+            maxLength: 80,
+            autofocus: true,
+            style: AppTypography.body,
+            decoration: InputDecoration(
+              hintText: i18n.tr('tour.saveHint'),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(null),
+              child: Text(i18n.tr('tour.discard')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+              child: Text(i18n.save),
+            ),
+          ],
+        ),
+      );
+      if (name == null) {
+        // Verwerfen: Tour aus der DB löschen.
+        if (tour.id != null) {
+          try {
+            await ref.read(tourDatabaseProvider).deleteTour(tour.id!);
+          } catch (_) {}
+        }
+        return;
+      }
+      if (name.isNotEmpty && name != tour.title) {
+        try {
+          await ref
+              .read(tourDatabaseProvider)
+              .updateTour(tour.copyWith(title: name));
+        } catch (_) {}
+      }
+      ref.read(tourDiaryProvider.notifier).refresh();
+    }
   }
 }
 

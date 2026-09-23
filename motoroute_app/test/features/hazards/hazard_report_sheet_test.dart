@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motoroute_app/features/hazards/hazard_repository.dart';
 import 'package:motoroute_app/features/hazards/presentation/hazard_report_sheet.dart';
 
 void main() {

@@ -1,6 +1,12 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart'
     show LocationAccuracyPreset, LocationTuning;
+
+/// Injektionspunkt (Tests überschreiben diesen Provider mit einem Mock).
+final locationRepositoryProvider = Provider<LocationRepository>((ref) {
+  return LocationRepository();
+});
 
 /// Kapselt Geolocator komplett - Presentation-Code fragt nie direkt
 /// bei geolocator nach, damit z. B. der Energiesparmodus (Phase 1/2
