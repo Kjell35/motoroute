@@ -56,3 +56,6 @@ motoroute_api/dist/
 
 # Flutter/Android: maschinenspezifische SDK-Pfade
 motoroute_app/android/local.properties
+
+# Garage-API: Lockfile wird gebraucht (Render npm ci)
+!garage/garage-api/package-lock.json
