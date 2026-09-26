@@ -70,6 +70,14 @@ class ChatRealtimeClient {
 
   bool get isConnected => _channel != null && _channel!.closeCode == null;
 
+  /// Aktive Raum-Abos. Der SERVER wirft Räume beim Disconnect weg -
+  /// nach einem Reconnect (Funkloch, Server-Restart) müssen wir sie
+  /// selbst neu anfragen, sonst bleiben Live-Nachrichten aus, bis der
+  /// Nutzer den Chat neu öffnet. Der Client merkt sich deshalb seine
+  /// Abos und erneuert sie nach jedem erfolgreichen auth_ok.
+  final Set<String> _rooms = {};
+  final Set<String> _rideRooms = {};
+
   void connect(String token) {
     if (_disposed) return;
     _token = token;
@@ -96,12 +104,20 @@ class ChatRealtimeClient {
       _reconnectAttempts = 0;
       send('auth', {'token': token});
       // Heartbeat: hält Mobilfunk-Verbindungen offen, erkennt tote Sockets.
-      _heartbeat?.cancel();
       _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
         // Der Server kennt kein ping-Event -> unbekannte Events antworten
         // mit error, was harmlos ist; primär geht es um TCP-Aktivität.
         send('ping', {});
       });
+      // WICHTIG (Reconnect-Bugfix): Nach einem Reconnect sind die
+      // serverseitigen Räume weg (handleDisconnect verwirft sie). Ohne
+      // Re-Subscribe würde chat.message.created stillschweigend aus-
+      // bleiben - die Realtime-Nachricht kommt erst wieder, wenn der
+      // Nutzer den Chat neu öffnet. Bei FRISCHER Verbindung ist _rooms
+      // leer: die Screens abonnieren wie gehabt selbst.
+      //
+      // Re-Subscribe aber NICHT direkt hier: der Server kennt uns erst
+      // nach auth_ok. Wir senden deshalb in _onData nach 'auth_ok'.
     } catch (_) {
       _scheduleReconnect();
     }
@@ -184,6 +200,16 @@ class ChatRealtimeClient {
           }
           break;
         case 'auth_ok':
+          // Reconnect-Bugfix: Nach erfolgreicher Auth die gemerkten Räume
+          // erneut anfragen (siehe _openSocket-Kommentar). Nur nach einem
+          // ECHTEN Reconnect nötig - bei erster Auth ist _rooms leer.
+          for (final room in _rooms) {
+            send('subscribe', {'conversationId': room});
+          }
+          for (final ride in _rideRooms) {
+            send('subscribe_ride', {'routeId': ride});
+          }
+          break;
         case 'subscribed':
         case 'error':
         default:
@@ -204,16 +230,28 @@ class ChatRealtimeClient {
     }
   }
 
-  void subscribe(String conversationId) => send('subscribe', {'conversationId': conversationId});
+  void subscribe(String conversationId) {
+    _rooms.add(conversationId);
+    send('subscribe', {'conversationId': conversationId});
+  }
 
-  void unsubscribe(String conversationId) => send('unsubscribe', {'conversationId': conversationId});
+  void unsubscribe(String conversationId) {
+    _rooms.remove(conversationId);
+    send('unsubscribe', {'conversationId': conversationId});
+  }
 
   /// Ride-Radar abonnieren (serverseitige Membership-Prüfung; Antwort
   /// subscribed_ride bzw. error - die Auswertung macht der Controller
   /// über die radarEvents bzw. den Refresh-Pfad).
-  void subscribeRide(String routeId) => send('subscribe_ride', {'routeId': routeId});
+  void subscribeRide(String routeId) {
+    _rideRooms.add(routeId);
+    send('subscribe_ride', {'routeId': routeId});
+  }
 
-  void unsubscribeRide(String routeId) => send('unsubscribe_ride', {'routeId': routeId});
+  void unsubscribeRide(String routeId) {
+    _rideRooms.remove(routeId);
+    send('unsubscribe_ride', {'routeId': routeId});
+  }
 
   /// Test-Hook: Radar-Event direkt in den Strom injizieren (ohne echten
   /// WS-Server - derselbe Codepfad wie _onData, nur ohne Transport).

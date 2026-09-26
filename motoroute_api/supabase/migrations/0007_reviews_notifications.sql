@@ -76,9 +76,11 @@ drop policy if exists notifications_read_own on public.notifications;
 create policy notifications_read_own on public.notifications
   for select using (user_id = auth.uid());
 
-drop policy if exists notifications_insert_service on public.notifications;
-create policy notifications_insert_service on public.notifications
-  for insert with check (true);
+-- Bewusst KEINE Insert-Policy: Das Backend schreibt Notifications mit
+-- dem Service-Role-Client, der RLS ohnehin umgeht. Eine offene Policy
+-- (with check (true)) würde jedem User-JWT erlauben, in FREMDE Inboxes
+-- zu schreiben (Spam-Vektor). RLS + keine Policy = deny all für normale
+-- Rollen - genau das gewollte Verhalten.
 
 drop policy if exists notifications_update_own on public.notifications;
 create policy notifications_update_own on public.notifications
