@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/network/api_client.dart';
 import '../auth/auth_providers.dart';
 import '../chat/chat_providers.dart';
 
@@ -339,7 +340,11 @@ class GarageRepository {
     String? garageBaseUrlOverride,
   }) async {
     // 1) Ticket anfordern (MotoRoute-Backend kennt Rolle + Email).
-    final ticketRes = await _dio.post<Map<String, dynamic>>(
+    //    Bewusst mit ApiClient.create(): baseUrl/Timeouts/Refresh wie
+    //    ueberall - ein roher Dio() waere gegen 10.0.2.2 gelaufen und
+    //    haette auf echten Handys IMMER failed.
+    final ticketDio = ApiClient.create();
+    final ticketRes = await ticketDio.post<Map<String, dynamic>>(
       '/v1/users/me/garage-ticket',
       options: Options(headers: {'Authorization': 'Bearer $motoRouteToken'}),
     );

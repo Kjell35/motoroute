@@ -6,16 +6,6 @@ import 'package:motoroute_app/features/garage/garage_screen.dart';
 import 'package:motoroute_app/features/garage/garage_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Fake-Repository: jeder Aufruf wirft eine GarageApiException (kein Netz).
-class _FailingGarageRepository extends GarageRepository {
-  _FailingGarageRepository() : super(Dio());
-
-  @override
-  Future<List<GarageVehicle>> garage(String baseUrl, String token) async {
-    throw GarageApiException('Simulierter Server-Ausfall', 503);
-  }
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -23,17 +13,19 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('Garage-Tab ohne Session zeigt Login-Karte (kein grauer Screen)', (tester) async {
+  testWidgets('Garage-Tab ohne Konto zeigt Verbinden-Karte (kein grauer Screen, kein Login-Formular)', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: MaterialApp(home: GarageScreen()),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.byType(GarageScreen), findsOneWidget);
-    // Login-Karte sichtbar (E-Mail + Passwort-Feld), kein Exception-Grau.
-    expect(find.byType(TextField), findsNWidgets(2));
+    // Kein Login-Formular mehr: Auto-Provisioning statt E-Mail/Passwort.
+    expect(find.byType(TextField), findsNothing);
+    // Die Verbinden-Karte ist da (Texte aus i18n, mit Fallback-Katalog).
+    expect(find.textContaining('Garage'), findsWidgets);
   });
 
   testWidgets('Garage-Übersicht: Server-Fehler erscheint als Liste mit Meldung, nicht als Grau', (tester) async {
@@ -54,8 +46,6 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 1));
 
-    // Kein Flutter-Standard-Error-Grau: Der Fehler-Zustand zeigt eine
-    // ListView mit verstaendlicher Meldung (Garage-Server nicht erreichbar).
     expect(
       find.byWidgetPredicate((w) => w is Text && (w.data?.contains('RenderException') ?? false)),
       findsNothing,
@@ -65,4 +55,13 @@ void main() {
       findsWidgets,
     );
   });
+}
+
+class _FailingGarageRepository extends GarageRepository {
+  _FailingGarageRepository() : super(Dio());
+
+  @override
+  Future<List<GarageVehicle>> garage(String baseUrl, String token) async {
+    throw GarageApiException('Simulierter Server-Ausfall', 503);
+  }
 }
