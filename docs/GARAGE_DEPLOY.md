@@ -22,15 +22,40 @@ Die Änderungen an `render.yaml` und den beiden Workflows müssen auf GitHub sei
 damit Render den neuen Dienst sieht. Erst committen + pushen (oder mich bitten,
 es zu tun), dann weiter mit Schritt 2.
 
-## Schritt 2 — Blueprint-Sync in Render (~2 Minuten)
+## Schritt 2 — Dienst in Render anlegen (~3 Minuten)
 
-1. **https://dashboard.render.com** öffnen → dein Blueprint-Projekt
-   (das mit `motoroute-api`)
-2. Oben rechts **„New +" → Blueprint** — Render erkennt das Repo erneut und
-   zeigt: **1 neuer Dienst: `garage-api`** (der bestehende `motoroute-api`
-   bleibt unangetastet) → **„Apply"** / „Create resources"
-3. Der erste Deploy schlägt garantiert fehl (fehlende `DATABASE_URL`) —
-   das ist normal, weiter zu Schritt 3.
+**Wichtig:** Nicht erneut „New + Blueprint" anklicken — das legt einen
+*zweiten*, getrennten Blueprint an und funktioniert nicht, wenn das Repo
+schon verbunden ist. Zwei Wege:
+
+### Weg A: Blueprint-Sync (falls motoroute-api als Blueprint läuft)
+
+1. Dashboard öffnen → linke Seitenleiste **„Blueprints"** anklicken
+   (ODER: das bestehende Projekt mit motoroute-api öffnen → Tab „Blueprints")
+2. Dort zeigt Render die Änderung der render.yaml an:
+   **„1 service to add: garage-api"** → **„Apply Changes"** drücken
+3. Wenn dort nichts angezeigt wird, existiert vielleicht gar kein Blueprint —
+   dann Weg B.
+
+### Weg B: Manueller Web Service (immer funktionierend)
+
+1. **https://dashboard.render.com** → **„New +" → „Web Service"**
+2. „Build and deploy from a Git repository" → bestehendes Repo
+   **Kjell35/motoroute** auswählen (ist schon verbunden)
+3. Werte eintragen:
+
+   | Feld | Wert |
+   |---|---|
+   | Name | `garage-api` |
+   | Language | `Node` |
+   | **Root Directory** | `garage/garage-api` |
+   | Build Command | `npm ci --include=dev && npx prisma generate && npm run build` |
+   | Start Command | `node dist/src/main.js` |
+   | Instance Type | `Free` |
+
+4. **„Advanced"** aufklappen → **Health Check Path:** `/api/health`
+5. **„Create Web Service"** — der erste Deploy schlägt garantiert fehl
+   (fehlende `DATABASE_URL`) — das ist normal, weiter zu Schritt 3.
 
 ## Schritt 3 — Environment-Variablen setzen (~3 Minuten)
 

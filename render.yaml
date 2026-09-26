@@ -15,11 +15,16 @@
 #     garage/garage-api-Ordner.
 #
 # Einmaliges Setup (~5 Minuten, Free Tier, keine Kreditkarte):
-#   1. https://dashboard.render.com oeffnen -> Blueprint-Repository
-#      "Kjell35/motoroute" auswaehlen. Render zeigt den NEUEN Dienst
-#      "garage-api" an (der bestehende motoroute-api bleibt wie er ist)
-#      -> "Apply".
-#   2. Danach im Dashboard den Dienst "garage-api" oeffnen ->
+#   A) Ist motoroute-api Blueprint-managed: Dashboard -> "Blueprints"
+#      (Seitenleiste) -> Render zeigt "1 service to add: garage-api"
+#      -> "Apply Changes".
+#   B) Sonst manuell: New + Web Service -> Repo Kjell35/motoroute ->
+#      Name garage-api, Root Directory garage/garage-api,
+#      Build: npm ci --include=dev && npx prisma generate && npm run build,
+#      Start: node dist/src/main.js, Health Check Path /api/health.
+#      (NICHT "New + Blueprint" klicken - das legt einen zweiten,
+#      getrennten Blueprint an.)
+#   Danach im Dashboard den Dienst "garage-api" oeffnen ->
 #      "Environment" und diese Variablen setzen (Werte aus
 #      garage/garage-api/.env - lokal vorhanden):
 #        DATABASE_URL          = die SUPABASE-POOLER-Verbindung der
