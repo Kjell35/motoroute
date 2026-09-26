@@ -66,6 +66,17 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   GEMINI_API_KEY?: string;
+
+  /** Gemeinsames Secret mit der Garage-API (Auto-Provisioning-Tickets):
+   *  optional - ohne Secret liefert /v1/garage/ticket 503. */
+  @IsOptional()
+  @IsString()
+  GARAGE_TICKET_SECRET?: string;
+
+  /** Öffentliche Basis-URL der Garage-API (Ticket-Empfänger). */
+  @IsOptional()
+  @IsString()
+  GARAGE_API_URL?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

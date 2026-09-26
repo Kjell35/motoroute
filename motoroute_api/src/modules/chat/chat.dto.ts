@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 /** Query-Klammer für Listen-Endpunkte (Pagination, Abschnitt 36). */
 export class PaginationQueryDto {
@@ -20,6 +21,10 @@ export class PaginationQueryDto {
   @MaxLength(64)
   before?: string; // ISO-Timestamp-Cursor
 
+  /** Query-Parameter kommen IMMER als String an ("limit=30") - @Type
+   *  konvertiert vor der Validierung; ohne ihn wirft @IsInt eine 400
+   *  für jeden gültigen Request (Production-Bug: Chat lud nie). */
+  @Type(() => Number)
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -173,11 +178,18 @@ export class ReportUserDto {
   details?: string;
 }
 
+/** Admin: Meldungs-Status setzen (Chat-Admin-Bereich der App). */
+export class ResolveReportDto {
+  @IsIn(['reviewing', 'resolved', 'dismissed'])
+  status!: 'reviewing' | 'resolved' | 'dismissed';
+}
+
 export class SearchUsersDto {
   @IsString()
   @Length(2, 40)
   query: string;
 
+  @Type(() => Number)
   @IsOptional()
   @IsInt()
   @Min(1)

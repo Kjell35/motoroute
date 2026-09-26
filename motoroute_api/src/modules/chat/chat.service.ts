@@ -848,6 +848,59 @@ export class ChatService {
   }
 
   // =========================================================================
+  // Admin: Nutzer-Meldungen pruefen (App-Anforderung: Admin sieht Meldungen)
+  // =========================================================================
+
+  private async requireChatAdmin(user: AuthenticatedUser): Promise<void> {
+    if (!this.adminClient) {
+      throw new HttpException(
+        { error: 'DB_NOT_CONFIGURED', message: 'Admin-Funktionen nicht konfiguriert' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const { data, error } = await this.adminClient
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (error) mapSupabaseError('requireChatAdmin', error);
+    if ((data as { role?: string } | null)?.role !== 'admin') {
+      throw new ForbiddenException({ error: 'FORBIDDEN', message: 'Admin-Berechtigung erforderlich' });
+    }
+  }
+
+  /** Offene Nutzer-/Nachrichten-Meldungen fuer den Admin-Bereich. */
+  async adminListReports(user: AuthenticatedUser, status = 'open'): Promise<{ reports: Record<string, unknown>[] }> {
+    this.ensureConfigured();
+    await this.requireChatAdmin(user);
+    const { data, error } = await this.adminClient!
+      .from('reports')
+      .select(
+        'id, reporter_id, reported_user_id, message_id, reason, details, status, created_at, reported:users!reports_reported_user_id_fkey(id, username, display_name, email)',
+      )
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) mapSupabaseError('adminListReports', error);
+    return { reports: (data ?? []) as Record<string, unknown>[] };
+  }
+
+  /** Meldung bearbeiten: status setzen (reviewing/resolved/dismissed). */
+  async adminResolveReport(
+    user: AuthenticatedUser,
+    reportId: string,
+    status: 'reviewing' | 'resolved' | 'dismissed',
+  ): Promise<void> {
+    this.ensureConfigured();
+    await this.requireChatAdmin(user);
+    const { error } = await this.adminClient!
+      .from('reports')
+      .update({ status })
+      .eq('id', reportId);
+    if (error) mapSupabaseError('adminResolveReport', error);
+  }
+
+  // =========================================================================
   // Presence & Typing (Abschnitt 18/19)
   // =========================================================================
 

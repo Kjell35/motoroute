@@ -46,7 +46,17 @@ class ApiClient {
 
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _cachedOverride = _normalized(prefs.getString(_overrideKey));
+    // MIGRATION: Früher konnte man die Server-URL in den Einstellungen
+    // überschreiben. Ein einmal falsch/einmal lokal gespeicherter Wert
+    // hat dann die gebackene Produktions-URL ÜBERSCHRIEBEN -> "Keine
+    // Internetverbindung" überall, obwohl der Server läuft. Der Override
+    // ist tot: gespeicherte Werte werden gelöscht, die gebackene URL
+    // (_envBaseUrl) gilt immer.
+    final legacy = prefs.getString(_overrideKey);
+    if (legacy != null) {
+      await prefs.remove(_overrideKey);
+    }
+    _cachedOverride = null;
   }
 
   static String? _normalized(String? value) {

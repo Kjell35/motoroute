@@ -1,4 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Put, Post, Req, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHmac } from 'crypto';
+import { HttpException, HttpStatus } from '@nestjs/common';
 import { IsIn, IsOptional, IsString, Length, Matches, MaxLength, MinLength } from 'class-validator';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
 import { UserService } from './user.service';
@@ -75,12 +78,45 @@ export class UpdatePasswordDto {
  */
 @Controller('v1/users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Get('me')
   @UseGuards(AuthProvider)
   async getMe(@Req() req: AuthenticatedRequest): Promise<unknown> {
     return this.userService.getMe(req.user!);
+  }
+
+  /**
+   * Garage-Auto-Provisioning (Schritt 1): kurzlebiges HMAC-Ticket fuer
+   * POST /api/auth/provision der Garage-API erzeugen. Der Nutzer wird
+   * dort silent registriert/eingeloggt - kein zweites Login-Formular.
+   */
+  @Post('me/garage-ticket')
+  @HttpCode(201)
+  @UseGuards(AuthProvider)
+  garageTicket(@Req() req: AuthenticatedRequest): unknown {
+    const secret = this.config.get<string>('GARAGE_TICKET_SECRET');
+    if (!secret || secret.length < 32) {
+      throw new HttpException(
+        { error: 'PROVISION_DISABLED', message: 'Garage-Anbindung nicht konfiguriert' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const payload = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        sub: req.user!.id,
+        email: req.user!.email ?? '',
+        displayName: '', // Garage faellt auf Email-Localpart zurueck
+        admin: req.user!.role === 'admin',
+        exp: Math.floor(Date.now() / 1000) + 120, // 2 Minuten gueltig
+      }),
+    ).toString('base64url');
+    const sig = createHmac('sha256', secret).update(payload).digest('base64url');
+    return { ticket: `${payload}.${sig}`, garageApiUrl: this.config.get<string>('GARAGE_API_URL') ?? null };
   }
 
   @Put('me')

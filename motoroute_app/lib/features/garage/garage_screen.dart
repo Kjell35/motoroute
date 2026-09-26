@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n/i18n.dart';
 import '../../core/theme/app_colors.dart';
+import '../auth/auth_providers.dart';
 import 'garage_repository.dart';
 import 'garage_vehicle_screen.dart';
 
-/// Garage-Tab: Login-Karte gegen die EIGENE Garage-API (unabhaengig vom
-/// MotoRoute-Login) und die Fahrzeug-Übersicht (Motorraeder/Autos,
-/// Ampel-Status der Wartungserinnerungen).
+/// Garage-Tab: Auto-Provisioning gegen die EIGENE Garage-API (mit dem
+/// MotoRoute-Konto, ohne zweites Login) und die Fahrzeug-Übersicht
+/// (Motorraeder/Autos, Ampel-Status der Wartungserinnerungen).
 class GarageScreen extends ConsumerStatefulWidget {
   const GarageScreen({super.key});
 
@@ -17,31 +18,7 @@ class GarageScreen extends ConsumerStatefulWidget {
 }
 
 class _GarageScreenState extends ConsumerState<GarageScreen> {
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
   bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _login() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    await ref.read(garageSessionProvider.notifier).login(_emailCtrl.text.trim(), _passwordCtrl.text);
-    final state = ref.read(garageSessionProvider);
-    setState(() {
-      _busy = false;
-      _error = state.hasError ? _friendly(state.error) : null;
-    });
-    if (!state.hasError) ref.invalidate(garageListProvider);
-  }
 
   String _friendly(Object? e) {
     final msg = e.toString();
@@ -90,7 +67,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text(_friendly(e), style: const TextStyle(color: AppColors.textSecondaryDark))),
         data: (s) {
-          if (s == null) return _buildLogin(i18n);
+          if (s == null) return _buildNeedsAccount(i18n);
           return _buildGarage(i18n, s);
         },
       ),
@@ -99,7 +76,13 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
 
   // -- Login-Karte -----------------------------------------------------------
 
-  Widget _buildLogin(I18n i18n) {
+  Widget _buildNeedsAccount(I18n i18n) {
+    // KEIN Login-Formular mehr: Die Garage verbindet sich automatisch
+    // mit dem MotoRoute-Konto. Diese Karte erscheint nur, wenn das
+    // Provisioning gerade nicht klappt (offline / Kaltstart / nicht
+    // angemeldet) - mit ehrlichem Hinweis und Retry-Knopf.
+    final auth = ref.watch(authControllerProvider);
+    final signedIn = auth.isAuthenticated;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -117,57 +100,35 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                   const Text('🏍️🚗', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
                   const SizedBox(height: 12),
                   Text(
-                    i18n.gLoginTitle,
+                    signedIn ? i18n.gConnectTitle : i18n.gConnectNeedLogin,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 20, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    i18n.gLoginHint,
+                    signedIn ? i18n.gConnectHint : i18n.gConnectNeedLoginHint,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13),
                   ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    decoration: InputDecoration(
-                      labelText: i18n.gEmail,
-                      filled: true,
-                      fillColor: AppColors.bgSurfaceRaisedDark,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _passwordCtrl,
-                    obscureText: true,
-                    autofillHints: const [AutofillHints.password],
-                    onSubmitted: (_) => _login(),
-                    decoration: InputDecoration(
-                      labelText: i18n.gPassword,
-                      filled: true,
-                      fillColor: AppColors.bgSurfaceRaisedDark,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(_error!, style: const TextStyle(color: AppColors.statusDanger, fontSize: 13)),
-                  ],
                   const SizedBox(height: 18),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accentPrimaryDark,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  if (signedIn)
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.accentPrimaryDark,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _busy ? null : () async {
+                        setState(() => _busy = true);
+                        await ref.read(garageSessionProvider.notifier).provisionFromAuth();
+                        if (mounted) setState(() => _busy = false);
+                        ref.invalidate(garageListProvider);
+                      },
+                      icon: _busy
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.sync),
+                      label: Text(i18n.gConnectRetry, style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
-                    onPressed: _busy ? null : _login,
-                    child: _busy
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(i18n.gLoginButton, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  ),
                 ],
               ),
             ),

@@ -12,6 +12,12 @@ export interface AuthenticatedUser {
   id: string;
   email?: string;
   /**
+   * App-Rolle aus users.role ('user' | 'admin' | 'banned'). Wird beim
+   * Token-Check nachgeladen (ein SELECT pro Request, cachebar) und
+   * treibt die App-seitige Admin-Freischaltung (Chat/Marktplatz/Meldungen).
+   */
+  role?: string;
+  /**
    * Raw bearer token - benötigt von Services, die Supabase mit den
    * Rechten DES NUTZERS aufrufen müssen (Chat: RLS bleibt Durchsetzungs-
    * schicht). Niemals loggen oder an Dritte weitergeben.
@@ -56,7 +62,19 @@ export class SupabaseAuthService {
     if (this.adminClient == null) return null;
     const { data, error } = await this.adminClient.auth.getUser(token);
     if (error || !data.user) return null;
-    return { id: data.user.id, email: data.user.email ?? undefined };
+    // Rolle aus users.role nachladen (Feht die Zeile, gilt 'user').
+    let role: string | undefined;
+    try {
+      const { data: row } = await this.adminClient
+        .from('users')
+        .select('role')
+        .eq('id', data.user.id)
+        .maybeSingle();
+      role = (row as { role?: string } | null)?.role ?? 'user';
+    } catch {
+      role = 'user';
+    }
+    return { id: data.user.id, email: data.user.email ?? undefined, role };
   }
 }
 

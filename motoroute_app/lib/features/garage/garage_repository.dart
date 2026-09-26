@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../auth/auth_providers.dart';
+import '../chat/chat_providers.dart';
+
 /// Garage: Modelle + Repository. Spricht gegen die EIGENE Garage-API
 /// (Express/Prisma, Basis-URL standardmaessig `garage.apiBaseUrl` ->
 /// Default `http://10.0.2.2:4100`). Eigener Login (Bootstrap-Admin aus
@@ -326,6 +329,36 @@ class GarageRepository {
     return token;
   }
 
+  /// Auto-Provisioning: Holt beim MotoRoute-Backend ein kurzlebiges
+  /// Ticket (mit dem MotoRoute-Access-Token) und laesst die Garage
+  /// daraus silent registrieren/einloggen. Der Nutzer sieht NIE ein
+  /// Garage-Login - die Garage oeffnet sich sofort (App-Anforderung).
+  /// Gibt (token, isAdmin) zurueck.
+  Future<(String, bool)> provisionWithMotoRouteToken(
+    String motoRouteToken, {
+    String? garageBaseUrlOverride,
+  }) async {
+    // 1) Ticket anfordern (MotoRoute-Backend kennt Rolle + Email).
+    final ticketRes = await _dio.post<Map<String, dynamic>>(
+      '/v1/users/me/garage-ticket',
+      options: Options(headers: {'Authorization': 'Bearer $motoRouteToken'}),
+    );
+    final ticket = ticketRes.data?['ticket'] as String?;
+    if (ticket == null || ticket.isEmpty) {
+      throw GarageApiException('Garage-Ticket fehlgeschlagen', 502);
+    }
+    final baseUrl = garageBaseUrlOverride ??
+        (_kGarageEnvUrl.isEmpty ? _kGarageFallbackUrl : _kGarageEnvUrl);
+    // 2) Ticket einloesen.
+    final res = await _post(baseUrl, null, '/api/auth/provision', {'ticket': ticket});
+    final token = (res['accessToken'] ?? res['token']) as String?;
+    if (token == null || token.isEmpty) {
+      throw GarageApiException('Provision ohne Token - Server-Antwort unerwartet');
+    }
+    final role = ((res['user'] as Map?)?['role'] as String?) ?? 'user';
+    return (token, role == 'admin');
+  }
+
   // -- Garage ---------------------------------------------------------------
 
   Future<List<GarageVehicle>> garage(String baseUrl, String token) async {
@@ -595,14 +628,15 @@ class GarageRepository {
 /// Garage nicht mit defekten URLs aufschlägt.
 const _kGarageEnvUrl = String.fromEnvironment('GARAGE_API_URL');
 const _kGarageFallbackUrl = 'http://10.0.2.2:4100';
-const _kGarageOverrideKey = 'settings.garageApiBaseUrl';
 const _kGarageTokenKey = 'garage.accessToken';
 const _kGarageEmailKey = 'garage.email';
+const _kGarageAdminKey = 'garage.isAdmin';
 
 final garageBaseUrlProvider = FutureProvider<String>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  final override = prefs.getString(_kGarageOverrideKey)?.trim();
-  if (override != null && override.isNotEmpty) return override;
+  // Bewusst OHNE Override: Die Garage-URL ist fest im APK gebacken
+  // (dart-define GARAGE_API_URL). Alte gespeicherte Overrides werden
+  // ignoriert (sonst blockt ein einmal falsch eingetragener Wert die
+  // Garage dauerhaft - exactly der graue-Screen-Fall).
   return _kGarageEnvUrl.isEmpty ? _kGarageFallbackUrl : _kGarageEnvUrl;
 });
 
@@ -614,7 +648,8 @@ final garageRepositoryProvider = Provider<GarageRepository>((ref) {
 class GarageSession {
   final String token;
   final String email;
-  const GarageSession({required this.token, required this.email});
+  final bool isAdmin;
+  const GarageSession({required this.token, required this.email, this.isAdmin = false});
 }
 
 class GarageSessionController extends StateNotifier<AsyncValue<GarageSession?>> {
@@ -628,21 +663,49 @@ class GarageSessionController extends StateNotifier<AsyncValue<GarageSession?>> 
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_kGarageTokenKey);
     final email = prefs.getString(_kGarageEmailKey);
-    state = AsyncValue.data(token != null && token.isNotEmpty ? GarageSession(token: token, email: email ?? '') : null);
+    if (token != null && token.isNotEmpty) {
+      state = AsyncValue.data(GarageSession(
+        token: token,
+        email: email ?? '',
+        isAdmin: prefs.getBool(_kGarageAdminKey) ?? false,
+      ));
+      return;
+    }
+    // KEIN Login-Formular (App-Anforderung): direkt Auto-Provisioning
+    // mit dem MotoRoute-Access-Token. Ohne MotoRoute-Login bleibt die
+    // Garage leer sichtbar (keine Session, keine Fehler-Grau-Flaeche).
+    await provisionFromAuth();
   }
 
-  Future<void> login(String email, String password) async {
-    state = const AsyncValue.loading();
+  /// Silent-Login gegen die Garage mit dem MotoRoute-Konto.
+  /// Gibt true zurueck, wenn danach eine Session existiert.
+  Future<bool> provisionFromAuth() async {
+    // Der gespiegelte, aktuelle Access-Token (Auth->Chat-Brücke hält
+    // ihn bei jedem Refresh aktuell).
+    final token = _ref.read(chatSessionTokenProvider);
+    if (token == null || token.isEmpty) {
+      state = const AsyncValue.data(null); // nicht angemeldet -> leere Garage
+      return false;
+    }
     try {
-      final baseUrl = await _ref.read(garageBaseUrlProvider.future);
       final repo = _ref.read(garageRepositoryProvider);
-      final token = await repo.login(baseUrl, email, password);
+      final (garageToken, isAdmin) = await repo.provisionWithMotoRouteToken(token);
+      final auth = _ref.read(authControllerProvider);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kGarageTokenKey, token);
-      await prefs.setString(_kGarageEmailKey, email);
-      state = AsyncValue.data(GarageSession(token: token, email: email));
-    } catch (e) {
-      state = AsyncValue.error(e, StackTrace.current);
+      await prefs.setString(_kGarageTokenKey, garageToken);
+      await prefs.setString(_kGarageEmailKey, auth.user?.email ?? '');
+      await prefs.setBool(_kGarageAdminKey, isAdmin);
+      state = AsyncValue.data(GarageSession(
+        token: garageToken,
+        email: auth.user?.email ?? '',
+        isAdmin: isAdmin,
+      ));
+      return true;
+    } catch (_) {
+      // Offline/Kaltstart: keine Session, aber KEIN Fehler-Grau - die
+      // UI bietet einen Retry-Knopf (siehe GarageScreen).
+      state = const AsyncValue.data(null);
+      return false;
     }
   }
 

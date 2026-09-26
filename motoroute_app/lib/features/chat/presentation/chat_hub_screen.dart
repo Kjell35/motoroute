@@ -5,6 +5,8 @@ import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 
+import 'package:motoroute_app/features/auth/auth_providers.dart';
+
 import '../chat_providers.dart';
 import '../data/chat_repository.dart';
 import 'conversation_screen.dart';
@@ -55,6 +57,16 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text('💬 ${i18n.chatTab}', style: AppTypography.title),
+        actions: [
+          // Admin: Meldungen prüfen - nur sichtbar mit Admin-Konto
+          // (App-Anforderung: Admin-Konto = überall Admin).
+          if (ref.watch(authControllerProvider).user?.isAdmin ?? false)
+            IconButton(
+              tooltip: 'Meldungen',
+              icon: const Icon(Icons.shield_outlined, color: AppColors.textSecondaryDark),
+              onPressed: () => _showAdminReports(context),
+            ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: AppColors.accentPrimaryDark,
@@ -102,6 +114,29 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
           : _showGroupActions(context),
       label: Text(index == 1 ? 'Neuer Chat' : 'Gruppen'),
       icon: Icon(index == 1 ? Icons.chat_bubble_outline : Icons.group_add),
+    );
+  }
+
+  /// Admin-Sheet: offene Nutzer-Meldungen einsehen und bearbeiten.
+  Future<void> _showAdminReports(BuildContext context) async {
+    final token = ref.read(chatSessionTokenProvider);
+    if (token == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.bgSurfaceDark,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (_, scrollCtrl) => _AdminReportsSheet(
+          token: token,
+          scrollCtrl: scrollCtrl,
+          loadReports: () => ref.read(chatRepositoryProvider).adminReports(token),
+          resolveReport: (id, st) => ref.read(chatRepositoryProvider).adminResolveReport(token, id, st),
+        ),
+      ),
     );
   }
 
@@ -400,6 +435,153 @@ class _NotSignedIn extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Admin: Liste offener Nutzer-Meldungen (Chat + Marktplatz-Nutzer) mit
+/// Aktionen (In Prüfung / Erledigt / Verwerfen). Serverseitig geschützt -
+/// ohne Admin-Rolle antwortet das Backend mit 403.
+class _AdminReportsSheet extends StatefulWidget {
+  final String token;
+  final ScrollController scrollCtrl;
+  final Future<List<Map<String, dynamic>>> Function() loadReports;
+  final Future<void> Function(String, String) resolveReport;
+
+  const _AdminReportsSheet({
+    required this.token,
+    required this.scrollCtrl,
+    required this.loadReports,
+    required this.resolveReport,
+  });
+
+  @override
+  State<_AdminReportsSheet> createState() => _AdminReportsSheetState();
+}
+
+class _AdminReportsSheetState extends State<_AdminReportsSheet> {
+  List<Map<String, dynamic>>? _reports;
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final reports = await widget.loadReports();
+      if (!mounted) return;
+      setState(() {
+        _reports = reports;
+        _busy = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Meldungen konnten nicht geladen werden (kein Admin-Zugriff?)';
+        _busy = false;
+      });
+    }
+  }
+
+  Future<void> _resolve(String reportId, String status) async {
+    try {
+      await widget.resolveReport(reportId, status);
+      await _load();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aktion fehlgeschlagen')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      controller: widget.scrollCtrl,
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          '🛡️ Nutzer-Meldungen',
+          style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 18),
+        ),
+        const SizedBox(height: 12),
+        if (_busy) const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+        else if (_error != null)
+          Text(_error!, style: const TextStyle(color: AppColors.statusDanger))
+        else if (_reports == null || _reports!.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text('Keine offenen Meldungen.', style: TextStyle(color: AppColors.textSecondaryDark)),
+            ),
+          )
+        else
+          for (final r in _reports!) _ReportTile(report: r, onResolve: _resolve),
+      ],
+    );
+  }
+}
+
+class _ReportTile extends StatelessWidget {
+  final Map<String, dynamic> report;
+  final Future<void> Function(String, String) onResolve;
+
+  const _ReportTile({required this.report, required this.onResolve});
+
+  @override
+  Widget build(BuildContext context) {
+    final reported = report['reported'] as Map<String, dynamic>?;
+    final who = (reported?['display_name'] ?? reported?['username'] ?? reported?['id'] ?? '?').toString();
+    final reason = (report['reason'] ?? '?').toString();
+    final details = report['details']?.toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurfaceRaisedDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderHairlineDark),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(who, style: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text('Grund: $reason', style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+          if (details != null && details.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(details, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12)),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (final (label, status) in [('Prüfung', 'reviewing'), ('Erledigt', 'resolved'), ('Verwerfen', 'dismissed')])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentPrimaryDark,
+                      side: const BorderSide(color: AppColors.accentPrimaryDark),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () => onResolve(report['id'].toString(), status),
+                    child: Text(label, style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

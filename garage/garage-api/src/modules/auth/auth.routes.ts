@@ -52,6 +52,27 @@ authRouter.post('/login', authLimiter, async (req, res, next) => {
   }
 });
 
+/**
+ * Auto-Provisioning: MotoRoute-App fordert beim MotoRoute-Backend ein
+ * kurzlebiges HMAC-Ticket an und reicht es hier ein. Ergebnis: Garage-
+ * Konto existiert, Token kommt zurueck - ohne jegliche Nutzer-Eingabe.
+ */
+authRouter.post('/provision', authLimiter, async (req, res, next) => {
+  try {
+    const ticket = String((req.body as { ticket?: unknown })?.ticket ?? '');
+    if (!ticket) {
+      const err = new Error('ticket: fehlt') as Error & { status?: number; code?: string };
+      err.status = 400;
+      err.code = 'VALIDATION_ERROR';
+      throw err;
+    }
+    const result = await authService.provisionFromTicket(ticket);
+    res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
 authRouter.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });

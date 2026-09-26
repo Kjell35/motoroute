@@ -19,6 +19,7 @@ import {
   CreateInvitationDto,
   JoinByCodeDto,
   PaginationQueryDto,
+  ResolveReportDto,
   RemoveMemberDto,
   ReportMessageDto,
   ReportUserDto,
@@ -249,6 +250,29 @@ export class ChatController {
   @HttpCode(201)
   async reportUser(@Req() req: AuthenticatedRequest, @Body() dto: ReportUserDto): Promise<void> {
     await this.chat.reportUser(req.user!, dto.reportedUserId, dto.reason, dto.details);
+  }
+
+  // ------------------------------------------------------ Admin: Meldungen
+
+  /** Admin: Nutzer-/Nachrichten-Meldungen einsehen (users.role = 'admin'). */
+  @Get('admin/reports')
+  adminListReports(
+    @Req() req: AuthenticatedRequest,
+    @Query('status') status?: string,
+  ): Promise<unknown> {
+    const s = status === 'reviewing' || status === 'resolved' || status === 'dismissed' ? status : 'open';
+    return this.chat.adminListReports(req.user!, s);
+  }
+
+  /** Admin: Meldung bearbeiten (Status setzen). */
+  @Post('admin/reports/:reportId/resolve')
+  @HttpCode(200)
+  async adminResolveReport(
+    @Req() req: AuthenticatedRequest,
+    @Param('reportId') reportId: string,
+    @Body() dto: ResolveReportDto,
+  ): Promise<void> {
+    await this.chat.adminResolveReport(req.user!, reportId, dto.status);
   }
 
   // ------------------------------------------------------ Realtime-Config

@@ -448,6 +448,23 @@ class ChatRepository {
     await _dio.post<void>('/v1/chat/reports/user',
         data: {'reportedUserId': userId, 'reason': reason, if (details != null) 'details': details});
   }
+
+  // -- Admin: Nutzer-Meldungen pruefen (App-Anforderung: Admin sieht
+  //    Meldungen; serverseitig via users.role geschuetzt) ------------------
+
+  Future<List<Map<String, dynamic>>> adminReports(String token, {String status = 'open'}) async {
+    _auth(token);
+    final res = await _dio.get<Map<String, dynamic>>('/v1/chat/admin/reports',
+        queryParameters: {'status': status});
+    return ((res.data?['reports'] as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  Future<void> adminResolveReport(String token, String reportId, String status) async {
+    _auth(token);
+    await _dio.post<void>('/v1/chat/admin/reports/$reportId/resolve', data: {'status': status});
+  }
 }
 
 /// Dio-Fehler -> Failure (bestehendes Fehlermodell der App).

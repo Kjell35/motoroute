@@ -104,6 +104,11 @@ class I18n {
   String get gLoginFailed => tr('garage.loginFailed');
   String get gServerUnreachable => tr('garage.serverUnreachable');
   String get gLogout => tr('garage.logout');
+  String get gConnectTitle => tr('garage.connectTitle');
+  String get gConnectHint => tr('garage.connectHint');
+  String get gConnectRetry => tr('garage.connectRetry');
+  String get gConnectNeedLogin => tr('garage.connectNeedLogin');
+  String get gConnectNeedLoginHint => tr('garage.connectNeedLoginHint');
   String get gEmpty => tr('garage.empty');
   String get gAddVehicle => tr('garage.addVehicle');
   String get gMyMotos => tr('garage.myMotos');
@@ -306,6 +311,11 @@ const _catalog = <String, Map<String, String>>{
     'garage.loginButton': 'Garage öffnen',
     'garage.loginFailed': 'Anmeldung fehlgeschlagen - E-Mail/Passwort prüfen',
     'garage.serverUnreachable': 'Garage-Server nicht erreichbar',
+    'garage.connectTitle': 'Garage verbinden',
+    'garage.connectHint': 'Deine Garage wird mit deinem MotoRoute-Konto verbunden. Kein zweites Passwort nötig.',
+    'garage.connectRetry': 'Erneut verbinden',
+    'garage.connectNeedLogin': 'Melde dich an',
+    'garage.connectNeedLoginHint': 'Melde dich mit deinem MotoRoute-Konto an - danach öffnet sich deine Garage automatisch.',
     'garage.logout': 'Abmelden',
     'garage.empty': 'Noch keine Fahrzeuge. Lege dein erstes Motorrad oder Auto an!',
     'garage.addVehicle': '+ Fahrzeug anlegen',
@@ -579,6 +589,11 @@ const _catalog = <String, Map<String, String>>{
     'garage.loginButton': 'Open garage',
     'garage.loginFailed': 'Login failed - check email/password',
     'garage.serverUnreachable': 'Garage server unreachable',
+    'garage.connectTitle': 'Connect garage',
+    'garage.connectHint': 'Your garage is linked to your MotoRoute account. No second password needed.',
+    'garage.connectRetry': 'Try again',
+    'garage.connectNeedLogin': 'Sign in',
+    'garage.connectNeedLoginHint': 'Sign in with your MotoRoute account - your garage opens automatically afterwards.',
     'garage.logout': 'Log out',
     'garage.empty': 'No vehicles yet. Add your first motorcycle or car!',
     'garage.addVehicle': '+ Add vehicle',

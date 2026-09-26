@@ -17,6 +17,12 @@ const schema = z.object({
   ADMIN_PASSWORD: z.string().min(8).optional(),
   ADMIN_DISPLAY_NAME: z.string().optional(),
   CORS_ORIGINS: z.string().default('*'),
+  /** Gemeinsames Secret zwischen MotoRoute-Backend und Garage fuer
+   *  Auto-Provisioning-Tickets (App fordert Ticket beim MotoRoute-Backend,
+   *  Garage validiert die Signatur - kein Passwort-Durchgriff). */
+  GARAGE_TICKET_SECRET: z.string().min(32).optional(),
+  /** Diese Garage-E-Mails gelten automatisch als Admin (Komma-Liste). */
+  GARAGE_ADMIN_EMAILS: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

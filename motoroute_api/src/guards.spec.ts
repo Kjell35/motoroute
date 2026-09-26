@@ -39,9 +39,12 @@ describe('SupabaseAuthService.validateToken', () => {
       data: { user: { id: 'u-1', email: 'rider@example.com' } },
       error: null,
     } as never);
+    jest.spyOn(service['adminClient']!, 'from').mockReturnValue({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { role: 'user' }, error: null }) }) }),
+    } as never);
 
     const user = await service.validateToken('good-token');
-    expect(user).toEqual({ id: 'u-1', email: 'rider@example.com' });
+    expect(user).toEqual({ id: 'u-1', email: 'rider@example.com', role: 'user' });
   });
 
   it('degrades to a null client without Supabase config instead of throwing', async () => {

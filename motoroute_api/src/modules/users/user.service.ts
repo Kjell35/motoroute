@@ -34,7 +34,7 @@ export class UserService {
     const { data, error } = await this.supabase
       .from(this.table)
       .select(
-        'id, email, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc, bio, plan, updated_at',
+        'id, email, username, display_name, first_name, chat_name_mode, chat_display_name, avatar_url, vehicle_desc, bio, plan, role, updated_at',
       )
       .eq('id', user.id)
       .maybeSingle();
@@ -73,6 +73,7 @@ export class UserService {
         vehicle_desc: null,
         bio: null,
         plan: 'free' as const,
+        role: 'user' as const,
         updated_at: null,
       };
     return { ...profile, entitlements: this.entitlementsFor(profile.plan) };

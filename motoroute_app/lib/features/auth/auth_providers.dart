@@ -27,7 +27,19 @@ class AuthUser {
   final String email;
   final String? displayName;
 
-  const AuthUser({required this.id, required this.email, this.displayName});
+  /// App-weite Admin-Rolle (users.role vom Backend): steuert Chat-Admin,
+  /// Marktplatz-Admin, Meldungs-Prüfung und Garage-Admin. Einmal mit
+  /// Admin-Konto angemeldet = überall Admin (App-Anforderung).
+  final bool isAdmin;
+
+  const AuthUser({required this.id, required this.email, this.displayName, this.isAdmin = false});
+
+  AuthUser copyWith({String? displayName, bool? isAdmin}) => AuthUser(
+        id: id,
+        email: email,
+        displayName: displayName ?? this.displayName,
+        isAdmin: isAdmin ?? this.isAdmin,
+      );
 
   String get name => (displayName?.isNotEmpty ?? false)
       ? displayName!
@@ -37,6 +49,7 @@ class AuthUser {
         id: (json['id'] as String?) ?? '',
         email: (json['email'] as String?) ?? '',
         displayName: json['displayName'] as String?,
+        isAdmin: json['isAdmin'] == true,
       );
 }
 
@@ -142,8 +155,29 @@ class AuthController extends StateNotifier<AuthState> {
       _refreshToken = refresh;
       state = AuthState(user: user, tokenEpoch: 1);
       _scheduleRefresh();
+      // Rolle FRISCH vom Server holen (Admin kann serverseitig geändert
+      // worden sein); lokal gespeicherter Wert nur Übergang bis dahin.
+      _refreshRole(access);
     } catch (_) {
       await _clearPersisted(prefs);
+    }
+  }
+
+  /// Rolle aus users/me nachladen und in den State schreiben.
+  Future<void> _refreshRole(String token) async {
+    try {
+      final dio = ApiClient.create();
+      final me = await dio.get<Map<String, dynamic>>(
+        '/v1/users/me',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final current = state.user;
+      if (current == null) return;
+      state = state.copyWith(
+        user: current.copyWith(isAdmin: (me.data?['role'] as String?) == 'admin'),
+      );
+    } catch (_) {
+      // Offline: gespeicherter Wert bleibt.
     }
   }
 
@@ -180,21 +214,35 @@ class AuthController extends StateNotifier<AuthState> {
         throw AuthException('Ungültige Serverantwort');
       }
 
+      // Rolle nachladen (Admin-Freischaltung überall): GET /users/me
+      // liefert users.role - fehlgeschlagen ist egal (dann 'user').
+      var authenticated = user;
+      try {
+        final me = await dio.get<Map<String, dynamic>>(
+          '/v1/users/me',
+          options: Options(headers: {'Authorization': 'Bearer ${_accessToken!}'}),
+        );
+        authenticated = user.copyWith(
+          isAdmin: (me.data?['role'] as String?) == 'admin',
+        );
+      } catch (_) {}
+
       final prefs = await SharedPreferences.getInstance();
       if (remember) {
         await prefs.setBool(_kRemembered, true);
         await prefs.setString(_kAccessToken, _accessToken!);
         await prefs.setString(_kRefreshToken, _refreshToken!);
         await prefs.setString(_kUser, jsonEncode({
-          'id': user.id,
-          'email': user.email,
-          'displayName': user.displayName,
+          'id': authenticated.id,
+          'email': authenticated.email,
+          'displayName': authenticated.displayName,
+          'isAdmin': authenticated.isAdmin,
         }));
       } else {
         await _clearPersisted(prefs);
       }
 
-      state = AuthState(user: user, tokenEpoch: state.tokenEpoch + 1);
+      state = AuthState(user: authenticated, tokenEpoch: state.tokenEpoch + 1);
       _scheduleRefresh();
     } on DioException catch (e) {
       final code = e.response?.statusCode;

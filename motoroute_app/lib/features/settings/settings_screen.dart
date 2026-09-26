@@ -19,10 +19,8 @@ import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
 import 'package:motoroute_app/features/ride_history/ride_history_settings.dart';
-import 'package:motoroute_app/features/garage/garage_repository.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Screen 11: Einstellungen (vollständig).
 ///
@@ -55,7 +53,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     'settings.notifications',
   };
   bool _runningHealthCheck = false;
-  String? _garageUrlOverride;
   String? _healthResult; // null = noch nicht getestet
   String _appVersion = '…';
 
@@ -68,11 +65,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       setState(() => _appVersion = info.version);
     }).catchError((_) {});
-    // Gespeicherte Garage-URL-Override anzeigen (optional).
-    SharedPreferences.getInstance().then((prefs) {
-      if (!mounted) return;
-      setState(() => _garageUrlOverride = prefs.getString('settings.garageApiBaseUrl'));
-    });
   }
 
   /// Echter Verbindungstest: GET /v1/health (anonym, kein Auth nötig).
@@ -116,7 +108,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final vehicleType = ref.watch(vehicleTypeProvider);
     final auth = ref.watch(authControllerProvider);
     final unit = ref.watch(distanceUnitProvider);
-    final categories = ref.watch(activePoiCategoriesProvider);
     final energy = ref.watch(energySaverControllerProvider);
     final notifications = ref.watch(notificationsEnabledProvider);
     final i18n = ref.watch(i18nProvider);
@@ -205,8 +196,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: Text('Akkustand: ${energy.batteryLevelPercent} %', style: AppTypography.caption),
                 ),
             ]),
-            const SizedBox(height: AppSpacing.lg),
-            _buildPoiSection(categories),
             const SizedBox(height: AppSpacing.lg),
             _buildOfflineMapsSection(),
             const SizedBox(height: AppSpacing.lg),
@@ -604,47 +593,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Widget _buildPoiSection(Set<PoiCategory> categories) {
-    final i18n = ref.watch(i18nProvider);
-    return _buildSection(i18n.tr('settings.mapPoiSection'), children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
-        child: Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: [
-            for (final category in PoiCategory.values)
-              FilterChip(
-                label: Text(category.label, style: const TextStyle(fontSize: 12)),
-                selected: categories.contains(category),
-                onSelected: (selected) {
-                  final next = {...categories};
-                  selected ? next.add(category) : next.remove(category);
-                  if (next.isEmpty) return; // immer mindestens eine Kategorie
-                  ref.read(activePoiCategoriesProvider.notifier).state = next;
-                  persistPoiCategories(next);
-                },
-                checkmarkColor: AppColors.accentPrimaryDark,
-                selectedColor: AppColors.accentPrimaryDark.withValues(alpha: 0.25),
-                backgroundColor: AppColors.bgSurfaceRaisedDark,
-                labelStyle: TextStyle(
-                  color: categories.contains(category)
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textSecondaryDark,
-                ),
-                side: BorderSide(
-                  color: categories.contains(category)
-                      ? AppColors.accentPrimaryDark
-                      : AppColors.borderHairlineDark,
-                ),
-                showCheckmark: false,
-              ),
-          ],
-        ),
-      ),
-    ]);
-  }
-
   // ------------------------------------------------------------------
   // Server & Verbindung: Status + echter Verbindungstest gegen
   // /v1/health. KEIN URL-Eingabefeld mehr - die Backend-URL ist fest
@@ -686,70 +634,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: AppTypography.caption,
             ),
             const SizedBox(height: AppSpacing.sm),
-            // Garage-API: eigene URL (Entwicklung/Debug). Im Release ist auch
-            // diese fest gebacken (dart-define GARAGE_API_URL) - dann erscheint
-            // hier nur der Hinweis.
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              leading: const Icon(Icons.garage_outlined, color: AppColors.textSecondaryDark, size: 20),
-              title: const Text('Garage-Server', style: AppTypography.body),
-              subtitle: Text(
-                _garageUrlOverride != null && _garageUrlOverride!.isNotEmpty
-                    ? 'Eigen: $_garageUrlOverride'
-                    : 'Fest konfiguriert (keine Eingabe nötig)',
-                style: AppTypography.caption,
-              ),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textMutedDark),
-              onTap: _editGarageUrl,
-            ),
           ],
         ),
       ),
     ]);
-  }
-
-  Future<void> _editGarageUrl() async {
-    final ctrl = TextEditingController(text: _garageUrlOverride ?? '');
-    final newUrl = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
-        title: const Text('Garage-Server-URL', style: TextStyle(color: AppColors.textPrimaryDark)),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(
-            hintText: 'z. B. http://192.168.1.50:4100',
-            hintStyle: TextStyle(color: AppColors.textMutedDark),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Abbrechen'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Speichern', style: TextStyle(color: AppColors.accentPrimaryDark)),
-          ),
-        ],
-      ),
-    );
-    if (newUrl == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (newUrl.isEmpty) {
-      await prefs.remove('settings.garageApiBaseUrl');
-    } else {
-      await prefs.setString('settings.garageApiBaseUrl', newUrl);
-    }
-    setState(() => _garageUrlOverride = newUrl.isEmpty ? null : newUrl);
-    if (mounted) {
-      ref.invalidate(garageBaseUrlProvider);
-      ref.invalidate(garageListProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Garage-Server gespeichert')),
-      );
-    }
   }
 
   // ------------------------------------------------------------------

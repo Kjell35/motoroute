@@ -73,6 +73,7 @@ describe('UserService', () => {
       vehicle_desc: null,
       bio: null,
       plan: 'free',
+      role: 'user',
       updated_at: null,
       entitlements: {
         plan: 'free',

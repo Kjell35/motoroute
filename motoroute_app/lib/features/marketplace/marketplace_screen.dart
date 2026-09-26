@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/i18n/i18n.dart';
 import '../../core/network/error_message.dart';
+import '../auth/auth_providers.dart';
 import 'marketplace_notifications.dart';
 import 'marketplace_repository.dart';
 import 'presentation/marketplace_create_screen.dart';
@@ -190,6 +191,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   Widget build(BuildContext context) {
     final i18n = ref.watch(i18nProvider);
     final scheme = Theme.of(context).colorScheme;
+    final isAdmin = ref.watch(authControllerProvider).user?.isAdmin ?? false;
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -197,6 +199,16 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         backgroundColor: scheme.surface,
         title: Text('🛒 ${i18n.mpTitle}', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
+          if (isAdmin)
+            IconButton(
+              tooltip: i18n.mpAdmin,
+              icon: const Icon(Icons.admin_panel_settings_outlined),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const MarketplaceAdminScreen()),
+                );
+              },
+            ),
           // Inbox-Badge: ungelesene Aktivität an eigenen Angeboten.
           IconButton(
             tooltip: 'Aktivität',
@@ -229,15 +241,6 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 MaterialPageRoute(builder: (_) => const MarketplaceMyListingsScreen()),
               );
               _load();
-            },
-          ),
-          IconButton(
-            tooltip: i18n.mpAdmin,
-            icon: const Icon(Icons.admin_panel_settings_outlined),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MarketplaceAdminScreen()),
-              );
             },
           ),
         ],
