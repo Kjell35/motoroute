@@ -5,6 +5,7 @@ import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import { SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { Poi, PoiSource } from './entities/poi.entity';
+import { PoiDetail } from './poi.detail';
 import { QueryPoisDto, PoiCategory } from './dto/query-pois.dto';
 
 const OVERPASS_TIMEOUT_MS = 8000;
@@ -139,6 +140,74 @@ export class PoiService {
     const all = dedupe([...osmResults, ...dbResults, ...curatedResults]);
     for (const p of all) delete p.nameKey;
     return all;
+  }
+
+  /**
+   * POI-Detail für das Detail-Sheet der App (GET /v1/pois/:id).
+   *
+   * Drei Quellen je nach ID-Präfix:
+   *  - "osm-<type>-<id>": Live aus der poi-Tabelle (falls gespiegelt),
+   *    sonst nicht auflösbar -> null (App zeigt Basis-Sheet).
+   *  - "curated-<cat>-<tomtomId>": Zeile aus der poi-Tabelle (die
+   *    Kuratierung spiegelt ihre Funde dorthin).
+   *  - sonst (Biker-Service/UUID): direkt aus der poi-Tabelle.
+   *
+   * Die Herkunftsangabe ("Veröffentlicht am/von") ist ehrlich: kuratierte
+   * POIs stammen vom Biker-POI-Dienst (TomTom-Kuratierung), OSM-POIs von
+   * OpenStreetMap - wir erfinden keine Nutzer-Ersteller.
+   */
+  async findDetail(id: string): Promise<PoiDetail | null> {
+    if (!this.supabase) return null;
+
+    let row: Record<string, unknown> | null = null;
+    const { data, error } = await this.supabase
+      .from('poi')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (!error && data) row = data as Record<string, unknown>;
+
+    if (!row) {
+      // Nicht in der Tabelle: OSM-IDs können on-demand nachgeladen
+      // werden - hier bewusst schlank: ohne DB-Zeile keine Metadaten.
+      return null;
+    }
+
+    const meta = (row.metadata ?? {}) as Record<string, unknown>;
+    const websiteRaw = typeof meta['website'] === 'string' ? meta['website'] : null;
+    const website = websiteRaw
+      ? websiteRaw.startsWith('http')
+        ? websiteRaw
+        : `https://${websiteRaw}`
+      : null;
+
+    const opening = typeof meta['opening_hours'] === 'string' ? meta['opening_hours'] : null;
+    const address = typeof meta['address'] === 'string' ? meta['address'] : null;
+    const descriptionParts = [opening, address].filter(Boolean) as string[];
+
+    const source = String(row.source ?? 'OSM');
+    const category = String(row.category);
+
+    return {
+      id: String(row.id),
+      category,
+      name: String(row.name),
+      lat: Number(row.lat),
+      lng: Number(row.lng),
+      source,
+      description: descriptionParts.length > 0 ? descriptionParts.join(' · ') : null,
+      website,
+      imageUrl: typeof meta['image_url'] === 'string' ? meta['image_url'] : null,
+      bikerScore: typeof meta['bikerScore'] === 'number' ? (meta['bikerScore'] as number) : null,
+      originTag: typeof meta['origin_tag'] === 'string' ? meta['origin_tag'] : null,
+      publishedAt: typeof row.created_at === 'string' ? row.created_at : null,
+      publishedBy:
+        source === 'CURATED'
+          ? 'Biker-POI-Kuratierung (TomTom)'
+          : source === 'COMMUNITY'
+            ? 'MotoRoute Community'
+            : 'OpenStreetMap',
+    };
   }
 
   /**

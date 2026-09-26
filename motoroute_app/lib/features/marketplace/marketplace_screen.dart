@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/i18n/i18n.dart';
+import 'marketplace_notifications.dart';
 import 'marketplace_repository.dart';
 import 'presentation/marketplace_create_screen.dart';
 import 'presentation/marketplace_detail_screen.dart';
 import 'presentation/marketplace_my_listings_screen.dart';
 import 'presentation/marketplace_favorites_screen.dart';
 import 'presentation/marketplace_admin_screen.dart';
+import 'presentation/marketplace_inbox_screen.dart';
 
 /// Marktplatz-Übersicht (Anforderung 11-13): Suche, Kategorien,
 /// neue Angebote, Filter. Dark-/Light-fähig über AppColors.
@@ -39,9 +43,96 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   String? _error;
   final _filter = _MpFilter();
 
+  // ---- Autocomplete (Suggest + Tippfehler-Toleranz) -----------------------
+  final _focusNode = FocusNode();
+  List<MpSuggestion> _suggestions = const [];
+  Timer? _suggestDebounce;
+
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_onSearchChanged);
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus) setState(() => _suggestions = const []);
+    });
+  }
+
+  /// Live-Vorschläge: Server-Präfix-Treffer + FUZZY-Erweiterung gegen den
+  /// zuletzt geladenen Katalog (Damerau-Levenshtein <= 2), damit "BMW "
+  /// auch bei "BWM" noch "BMW" findet.
+  Future<void> _onSearchChanged() async {
+    setState(() {}); // Clear-Button sichtbar halten
+    final term = _searchController.text.trim();
+    _suggestDebounce?.cancel();
+    if (term.length < 2) {
+      if (_suggestions.isNotEmpty) setState(() => _suggestions = const []);
+      return;
+    }
+    _suggestDebounce = Timer(const Duration(milliseconds: 250), () async {
+      final token = ref.read(marketplaceTokenProvider);
+      if (token == null) return;
+      try {
+        final server = await ref
+            .read(marketplaceRepositoryProvider)
+            .suggest(token: token, q: term);
+        var merged = [...server.brands, ...server.models];        // Fuzzy-Erweiterung: schon bekannte Marken/Modelle aus dem Katalog
+        // des Screens (aktuelles Listing-Set) per Edit-Distanz ergänzen.
+        final known = <String>{
+          for (final l in _listings) ...[
+            if (l.brand != null && l.brand!.isNotEmpty) l.brand!,
+            if (l.model != null && l.model!.isNotEmpty) l.model!,
+          ],
+        };
+        final lower = term.toLowerCase();
+        for (final candidate in known) {
+          if (merged.any((s) => s.label == candidate)) continue;
+          final dist = _damerauLevenshtein(lower, candidate.toLowerCase());
+          if (dist <= (lower.length <= 4 ? 1 : 2)) {
+            merged = [...merged, MpSuggestion(label: candidate, count: 0)];
+          }
+        }
+        if (!mounted) return;
+        setState(() {
+          _suggestions = merged.take(8).toList(growable: false);
+        });
+      } catch (_) {
+        // Vorschläge sind Best-Effort - Suchfeld bleibt voll funktionsfähig.
+      }
+    });
+  }
+
+  /// Damerau-Levenshtein-Distanz (inkl. Transpositionen - "BWM" -> "BMW").
+  static int _damerauLevenshtein(String a, String b) {
+    final la = a.length, lb = b.length;
+    final d = List.generate(la + 1, (_) => List<int>.filled(lb + 1, 0));
+    for (var i = 0; i <= la; i++) {
+      d[i][0] = i;
+    }
+    for (var j = 0; j <= lb; j++) {
+      d[0][j] = j;
+    }
+    for (var i = 1; i <= la; i++) {
+      for (var j = 1; j <= lb; j++) {
+        final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
+        d[i][j] = [
+          d[i - 1][j] + 1, // löschen
+          d[i][j - 1] + 1, // einfügen
+          d[i - 1][j - 1] + cost, // ersetzen
+        ].reduce((x, y) => x < y ? x : y);
+        if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) {
+          d[i][j] = d[i][j] < d[i - 2][j - 2] + 1 ? d[i][j] : d[i - 2][j - 2] + 1;
+        }
+      }
+    }
+    return d[la][lb];
+  }
+
+  void _applySuggestion(String label) {
+    _searchController.text = label;
+    _searchController.selection = TextSelection.fromPosition(
+      TextPosition(offset: label.length),
+    );
+    setState(() => _suggestions = const []);
     _load();
   }
 
@@ -88,7 +179,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
 
   @override
   void dispose() {
+    _suggestDebounce?.cancel();
     _searchController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -103,6 +196,21 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         backgroundColor: scheme.surface,
         title: Text('🛒 ${i18n.mpTitle}', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
+          // Inbox-Badge: ungelesene Aktivität an eigenen Angeboten.
+          IconButton(
+            tooltip: 'Aktivität',
+            icon: Badge(
+              isLabelVisible: ref.watch(unreadCountProvider) > 0,
+              label: Text('${ref.watch(unreadCountProvider)}'),
+              backgroundColor: AppColors.statusDanger,
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MarketplaceInboxScreen()),
+              );
+            },
+          ),
           IconButton(
             tooltip: i18n.mpFavorites,
             icon: const Icon(Icons.favorite_outline),
@@ -150,29 +258,76 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Suche
+            // Suche mit Autocomplete (Suggest + Tippfehler-Toleranz)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: TextField(
-                  controller: _searchController,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => _load(),
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: '${i18n.mpSearchHint} (BMW GS Auspuff)',
-                    suffixIcon: _searchController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              _load();
-                            },
-                          ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                    isDense: true,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _searchController,
+                      focusNode: _focusNode,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) {
+                        setState(() => _suggestions = const []);
+                        _load();
+                      },
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: '${i18n.mpSearchHint} (BMW GS Auspuff)',
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _suggestions = const []);
+                                  _load();
+                                },
+                              ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        isDense: true,
+                      ),
+                    ),
+                    if (_suggestions.isNotEmpty && _focusNode.hasFocus)
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: scheme.outlineVariant),
+                        ),
+                        child: Column(
+                          children: _suggestions.map((s) {
+                            final isBrand = s.count > 0;
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => _applySuggestion(s.label),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      isBrand ? Icons.directions_car_outlined : Icons.settings_outlined,
+                                      size: 18,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: Text(s.label, style: const TextStyle(fontSize: 15))),
+                                    if (isBrand)
+                                      Text(
+                                        '${s.count} Treffer',
+                                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

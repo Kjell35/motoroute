@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show Offset;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -21,19 +22,46 @@ class PoiMapLayer {
 
   static const _maxCircles = 200;
 
+  /// Zoom-Gate (Anforderung "Punkte nur bei Nahsicht"): POI-Dots erscheinen
+  /// erst, wenn der sichtbare Längengrad-Bereich schmal genug ist (~12 km
+  /// breit, entspricht Zoom ~13.5-14 in DE). Auf Landes-/Regionsebene ist
+  /// die Karte poi-frei - erst reinschwenken zeigt sie.
+  static const _showSpanDeg = 0.12;
+
   final Map<String, Circle> _circles = {};
+  final Map<String, Symbol> _labels = {};
   final Map<String, Poi> _poisById = {};
   LatLngBounds? _lastLoadedBounds;
   DateTime _lastLoad = DateTime.fromMillisecondsSinceEpoch(0);
   Set<PoiCategory> _lastCategories = {};
+  bool _rendered = false;
 
   PoiMapLayer(this._controllerGetter);
 
   void dispose() {
     _circles.clear();
+    _labels.clear();
     _poisById.clear();
     _lastLoadedBounds = null;
   }
+
+  /// Sichtbarer Längengrad-Bereich in Grad (Näherung für das Zoom-Gate).
+  static double _spanOf(LatLngBounds bounds) {
+    var span = bounds.northeast.longitude - bounds.southwest.longitude;
+    if (span < 0) span += 360; // Datumsgrenze-Fallback
+    return span;
+  }
+
+  /// Epsilon-Toleranz für den Grenzfall (Float-Arithmetik: 11.62 - 11.50
+  /// ist nicht exakt 0.12).
+  static const _spanEpsilon = 1e-9;
+
+  static bool _isCloseUp(LatLngBounds bounds) =>
+      _spanOf(bounds) <= _showSpanDeg + _spanEpsilon;
+
+  /// Test-Brücke: das Zoom-Gate ist rein statisch - so lässt es sich
+  /// ohne maplibre-Controller prüfen.
+  static bool isCloseUpForTest(LatLngBounds bounds) => _isCloseUp(bounds);
 
   /// Wird vom Kartenscreen nach Karten-Bewegung aufgerufen.
   Future<void> onCameraIdle(WidgetRef ref) async {
@@ -41,7 +69,21 @@ class PoiMapLayer {
     if (controller == null) return;
     try {
       final bounds = await controller.getVisibleRegion();
-      await refresh(ref, bounds);
+      // Zoom-Gate: Rein-/Rauszoomen entscheidet über Dot-Sichtbarkeit.
+      // War der Layer in derselben Nahsicht schon gerendert, ist nur das
+      // Nachladen gedrosselt - das Sichtbar-/Unsichtbarmachen selbst
+      // passiert in jedem Fall sofort (kein 5-s-Wait beim Zoomen).
+      if (_isCloseUp(bounds)) {
+        if (!_rendered) {
+          await refresh(ref, bounds);
+        } else {
+          final tooSoon = DateTime.now().difference(_lastLoad) < const Duration(seconds: 5);
+          if (!tooSoon) await refresh(ref, bounds);
+        }
+      } else if (_rendered) {
+        _rendered = false; // Beim Wiedereinzoomen sofort wieder rendern.
+        await _clear();
+      }
     } catch (_) {
       // Karte noch nicht bereit - nächster Versuch tut es erneut.
     }
@@ -155,6 +197,15 @@ class PoiMapLayer {
     final controller = _controllerGetter();
     if (controller == null) return;
 
+    final bounds = _lastLoadedBounds;
+    // Zoom-Gate: außerhalb der Nahsicht KEINE Dots rendern (Daten sind
+    // trotzdem geladen - beim Reinschwenken erscheinen sie sofort).
+    if (bounds == null || !_isCloseUp(bounds)) {
+      await _clear();
+      _rendered = false;
+      return;
+    }
+
     await _clear();
 
     // Obergrenze: bei niedrigem Zoom liefern große BBoxes sonst tausende
@@ -173,10 +224,30 @@ class PoiMapLayer {
           {'poiId': poi.id},
         );
         _circles[poi.id] = circle;
+
+        // Namens-Label UNTER dem Dot ("Shell Tankstelle"): nur sinnvoll,
+        // wenn der POI einen Namen hat. Halo hält den Text auf jeder
+        // Kachel lesbar.
+        if (poi.name.isNotEmpty) {
+          final symbol = await controller.addSymbol(
+            SymbolOptions(
+              geometry: LatLng(poi.lat, poi.lng),
+              textField: poi.name.length > 24 ? '${poi.name.substring(0, 24)}…' : poi.name,
+              textSize: 11,
+              textColor: '#FFFFFF',
+              textHaloColor: '#0B0E11',
+              textHaloWidth: 1.5,
+              textOffset: const Offset(0, 1.4),
+              textAnchor: 'top',
+            ),
+          );
+          _labels[poi.id] = symbol;
+        }
       } catch (_) {
         // Einzelner Kreis darf scheitern, ohne den Layer zu töten.
       }
     }
+    _rendered = true;
   }
 
   Future<void> _clear() async {
@@ -190,6 +261,12 @@ class PoiMapLayer {
       }
     }
     _circles.clear();
+    for (final symbol in _labels.values) {
+      try {
+        await controller.removeSymbol(symbol);
+      } catch (_) {}
+    }
+    _labels.clear();
   }
 
   /// Karten-Tap: nächstgelegenen POI innerhalb der Touch-Toleranz
@@ -205,9 +282,10 @@ class PoiMapLayer {
         best = poi;
       }
     }
-    // 24 m Treffertoleranz: bei typischen Zoomstufen (14+) entspricht
-    // das grob dem 48-dp-Touch-Ziel aus Phase 3 Teil B.3.
-    return best != null && bestDist <= 24 ? best : null;
+    // 28 m Treffertoleranz: Dot ist 7 px, das Label erweitert das
+    // Touch-Ziel - zusammen mit der Label-Sichtbarkeit trifft man auch
+    // auf kleinen Zoomstufen zuverlässig (48-dp-Richtlinie).
+    return best != null && bestDist <= 28 ? best : null;
   }
 
   static String _colorFor(PoiCategory category) => switch (category) {

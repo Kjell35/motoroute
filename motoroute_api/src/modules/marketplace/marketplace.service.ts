@@ -463,6 +463,47 @@ export class MarketplaceService {
    * 'approved' ist oeffentlich sichtbar - unabhaengig von jeglichen
    * Client-Parametern (Punkt 10/22).
    */
+  /**
+   * Autovervollständigung für die Suche (Anforderung "Suggest"): Distinct
+   * Marken + Modelle aus aktiven, freigegebenen Angebot. Nur Präfix-
+   * Match (ilike 'q%'), Rückgabe mit Trefferzahl für sinnvolle Sortierung.
+   * Fuzzy-Logik (Tippfehler-Toleranz) bewusst CLIENT-seitig - der Server
+   * liefert den Katalog-Kern, der Client macht Damerau-Levenshtein.
+   */
+  async suggest(q: string): Promise<{ brands: { label: string; count: number }[]; models: { label: string; count: number }[] }> {
+    this.ensureConfigured();
+    const term = q.trim().toLowerCase();
+    if (term.length < 2) return { brands: [], models: [] };
+
+    const admin = this.adminClient!;
+    const { data, error } = await admin
+      .from('marketplace_listings')
+      .select('brand, model')
+      .eq('status', 'active')
+      .eq('review_status', 'approved')
+      .or(`brand.ilike.${term}%,model.ilike.${term}%`)
+      .limit(500);
+    if (error) mapSupabaseError('suggest', error);
+
+    const brandCounts = new Map<string, number>();
+    const modelCounts = new Map<string, number>();
+    for (const row of data ?? []) {
+      const r = row as { brand: string | null; model: string | null };
+      if (r.brand && r.brand.toLowerCase().startsWith(term)) {
+        brandCounts.set(r.brand, (brandCounts.get(r.brand) ?? 0) + 1);
+      }
+      if (r.model && r.model.toLowerCase().startsWith(term)) {
+        modelCounts.set(r.model, (modelCounts.get(r.model) ?? 0) + 1);
+      }
+    }
+    const toSorted = (m: Map<string, number>) =>
+      [...m.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+        .slice(0, 8);
+    return { brands: toSorted(brandCounts), models: toSorted(modelCounts) };
+  }
+
   async listPublic(filters: {
     q?: string;
     category?: string;
@@ -603,17 +644,23 @@ export class MarketplaceService {
     // Nur freigegebene, aktive Angebote merkbar.
     const { data: listing } = await this.adminClient!
       .from('marketplace_listings')
-      .select('id')
+      .select('id, seller_id')
       .eq('id', listingId)
       .eq('status', 'active')
       .eq('review_status', 'approved')
       .maybeSingle();
-    if (!listing) throw new NotFoundException({ error: 'LISTING_NOT_FOUND', message: 'Angebot nicht gefunden' });
+    const row = listing as { id: string; seller_id: string } | null;
+    if (!row) throw new NotFoundException({ error: 'LISTING_NOT_FOUND', message: 'Angebot nicht gefunden' });
 
     const { error } = await this.adminClient!
       .from('marketplace_favorites')
       .upsert({ user_id: user.id, listing_id: listingId }, { onConflict: 'user_id,listing_id' });
     if (error) mapSupabaseError('addFavorite', error);
+
+    // Verkäufer benachrichtigen (nur beim ERSTEN Merken - Upsert-Fall:
+    // wir benachrichtigen trotzdem, aber notify dedupliziert nicht; das
+    // ist bewusst simpel, ein erneutes Merken ist selten).
+    await this.notify(row.seller_id, 'favorite', listingId, user.id);
   }
 
   async removeFavorite(user: AuthenticatedUser, listingId: string): Promise<void> {
@@ -673,7 +720,7 @@ export class MarketplaceService {
     }
     const { data: listing } = await this.adminClient!
       .from('marketplace_listings')
-      .select('id')
+      .select('id, seller_id')
       .eq('id', listingId)
       .maybeSingle();
     if (!listing) throw new NotFoundException({ error: 'LISTING_NOT_FOUND', message: 'Angebot nicht gefunden' });
@@ -685,6 +732,13 @@ export class MarketplaceService {
       details: details?.slice(0, 1000) ?? null,
     });
     if (error) mapSupabaseError('reportListing', error);
+
+    // Verkäufer informieren (Anforderung: In-App-Benachrichtigung bei
+    // Meldung). Kein Detail über den Reporter - Datenschutz.
+    const sellerId = String((listing as { seller_id?: string } | null)?.seller_id ?? '');
+    if (sellerId) {
+      await this.notify(sellerId, 'report', listingId, user.id);
+    }
   }
 
   // =========================================================================
@@ -784,6 +838,177 @@ export class MarketplaceService {
   // =========================================================================
   // Verkaeufer-Kontakt via bestehenden privaten Chat (Punkt 15)
   // =========================================================================
+
+  // =========================================================================
+  // Bewertungen (Migration 0007)
+  // =========================================================================
+
+  /**
+   * Review anlegen. Regel ("nach Kauf/Kontakt"): Der Autor muss einen
+   * PRIVATEN Chat-Verlauf mit dem Verkäufer haben - geprüft über
+   * conversations.pair_key (min|max) + messages (mindestens eine Nachricht
+   * in beide Richtungen wäre strenger; hier: Kontakt existiert + Nachricht
+   * vom Käufer reicht). Ein Review pro (Listing, Autor) - upsert.
+   */
+  async createReview(
+    user: AuthenticatedUser,
+    listingId: string,
+    rating: number,
+    comment: string | undefined,
+  ): Promise<{ ok: true }> {
+    this.ensureConfigured();
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      throw new BadRequestException({ error: 'INVALID_RATING', message: 'Bewertung muss 1-5 Sterne sein' });
+    }
+
+    const admin = this.adminClient!;
+    const { data: listing } = await admin
+      .from('marketplace_listings')
+      .select('id, seller_id')
+      .eq('id', listingId)
+      .maybeSingle();
+    const row = listing as { id: string; seller_id: string } | null;
+    if (!row) throw new NotFoundException({ error: 'LISTING_NOT_FOUND', message: 'Angebot nicht gefunden' });
+    if (row.seller_id === user.id) {
+      throw new BadRequestException({ error: 'OWN_LISTING', message: 'Eigenes Angebot kann nicht bewertet werden' });
+    }
+
+    // Kontakt-Regel: privater Chat zwischen Autor und Verkäufer muss
+    // existieren UND eine Nachricht des Autors enthalten.
+    const pairKey = [user.id, row.seller_id].sort().join('|');
+    const { data: conv } = await admin
+      .from('conversations')
+      .select('id')
+      .eq('type', 'private')
+      .eq('pair_key', pairKey)
+      .maybeSingle();
+    const convRow = conv as { id: string } | null;
+    if (!convRow) {
+      throw new ForbiddenException({
+        error: 'NO_CONTACT',
+        message: 'Bewerten ist erst nach Kontakt mit dem Verkäufer möglich',
+      });
+    }
+    const { count } = await admin
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', convRow.id)
+      .eq('sender_id', user.id);
+    if (!count || count === 0) {
+      throw new ForbiddenException({
+        error: 'NO_CONTACT',
+        message: 'Bewerten ist erst nach eigener Nachricht an den Verkäufer möglich',
+      });
+    }
+
+    const { error } = await admin.from('marketplace_reviews').upsert(
+      {
+        listing_id: listingId,
+        author_id: user.id,
+        rating,
+        comment: (comment ?? '').slice(0, 500),
+      },
+      { onConflict: 'listing_id,author_id' },
+    );
+    if (error) mapSupabaseError('createReview', error);
+
+    await this.notify(row.seller_id, 'review', listingId, user.id);
+    return { ok: true };
+  }
+
+  /** Reviews eines Angebots (öffentlich, neueste zuerst). */
+  async listReviews(listingId: string): Promise<{
+    reviews: { rating: number; comment: string; createdAt: string | null; author: string | null }[];
+    average: number;
+    count: number;
+  }> {
+    this.ensureConfigured();
+    const admin = this.adminClient!;
+    const { data, error } = await admin
+      .from('marketplace_reviews')
+      .select('rating, comment, created_at, author:users!marketplace_reviews_author_id_fkey(username, display_name)')
+      .eq('listing_id', listingId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) mapSupabaseError('listReviews', error);
+
+    const reviews = (data ?? []).map(
+      (r: Record<string, unknown>) => {
+        const author = r['author'] as { username?: string | null; display_name?: string | null } | null;
+        return {
+          rating: Number(r['rating']),
+          comment: String(r['comment'] ?? ''),
+          createdAt: (r['created_at'] as string | undefined) ?? null,
+          author: author?.display_name || author?.username || null,
+        };
+      },
+    );
+    const count = reviews.length;
+    const average = count > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / count : 0;
+    return { reviews, average: Math.round(average * 10) / 10, count };
+  }
+
+  // =========================================================================
+  // Benachrichtigungen (Migration 0007)
+  // =========================================================================
+
+  /** Notification-Zeile für den Empfänger schreiben (Favorit/Meldung/Review). */
+  private async notify(
+    recipientId: string,
+    type: 'favorite' | 'report' | 'review',
+    listingId: string,
+    actorId: string,
+    body?: string,
+  ): Promise<void> {
+    // Selbst-Benachrichtigung ist sinnlos (eigener Favorit am eigenen
+    // Angebot passiert nicht, aber defensiv absichern).
+    if (recipientId === actorId) return;
+    try {
+      await this.adminClient!.from('notifications').insert({
+        user_id: recipientId,
+        type,
+        listing_id: listingId,
+        actor_id: actorId,
+        body: body?.slice(0, 300) ?? '',
+      });
+    } catch {
+      // Benachrichtigung darf den Hauptvorgang nie scheitern lassen.
+    }
+  }
+
+  /** Ungelesene Anzahl (Badge) + Liste für die Inbox. */
+  async listNotifications(
+    user: AuthenticatedUser,
+  ): Promise<{ items: Record<string, unknown>[]; unread: number }> {
+    this.ensureConfigured();
+    const admin = this.adminClient!;
+    const { data, error } = await admin
+      .from('notifications')
+      .select(
+        `id, type, body, read_at, created_at,
+         actor:users!notifications_actor_id_fkey(username, display_name),
+         listing:marketplace_listings(id, title)`,
+      )
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) mapSupabaseError('listNotifications', error);
+
+    const items = (data ?? []) as unknown as Record<string, unknown>[];
+    const unread = items.filter((n) => !n['read_at']).length;
+    return { items, unread };
+  }
+
+  /** Alle ungelesenen Benachrichtigungen des Nutzers als gelesen markieren. */
+  async markNotificationsRead(user: AuthenticatedUser): Promise<void> {
+    this.ensureConfigured();
+    const { error } = await this.adminClient!
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .is('read_at', null);
+    if (error) mapSupabaseError('markNotificationsRead', error);
+  }
 
   /**
    * Oeffnet (oder findet) den privaten Chat zwischen Kaeufer und

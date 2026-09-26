@@ -453,6 +453,184 @@ class MarketplaceRepository {
     _auth(token);
     await _dio.put<void>('/v1/marketplace/admin/reports/$reportId/resolve');
   }
+
+  // =========================================================================
+  // Autocomplete (Suggest) - Marken/Modelle aus aktiven Angebot
+  // =========================================================================
+
+  /// Vorschläge für die Suchfeld-Autovervollständigung. Der Server liefert
+  /// Präfix-Treffer mit Häufigkeit; die Tippfehler-Toleranz (Damerau-
+  /// Levenshtein) macht die UI im suggestProvider (siehe dort).
+  Future<MpSuggestions> suggest({required String token, required String q}) async {
+    _auth(token);
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/suggest',
+      queryParameters: {'q': q},
+    );
+    return MpSuggestions.fromJson(res.data ?? const {});
+  }
+
+  // =========================================================================
+  // Bewertungen (Migration 0007)
+  // =========================================================================
+
+  /// Reviews eines Angebots (öffentlich lesbar).
+  Future<MpReviews> reviews({required String token, required String listingId}) async {
+    _auth(token);
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/listings/$listingId/reviews',
+    );
+    return MpReviews.fromJson(res.data ?? const {});
+  }
+
+  /// Eigene Bewertung abgeben/ändern (Regel: nur nach Chat-Kontakt).
+  Future<void> createReview({
+    required String token,
+    required String listingId,
+    required int rating,
+    String? comment,
+  }) async {
+    _auth(token);
+    await _dio.post<void>(
+      '/v1/marketplace/listings/$listingId/reviews',
+      data: {'rating': rating, if (comment != null && comment.isNotEmpty) 'comment': comment},
+    );
+  }
+
+  // =========================================================================
+  // In-App-Benachrichtigungen
+  // =========================================================================
+
+  /// Ungelesen-Zahl + Inbox-Einträge.
+  Future<MpNotifications> notifications({required String token}) async {
+    _auth(token);
+    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/notifications');
+    return MpNotifications.fromJson(res.data ?? const {});
+  }
+
+  /// Alles als gelesen markieren.
+  Future<void> markNotificationsRead({required String token}) async {
+    _auth(token);
+    await _dio.post<void>('/v1/marketplace/notifications/read-all');
+  }
+}
+
+/// Autovervollständigungsvorschläge (Marken + Modelle mit Trefferzahl).
+class MpSuggestions {
+  final List<MpSuggestion> brands;
+  final List<MpSuggestion> models;
+
+  const MpSuggestions({required this.brands, required this.models});
+
+  factory MpSuggestions.fromJson(Map<String, dynamic> json) => MpSuggestions(
+        brands: _parseList(json['brands']),
+        models: _parseList(json['models']),
+      );
+
+  static List<MpSuggestion> _parseList(dynamic raw) =>
+      ((raw as List?) ?? const [])
+          .map((e) => MpSuggestion.fromJson(e as Map<String, dynamic>))
+          .toList(growable: false);
+}
+
+class MpSuggestion {
+  final String label;
+  final int count;
+
+  const MpSuggestion({required this.label, required this.count});
+
+  factory MpSuggestion.fromJson(Map<String, dynamic> json) => MpSuggestion(
+        label: (json['label'] as String?) ?? '',
+        count: (json['count'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Reviews eines Angebots inkl. Durchschnitt.
+class MpReviews {
+  final List<MpReview> reviews;
+  final double average;
+  final int count;
+
+  const MpReviews({required this.reviews, required this.average, required this.count});
+
+  factory MpReviews.fromJson(Map<String, dynamic> json) {
+    final list = ((json['reviews'] as List?) ?? const [])
+        .map((e) => MpReview.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
+    final count = (json['count'] as num?)?.toInt() ?? list.length;
+    final average = (json['average'] as num?)?.toDouble() ?? 0;
+    return MpReviews(reviews: list, average: average, count: count);
+  }
+}
+
+class MpReview {
+  final int rating;
+  final String comment;
+  final String? createdAt;
+  final String? author;
+
+  const MpReview({
+    required this.rating,
+    required this.comment,
+    required this.createdAt,
+    required this.author,
+  });
+
+  factory MpReview.fromJson(Map<String, dynamic> json) => MpReview(
+        rating: (json['rating'] as num?)?.toInt() ?? 0,
+        comment: (json['comment'] as String?) ?? '',
+        createdAt: json['created_at'] as String?,
+        author: json['author'] as String?,
+      );
+}
+
+/// In-App-Benachrichtigungen (Favorit/Meldung/Review am eigenen Angebot).
+class MpNotifications {
+  final List<MpNotification> items;
+  final int unread;
+
+  const MpNotifications({required this.items, required this.unread});
+
+  factory MpNotifications.fromJson(Map<String, dynamic> json) => MpNotifications(
+        items: ((json['items'] as List?) ?? const [])
+            .map((e) => MpNotification.fromJson(e as Map<String, dynamic>))
+            .toList(growable: false),
+        unread: (json['unread'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class MpNotification {
+  final String id;
+  final String type; // favorite | report | review
+  final String body;
+  final String? readAt;
+  final String? createdAt;
+  final String? actor;
+  final String? listingTitle;
+
+  const MpNotification({
+    required this.id,
+    required this.type,
+    required this.body,
+    required this.readAt,
+    required this.createdAt,
+    required this.actor,
+    required this.listingTitle,
+  });
+
+  factory MpNotification.fromJson(Map<String, dynamic> json) {
+    final actor = json['actor'] as Map<String, dynamic>?;
+    final listing = json['listing'] as Map<String, dynamic>?;
+    return MpNotification(
+      id: (json['id'] as String?) ?? '',
+      type: (json['type'] as String?) ?? '',
+      body: (json['body'] as String?) ?? '',
+      readAt: json['read_at'] as String?,
+      createdAt: json['created_at'] as String?,
+      actor: (actor?['display_name'] ?? actor?['username']) as String?,
+      listingTitle: listing?['title'] as String?,
+    );
+  }
 }
 
 /// Provider: Repository (Dio mit Kaltstart-Retry) + Token-Shortcut.

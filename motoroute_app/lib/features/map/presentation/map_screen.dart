@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
@@ -418,108 +419,210 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return '${diff.inDays} Tagen';
   }
 
-  void _showPoiDetails(Poi poi) {
+  Future<void> _showPoiDetails(Poi poi) async {
     final bikerPoi = poi is BikerPoi ? poi : null;
+
+    // Detail nachladen (Metadaten: website, image, published-at/by).
+    // Fehler/404 sind okay - das Sheet zeigt dann die Basis-Daten.
+    PoiDetail? detail;
+    try {
+      detail = await ref.read(poiRepositoryProvider).fetchDetail(poi.id);
+    } catch (_) {}
+
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.bgSurfaceDark,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(_iconFor(poi.category),
-                      color: AppColors.accentSecondary, size: 24),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(poi.name, style: AppTypography.title),
-                  ),
-                  // Biker-Score (Alleinstellungsmerkmal des Kuratierungs-
-                  // dienstes): nur bei POIs aus dem Biker-POI-Dienst.
-                  if (bikerPoi != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '🏍️ ${bikerPoi.bikerScore}',
-                        style: const TextStyle(
-                            color: AppColors.accentPrimaryDark,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13),
-                      ),
+      builder: (sheetContext) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.55,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          builder: (sheetContext, scrollController) => SingleChildScrollView(
+            controller: scrollController,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Bild oben (kuratierte POIs) oder Kategorie-Platzhalter.
+                if ((detail?.imageUrl != null))
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    child: Image.network(
+                      detail!.imageUrl!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _poiImagePlaceholder(),
                     ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                '${poi.category.label} · Quelle: ${bikerPoi != null ? 'Biker-Service (kuratiert)' : poi.source}',
-                style: AppTypography.caption,
-              ),
-              if (bikerPoi != null && (bikerPoi.motorcycleParking || bikerPoi.meetingPoint))
+                  )
+                else
+                  _poiImagePlaceholder(),
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Wrap(
-                    spacing: 6,
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (bikerPoi.motorcycleParking)
-                        _amenityChip('🏍️ Motorradparkplatz'),
-                      if (bikerPoi.meetingPoint) _amenityChip('👥 Treffpunkt'),
+                      Row(
+                        children: [
+                          Icon(_iconFor(poi.category),
+                              color: AppColors.accentSecondary, size: 24),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              poi.name.isNotEmpty ? poi.name : (detail?.name ?? 'POI'),
+                              style: AppTypography.title,
+                            ),
+                          ),
+                          if (bikerPoi != null || detail?.bikerScore != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '🏍️ ${bikerPoi?.bikerScore ?? detail?.bikerScore}',
+                                style: const TextStyle(
+                                    color: AppColors.accentPrimaryDark,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      // Beschreibung + Website (aus dem Backend-Detail).
+                      if (detail?.description != null && detail!.description!.isNotEmpty)
+                        Text(detail.description!, style: AppTypography.caption)
+                      else
+                        Text(
+                          '${poi.category.label} · Quelle: ${bikerPoi != null ? 'Biker-Service (kuratiert)' : poi.source}',
+                          style: AppTypography.caption,
+                        ),
+                      if (detail?.website != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: InkWell(
+                            onTap: () async {
+                              final uri = Uri.tryParse(detail!.website!);
+                              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            },
+                            child: Text(
+                              detail!.website!,
+                              style: const TextStyle(
+                                color: AppColors.accentSecondary,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                      ),
+                      if (bikerPoi != null && (bikerPoi.motorcycleParking || bikerPoi.meetingPoint))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Wrap(
+                            spacing: 6,
+                            children: [
+                              if (bikerPoi.motorcycleParking)
+                                _amenityChip('🏍️ Motorradparkplatz'),
+                              if (bikerPoi.meetingPoint) _amenityChip('👥 Treffpunkt'),
+                            ],
+                          ),
+                        ),
+                      Text(
+                        '${poi.lat.toStringAsFixed(5)}, ${poi.lng.toStringAsFixed(5)}',
+                        style: AppTypography.caption,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      // Veröffentlichung (unten): wann und von wem -
+                      // ehrlich je nach Quelle (OSM / Kuratierung / Community).
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgSurfaceRaisedDark,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _poiPublishedLine(poi, detail),
+                          style: AppTypography.caption,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      SizedBox(
+                        width: double.infinity,
+                        height: AppSpacing.touchTargetPlanning,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _startRoutingFrom(poi);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentPrimaryDark,
+                            foregroundColor: AppColors.textPrimaryLight,
+                          ),
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('Als Ziel setzen'),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(
+                        width: double.infinity,
+                        height: AppSpacing.touchTargetPlanning,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _addBikerPoiAsWaypoint(poi);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.accentSecondary),
+                          ),
+                          icon: const Icon(Icons.add_road, color: AppColors.accentSecondary),
+                          label: const Text('Als Stopp in die Route',
+                              style: TextStyle(color: AppColors.accentSecondary)),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              Text(
-                '${poi.lat.toStringAsFixed(5)}, ${poi.lng.toStringAsFixed(5)}',
-                style: AppTypography.caption,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              SizedBox(
-                width: double.infinity,
-                height: AppSpacing.touchTargetPlanning,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _startRoutingFrom(poi);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentPrimaryDark,
-                    foregroundColor: AppColors.textPrimaryLight,
-                  ),
-                  icon: const Icon(Icons.navigation),
-                  label: const Text('Als Ziel setzen'),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              SizedBox(
-                width: double.infinity,
-                height: AppSpacing.touchTargetPlanning,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _addBikerPoiAsWaypoint(poi);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.accentSecondary),
-                  ),
-                  icon: const Icon(Icons.add_road, color: AppColors.accentSecondary),
-                  label: const Text('Als Stopp in die Route',
-                      style: TextStyle(color: AppColors.accentSecondary)),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _poiImagePlaceholder() => Container(
+        height: 180,
+        width: double.infinity,
+        color: AppColors.bgSurfaceRaisedDark,
+        child: const Center(
+          child: Text('📍', style: TextStyle(fontSize: 44)),
+        ),
+      );
+
+  String _poiPublishedLine(Poi poi, PoiDetail? detail) {
+    final publishedBy = detail?.publishedBy ??
+        (poi.source == 'BIKER_SERVICE'
+            ? 'Biker-POI-Kuratierung'
+            : poi.source == 'OSM'
+                ? 'OpenStreetMap'
+                : poi.source);
+    final publishedAt = detail?.publishedAt;
+    if (publishedAt == null) return 'Veröffentlicht von $publishedBy';
+    final dt = DateTime.tryParse(publishedAt);
+    final when = dt == null
+        ? ''
+        : ' am ${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
+    return 'Veröffentlicht von $publishedBy$when';
   }
 
   /// POI als Ziel: Der Nutzer wählt den Startpunkt (GPS oder Adresse)

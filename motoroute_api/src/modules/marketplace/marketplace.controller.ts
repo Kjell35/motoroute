@@ -112,6 +112,19 @@ class ContactSellerDto {
   message?: string;
 }
 
+class ReviewDto {
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
+}
+
 class AdminPatchDto {
   @IsOptional()
   @IsString()
@@ -151,6 +164,12 @@ export class MarketplaceController {
   @Get('categories')
   categories() {
     return this.marketplace.categories();
+  }
+
+  /** Autovervollständigung: Marken/Modelle aus aktiven Angebot. */
+  @Get('suggest')
+  suggest(@Query('q') q: string) {
+    return this.marketplace.suggest(q ?? '');
   }
 
   /** Oeffentliche Liste mit Filtern + Suche. */
@@ -247,6 +266,34 @@ export class MarketplaceController {
   @Post('listings/:id/contact')
   contact(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: ContactSellerDto) {
     return this.marketplace.contactSeller(req.user!, id, dto.message, this.chatService);
+  }
+
+  // Bewertungen (Migration 0007)
+  @Get('listings/:id/reviews')
+  reviews(@Param('id') id: string) {
+    return this.marketplace.listReviews(id);
+  }
+
+  @Post('listings/:id/reviews')
+  @HttpCode(HttpStatus.CREATED)
+  createReview(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: ReviewDto,
+  ) {
+    return this.marketplace.createReview(req.user!, id, dto.rating, dto.comment);
+  }
+
+  // In-App-Benachrichtigungen
+  @Get('notifications')
+  notifications(@Req() req: AuthenticatedRequest) {
+    return this.marketplace.listNotifications(req.user!);
+  }
+
+  @Post('notifications/read-all')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  notificationsReadAll(@Req() req: AuthenticatedRequest) {
+    return this.marketplace.markNotificationsRead(req.user!);
   }
 
   // Admin

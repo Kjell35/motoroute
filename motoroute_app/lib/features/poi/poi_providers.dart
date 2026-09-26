@@ -46,6 +46,50 @@ extension on String {
       };
 }
 
+/// Detail-Daten eines POIs (GET /v1/pois/:id) - Basis für das
+/// Detail-Sheet: Beschreibung, Website, Bild und Veröffentlichungs-Info.
+class PoiDetail {
+  final String id;
+  final String category;
+  final String name;
+  final String source;
+  final String? description;
+  final String? website;
+  final String? imageUrl;
+  final int? bikerScore;
+  final String? originTag;
+  final String? publishedAt;
+  final String? publishedBy;
+
+  const PoiDetail({
+    required this.id,
+    required this.category,
+    required this.name,
+    required this.source,
+    required this.description,
+    required this.website,
+    required this.imageUrl,
+    required this.bikerScore,
+    required this.originTag,
+    required this.publishedAt,
+    required this.publishedBy,
+  });
+
+  factory PoiDetail.fromJson(Map<String, dynamic> json) => PoiDetail(
+        id: (json['id'] as String?) ?? '',
+        category: (json['category'] as String?) ?? '',
+        name: (json['name'] as String?) ?? '',
+        source: (json['source'] as String?) ?? 'OSM',
+        description: json['description'] as String?,
+        website: json['website'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+        bikerScore: (json['bikerScore'] as num?)?.toInt(),
+        originTag: json['originTag'] as String?,
+        publishedAt: json['publishedAt'] as String?,
+        publishedBy: json['publishedBy'] as String?,
+      );
+}
+
 class PoiRepository {
   final Dio _dio;
 
@@ -78,6 +122,19 @@ class PoiRepository {
       items = const [];
     }
     return items.map((e) => Poi.fromJson(e as Map<String, dynamic>)).toList(growable: false);
+  }
+
+  /// Detail-Daten für das POI-Sheet (404 -> PoiDetail?-null; das Sheet
+  /// zeigt dann die Basis-Infos aus dem Karten-Treffer).
+  Future<PoiDetail?> fetchDetail(String id) async {
+    if (id.startsWith('biker-')) {
+      // Biker-Service-Delta-POIs leben im App-Cache, nicht in der
+      // poi-Tabelle - ohne serverseitige Zeile gibt es kein erweitertes
+      // Detail; das Sheet fällt auf die Basis-Daten zurück.
+      return null;
+    }
+    final res = await _dio.get<Map<String, dynamic>>('/v1/pois/$id');
+    return PoiDetail.fromJson(res.data ?? const {});
   }
 }
 

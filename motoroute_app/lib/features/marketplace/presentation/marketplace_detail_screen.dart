@@ -22,6 +22,7 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
   bool _isFavorite = false;
   int _photoIndex = 0;
   bool _busy = false;
+  MpReviews? _reviews;
 
   @override
   void initState() {
@@ -38,10 +39,20 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
     try {
       final listing = await ref.read(marketplaceRepositoryProvider).get(token: token, id: widget.listingId);
       final favorites = await ref.read(marketplaceRepositoryProvider).favorites(token: token);
+      MpReviews? reviews;
+      try {
+        reviews = await ref.read(marketplaceRepositoryProvider).reviews(
+              token: token,
+              listingId: widget.listingId,
+            );
+      } catch (_) {
+        // Reviews sind Best-Effort - das Detail bleibt auch ohne nutzbar.
+      }
       if (!mounted) return;
       setState(() {
         _listing = listing;
         _isFavorite = favorites.any((f) => f.id == listing.id);
+        _reviews = reviews;
         _loading = false;
       });
     } catch (e) {
@@ -242,6 +253,13 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
                                 Text(listing.description),
                                 const SizedBox(height: 16),
                               ],
+                              // Verkäufer-Bewertungen (Sterne + Kommentar,
+                              // nur nach Chat-Kontakt bewertbar).
+                              _ReviewsSection(
+                                reviews: _reviews,
+                                onWrite: _writeReview,
+                              ),
+                              const SizedBox(height: 16),
                               Text(
                                 'Veröffentlicht am ${_fmtDate(listing.createdAt)}',
                                 style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
@@ -272,6 +290,168 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
   }
 
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+
+  Future<void> _writeReview() async {
+    final token = ref.read(marketplaceTokenProvider);
+    if (token == null || _listing == null || _busy) return;
+
+    int rating = 5;
+    final commentController = TextEditingController();
+    final submitted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + MediaQuery.of(sheetContext).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Deine Bewertung', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  return IconButton(
+                    iconSize: 40,
+                    icon: Icon(
+                      i < rating ? Icons.star : Icons.star_border,
+                      color: i < rating ? Colors.amber : Colors.grey,
+                    ),
+                    onPressed: () => setSheetState(() => rating = i + 1),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: commentController,
+                maxLines: 3,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  hintText: 'Kommentar (optional) - z. B. Abwicklung, Zustand',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => Navigator.of(sheetContext).pop(true),
+                child: const Text('Bewertung abgeben'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (submitted != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(marketplaceRepositoryProvider).createReview(
+            token: token,
+            listingId: _listing!.id,
+            rating: rating,
+            comment: commentController.text.trim(),
+          );
+      if (!mounted) return;
+      _snack('⭐ Bewertung gespeichert - danke!');
+      await _load();
+    } catch (e) {
+      final msg = e.toString().contains('NO_CONTACT')
+          ? 'Bewerten ist erst nach Chat-Kontakt mit dem Verkäufer möglich'
+          : 'Fehler: $e';
+      if (mounted) _snack(msg, error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
+
+/// Bewertungs-Sektion im Detail: Durchschnitt + Liste + Bewerten-Button.
+class _ReviewsSection extends StatelessWidget {
+  final MpReviews? reviews;
+  final Future<void> Function() onWrite;
+
+  const _ReviewsSection({required this.reviews, required this.onWrite});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final r = reviews;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Bewertungen', style: TextStyle(fontWeight: FontWeight.w700)),
+              const Spacer(),
+              if (r != null && r.count > 0) ...[
+                Icon(Icons.star, size: 18, color: Colors.amber.shade700),
+                const SizedBox(width: 4),
+                Text('${r.average}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(' (${r.count})', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (r == null || r.count == 0)
+            Text(
+              'Noch keine Bewertungen.',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+            )
+          else
+            ...r.reviews.take(5).map(
+                  (review) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            ...List.generate(
+                              5,
+                              (i) => Icon(
+                                i < review.rating ? Icons.star : Icons.star_border,
+                                size: 15,
+                                color: Colors.amber.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                review.author ?? 'Biker',
+                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (review.comment.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(review.comment, style: const TextStyle(fontSize: 13)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: onWrite,
+            icon: const Icon(Icons.star_outline, size: 18),
+            label: const Text('Verkäufer bewerten'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _MetaChip extends StatelessWidget {
