@@ -634,9 +634,26 @@ export class MarketplaceService {
       .eq('user_id', user.id)
       .eq('listing.status', 'active')
       .eq('listing.review_status', 'approved')
-      .order('created_at', { ascending: false, foreignTable: 'marketplace_favorites' });
+      // created_at ist eine Spalte der Top-Level-Tabelle (favorites) -
+      // NICHT mit foreignTable sortieren: PostgREST wirft sonst PGRST108
+      // ("not an embedded resource") -> 500. Die Bild-Sortierung nach
+      // position machen wir unten im Code (images ist in listing
+      // verschachtelt und daher nicht per foreignTable erreichbar).
+      .order('created_at', { ascending: false });
     if (error) mapSupabaseError('listFavorites', error);
-    return { listings: (data ?? []).map((row: { listing: unknown }) => row.listing) as Record<string, unknown>[] };
+    // Bilder pro Listing nach position sortieren (im Code, da 'images'
+    // nicht per foreignTable order erreichbar ist - siehe oben).
+    const rows = (data ?? []) as unknown as { listing: Record<string, unknown> }[];
+    const listings = rows.map((row) => {
+      const listing = row.listing;
+      if (Array.isArray(listing.images)) {
+        (listing.images as { position?: number }[]).sort(
+          (a, b) => (a.position ?? 0) - (b.position ?? 0),
+        );
+      }
+      return listing;
+    });
+    return { listings };
   }
 
   // =========================================================================
