@@ -84,6 +84,63 @@ class I18n {
   String get mpSubmitForReview => tr('mp.submitForReview');
   String get mpSubmitFailed => tr('mp.submitFailed');
   String get settingsTab => tr('tab.settings');
+  String get garageTab => tr('tab.garage');
+
+  // Garage
+  String get gTitle => tr('garage.title');
+  String get gLoginTitle => tr('garage.loginTitle');
+  String get gLoginHint => tr('garage.loginHint');
+  String get gEmail => tr('garage.email');
+  String get gPassword => tr('garage.password');
+  String get gLoginButton => tr('garage.loginButton');
+  String get gLoginFailed => tr('garage.loginFailed');
+  String get gServerUnreachable => tr('garage.serverUnreachable');
+  String get gLogout => tr('garage.logout');
+  String get gEmpty => tr('garage.empty');
+  String get gAddVehicle => tr('garage.addVehicle');
+  String get gMyMotos => tr('garage.myMotos');
+  String get gMyCars => tr('garage.myCars');
+  String get gStatusOk => tr('garage.statusOk');
+  String get gStatusDueSoon => tr('garage.statusDueSoon');
+  String get gStatusOverdue => tr('garage.statusOverdue');
+  String get gMoto => tr('garage.moto');
+  String get gCar => tr('garage.car');
+  String get gManufacturer => tr('garage.manufacturer');
+  String get gModel => tr('garage.model');
+  String get gVariant => tr('garage.variant');
+  String get gFirstManufacturer => tr('garage.firstManufacturer');
+  String get gNickname => tr('garage.nickname');
+  String get gOdometer => tr('garage.odometer');
+  String get gColor => tr('garage.color');
+  String get gLoading => tr('garage.loading');
+  String get gErrPickModel => tr('garage.errPickModel');
+  String get gSave => tr('common.save');
+  String get gCancel => tr('common.cancel');
+  String get gVehicle => tr('garage.vehicle');
+  String get gUpdateKm => tr('garage.updateKm');
+  String get gReminders => tr('garage.reminders');
+  String get gNothingDue => tr('garage.nothingDue');
+  String get gIn => tr('garage.in');
+  String get gDays => tr('garage.days');
+  String get gSpecs => tr('garage.specs');
+  String get gNoSpecs => tr('garage.noSpecs');
+  String get gMaintenance => tr('garage.maintenance');
+  String get gNoMaintenance => tr('garage.noMaintenance');
+  String get gAddMaintenance => tr('garage.addMaintenance');
+  String get gDate => tr('garage.date');
+  String get gCost => tr('garage.cost');
+  String get gFuel => tr('garage.fuel');
+  String get gNoFuel => tr('garage.noFuel');
+  String get gAddFuel => tr('garage.addFuel');
+  String get gLiters => tr('garage.liters');
+  String get gStation => tr('garage.station');
+  String get gTires => tr('garage.tires');
+  String get gNoTires => tr('garage.noTires');
+  String get gDocuments => tr('garage.documents');
+  String get gNoDocuments => tr('garage.noDocuments');
+  String get gCosts => tr('garage.costs');
+  String get gThisYear => tr('garage.thisYear');
+  String get gTotal => tr('garage.total');
   String get languageLabel => tr('settings.language');
   String get themeModeTitle => tr('settings.themeMode');
   String get themeModeSystem => tr('settings.themeMode.system');
@@ -230,6 +287,60 @@ const _catalog = <String, Map<String, String>>{
     'tab.tours': 'Touren',
     'tab.chat': 'Chat',
     'tab.settings': 'Einstellungen',
+    'tab.garage': 'Garage',
+    // Garage
+    'garage.title': 'Garage',
+    'garage.loginTitle': 'Meine Garage',
+    'garage.loginHint': 'Eigenes Garage-Konto (unabhängig vom MotoRoute-Login). Verwaltet Fahrzeuge, Wartung und Kosten.',
+    'garage.email': 'E-Mail',
+    'garage.password': 'Passwort',
+    'garage.loginButton': 'Garage öffnen',
+    'garage.loginFailed': 'Anmeldung fehlgeschlagen - E-Mail/Passwort prüfen',
+    'garage.serverUnreachable': 'Garage-Server nicht erreichbar',
+    'garage.logout': 'Abmelden',
+    'garage.empty': 'Noch keine Fahrzeuge. Lege dein erstes Motorrad oder Auto an!',
+    'garage.addVehicle': '+ Fahrzeug anlegen',
+    'garage.myMotos': 'Meine Motorräder',
+    'garage.myCars': 'Meine Autos',
+    'garage.statusOk': 'Alles ok',
+    'garage.statusDueSoon': 'Bald fällig',
+    'garage.statusOverdue': 'Überfällig',
+    'garage.moto': 'Motorrad',
+    'garage.car': 'Auto',
+    'garage.manufacturer': 'Hersteller',
+    'garage.model': 'Modell',
+    'garage.variant': 'Variante (Baujahr)',
+    'garage.firstManufacturer': 'Erst Hersteller wählen',
+    'garage.nickname': 'Spitzname (z. B. "Lotte")',
+    'garage.odometer': 'Kilometerstand',
+    'garage.color': 'Farbe',
+    'garage.loading': 'Lädt…',
+    'garage.errPickModel': 'Bitte Hersteller und Modell wählen',
+    'garage.vehicle': 'Fahrzeug',
+    'garage.updateKm': 'km aktualisieren',
+    'garage.reminders': 'Wartungserinnerungen',
+    'garage.nothingDue': 'Keine Wartung fällig - alles im grünen Bereich 🟢',
+    'garage.in': 'in',
+    'garage.days': 'Tagen',
+    'garage.specs': 'Technische Daten',
+    'garage.noSpecs': 'Keine technischen Daten hinterlegt',
+    'garage.maintenance': 'Wartung & Historie',
+    'garage.noMaintenance': 'Noch keine Wartung erfasst',
+    'garage.addMaintenance': 'Wartung erfassen',
+    'garage.date': 'Datum (JJJJ-MM-TT)',
+    'garage.cost': 'Kosten',
+    'garage.fuel': 'Tankbuch',
+    'garage.noFuel': 'Noch keine Tankfüllung erfasst',
+    'garage.addFuel': 'Tanken erfassen',
+    'garage.liters': 'Liter',
+    'garage.station': 'Tankstelle',
+    'garage.tires': 'Reifen',
+    'garage.noTires': 'Keine Reifen hinterlegt',
+    'garage.documents': 'Dokumente',
+    'garage.noDocuments': 'Keine Dokumente hinterlegt',
+    'garage.costs': 'Kosten',
+    'garage.thisYear': 'Dieses Jahr',
+    'garage.total': 'gesamt',
     // Common
     'common.save': 'Speichern',
     'common.cancel': 'Abbrechen',
@@ -441,6 +552,60 @@ const _catalog = <String, Map<String, String>>{
     'tab.tours': 'Tours',
     'tab.chat': 'Chat',
     'tab.settings': 'Settings',
+    'tab.garage': 'Garage',
+    // Garage
+    'garage.title': 'Garage',
+    'garage.loginTitle': 'My garage',
+    'garage.loginHint': 'Separate garage account (independent of your MotoRoute login). Manages vehicles, maintenance and costs.',
+    'garage.email': 'Email',
+    'garage.password': 'Password',
+    'garage.loginButton': 'Open garage',
+    'garage.loginFailed': 'Login failed - check email/password',
+    'garage.serverUnreachable': 'Garage server unreachable',
+    'garage.logout': 'Log out',
+    'garage.empty': 'No vehicles yet. Add your first motorcycle or car!',
+    'garage.addVehicle': '+ Add vehicle',
+    'garage.myMotos': 'My motorcycles',
+    'garage.myCars': 'My cars',
+    'garage.statusOk': 'All good',
+    'garage.statusDueSoon': 'Due soon',
+    'garage.statusOverdue': 'Overdue',
+    'garage.moto': 'Motorcycle',
+    'garage.car': 'Car',
+    'garage.manufacturer': 'Manufacturer',
+    'garage.model': 'Model',
+    'garage.variant': 'Variant (year)',
+    'garage.firstManufacturer': 'Pick a manufacturer first',
+    'garage.nickname': 'Nickname (e.g. "Lotte")',
+    'garage.odometer': 'Odometer',
+    'garage.color': 'Color',
+    'garage.loading': 'Loading…',
+    'garage.errPickModel': 'Please pick manufacturer and model',
+    'garage.vehicle': 'Vehicle',
+    'garage.updateKm': 'update km',
+    'garage.reminders': 'Maintenance reminders',
+    'garage.nothingDue': 'Nothing due - all green 🟢',
+    'garage.in': 'in',
+    'garage.days': 'days',
+    'garage.specs': 'Specifications',
+    'garage.noSpecs': 'No specifications on record',
+    'garage.maintenance': 'Maintenance & history',
+    'garage.noMaintenance': 'No maintenance recorded yet',
+    'garage.addMaintenance': 'Add maintenance',
+    'garage.date': 'Date (YYYY-MM-DD)',
+    'garage.cost': 'Cost',
+    'garage.fuel': 'Fuel log',
+    'garage.noFuel': 'No fuel entries yet',
+    'garage.addFuel': 'Add fuel entry',
+    'garage.liters': 'Liters',
+    'garage.station': 'Station',
+    'garage.tires': 'Tires',
+    'garage.noTires': 'No tires on record',
+    'garage.documents': 'Documents',
+    'garage.noDocuments': 'No documents on record',
+    'garage.costs': 'Costs',
+    'garage.thisYear': 'This year',
+    'garage.total': 'total',
     // Common
     'common.save': 'Save',
     'common.cancel': 'Cancel',

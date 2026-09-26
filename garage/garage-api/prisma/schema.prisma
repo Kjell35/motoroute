@@ -1,0 +1,262 @@
+// Garage - Datenmodell (Prisma).
+//
+// Eigenstaendiges System: keine Abhaengigkeit zu MotoRoute. Spaetere
+// Anbindung ausschliesslich ueber die REST-API (siehe README).
+//
+// Privatsphaere-Regel (Anforderung 15): licensePlate, purchasePrice,
+// purchaseDate und notes sind privat. Sharing ist als isPublic-Flag
+// VORBEREITET (default false); solange es false ist, ist ein Fahrzeug nur
+// fuer den Owner sichtbar. Sensible Felder werden in den Serialisierern
+// (src/common/privacy.ts) fuer fremde Augen nie ausgeliefert.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Benutzer + Auth
+// =============================================================================
+
+enum UserRole {
+  user
+  admin
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  displayName  String
+  role         UserRole  @default(user)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  vehicles    Vehicle[]
+  maintainences Maintenance[]
+  tires       Tire[]
+  fuelEntries FuelEntry[]
+  documents   Document[]
+}
+
+// =============================================================================
+// Zentrale Fahrzeugdatenbank (Anforderung 12): Hersteller -> Modell ->
+// Variante -> Specs. Erweiterbar ueber den Admin-Bereich (Anforderung 16).
+// =============================================================================
+
+model Manufacturer {
+  id        String   @id @default(uuid())
+  name      String   @unique // "BMW", "Volkswagen", "Yamaha"
+  country   String?
+  isActive  Boolean  @default(true) // "Fahrzeuge deaktivieren" (16)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models Model[]
+}
+
+model Model {
+  id             String  @id @default(uuid())
+  manufacturerId String
+  name           String // "R 1250 GS", "Golf"
+  category       VehicleCategory
+  isActive       Boolean @default(true)
+  imageTemplate  String? // optionales Standard-Bild
+
+  manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  variants     Variant[]
+
+  @@unique([manufacturerId, name])
+}
+
+model Variant {
+  id       String  @id @default(uuid())
+  modelId  String
+  name     String // "Rallye TE", "GTI Performance"
+  years    String? // "2021-2026" Freitext-Bereich, optional
+
+  model Model @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  specs    VehicleSpec[]
+  vehicles Vehicle[]
+
+  @@unique([modelId, name])
+}
+
+/// Technische Eckdaten je Variante+Baujahr (Anforderung 3). key/value mit
+/// definierter Schluesselliste im Code (SpecKey) - erweiterbar, ohne die
+/// Tabelle zu migrieren.
+model VehicleSpec {
+  id        String @id @default(uuid())
+  variantId String
+  yearFrom  Int? // Baujahresbereich, z. B. 2021
+  yearTo    Int?
+  key       String // z. B. "power_hp", "engine_displacement_cc"
+  value     String
+  unit      String? // "PS", "Nm", "l/100km", "kWh"
+
+  variant Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, key, yearFrom, yearTo])
+}
+
+// =============================================================================
+// Fahrzeuge in der Garage (Anforderung 1/2/4)
+// =============================================================================
+
+enum VehicleCategory {
+  motorcycle
+  car
+}
+
+model Vehicle {
+  id              String          @id @default(uuid())
+  ownerId         String
+  category        VehicleCategory
+  variantId       String? // optional: Verbindung zur zentralen Datenbank
+  manufacturerId  String? // denormalisiert fuer Suche ohne Join
+  modelName       String // "R 1250 GS" - Snapshots beim Anlegen
+  manufacturerName String // "BMW"
+  variantName     String?
+  year            Int? // Baujahr
+  firstRegistration DateTime? // Erstzulassung
+  nickname        String? // "Gustav", "Der Blaue"
+  color           String?
+  licensePlate    String? // PRIVAT (Anforderung 15)
+  odometerKm      Int             @default(0)
+  purchaseDate    DateTime? // PRIVAT
+  purchasePriceCents Int? // PRIVAT
+  notes           String? // PRIVAT
+  photoUrl        String?
+  isPublic        Boolean         @default(false) // Sharing vorbereitet
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  variant     Variant?      @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  maintences  Maintenance[]
+  tires       Tire[]
+  fuelEntries FuelEntry[]
+  documents   Document[]
+
+  @@index([ownerId])
+  @@index([manufacturerId])
+}
+
+// =============================================================================
+// Wartung & Inspektion (Anforderung 5)
+// =============================================================================
+
+model Maintenance {
+  id             String    @id @default(uuid())
+  vehicleId      String
+  ownerId        String // denormalisiert: schnelle Ownership-Pruefung
+  type           String // OIL_CHANGE, BRAKE_PADS, INSPECTION, HU, ... (Wartungstypen-Katalog im Code)
+  performedAt    DateTime // Datum der Wartung
+  odometerKm     Int // Kilometerstand bei Wartung
+  nextDueDate    DateTime?
+  nextDueOdometerKm Int?
+  costCents      Int?
+  shopName       String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, performedAt])
+  @@index([ownerId])
+}
+
+// =============================================================================
+// Reifen (Anforderung 10)
+// =============================================================================
+
+model Tire {
+  id           String    @id @default(uuid())
+  vehicleId    String
+  ownerId      String
+  position     TirePosition // front / rear
+  brand        String
+  modelName    String
+  size         String // "120/70 ZR17"
+  mountedAt    DateTime // Montage-Datum
+  mountedAtKm  Int // Kilometerstand bei Montage
+  treadDepthMm Float? // Profil
+  season       String? // Sommer/Winter/Ganzjahr
+  notes        String?
+  removedAt    DateTime? // gesetzt = abmontiert (Historie)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, mountedAt])
+}
+
+enum TirePosition {
+  front
+  rear
+}
+
+// =============================================================================
+// Tankbuch (Anforderung 11) - Verbrauch/Kosten werden daraus berechnet
+// =============================================================================
+
+model FuelEntry {
+  id         String   @id @default(uuid())
+  vehicleId  String
+  ownerId    String
+  date       DateTime
+  odometerKm Int
+  liters     Float
+  priceCentsTotal Int // Gesamtpreis in Cent
+  pricePerLiterCents Int? // optional direkt erfasst, sonst berechnet
+  station    String?
+  isFullTank Boolean  @default(true) // nur VOLL-Tankungen ergeben brauchbaren Verbrauch
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, date])
+}
+
+// =============================================================================
+// Dokumente (Anforderung 9) - IMMER privat
+// =============================================================================
+
+enum DocumentType {
+  invoice // Rechnung
+  inspection // Inspektionsnachweis
+  tuv // TUEV-Bericht
+  service_record // Wartungsnachweis
+  other
+}
+
+model Document {
+  id        String       @id @default(uuid())
+  vehicleId String
+  ownerId   String
+  type      DocumentType
+  title     String
+  fileUrl   String // Storage-URL (privater Bucket) oder Dateipfad
+  fileSizeBytes Int?
+  mimeType  String?
+  notes     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+}

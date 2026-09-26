@@ -70,7 +70,7 @@ jobs:
         working-directory: motoroute_app
         run: |
           set -o pipefail
-          flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }} 2>&1 | tee build-output.txt
+          flutter build apk --debug --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com --dart-define=GARAGE_API_URL=${{ secrets.GARAGE_API_URL }} --dart-define=CARTO_BASEMAP_KEY=${{ secrets.CARTO_BASEMAP_KEY }} 2>&1 | tee build-output.txt
       - name: Build-Fehler oeffentlich sichtbar machen (Issue)
         if: failure()
         working-directory: motoroute_app

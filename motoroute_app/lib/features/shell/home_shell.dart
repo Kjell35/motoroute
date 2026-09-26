@@ -8,6 +8,7 @@ import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/presentation/chat_hub_screen.dart';
 import 'package:motoroute_app/features/map/presentation/map_screen.dart';
+import 'package:motoroute_app/features/garage/garage_screen.dart';
 import 'package:motoroute_app/features/marketplace/marketplace_screen.dart';
 import 'package:motoroute_app/features/settings/settings_screen.dart';
 import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
@@ -74,6 +75,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         children: const [
           MapScreen(),
           MarketplaceScreen(),
+          GarageScreen(),
           WaypointManagementScreen(),
           ChatHubScreen(),
           SettingsScreen(),
@@ -106,6 +108,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               icon: const Icon(Icons.storefront_outlined, color: AppColors.textSecondaryDark),
               selectedIcon: const Icon(Icons.storefront, color: AppColors.accentPrimaryDark),
               label: i18n.marketplaceTab,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.garage_outlined, color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.garage, color: AppColors.accentPrimaryDark),
+              label: i18n.garageTab,
             ),
             NavigationDestination(
               icon: const Icon(Icons.route_outlined, color: AppColors.textSecondaryDark),
