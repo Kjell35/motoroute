@@ -342,6 +342,42 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Abmelden: Server informieren (best-effort), lokale Persistenz
   /// UND In-Memory-Sitzung verwerfen.
+  /// Zentraler Refresh für den 401-Interceptor (ApiClient.bindAuth):
+  /// Erneuert den Access-Token via Refresh-Token und aktualisiert die
+  /// Persistenz (falls "Gerät merken"). Gibt den neuen Token zurück -
+  /// oder null, wenn die Sitzung nicht mehr rettbar ist (dann Logout).
+  Future<String?> refreshTokenNow() async {
+    final refresh = _refreshToken;
+    if (refresh == null) return null;
+    try {
+      final dio = ApiClient.create();
+      final response = await dio.post<Map<String, dynamic>>(
+        '/v1/auth/refresh',
+        data: {'refreshToken': refresh},
+      );
+      final data = response.data;
+      final newAccess = data?['accessToken'] as String?;
+      final newRefresh = data?['refreshToken'] as String?;
+      if (newAccess == null || newAccess.isEmpty) return null;
+      _accessToken = newAccess;
+      if (newRefresh != null) _refreshToken = newRefresh;
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_kRemembered) ?? false) {
+        await prefs.setString(_kAccessToken, _accessToken!);
+        if (newRefresh != null) await prefs.setString(_kRefreshToken, newRefresh);
+      }
+      // Frischer Token an alle Mitläufer (Chat-WS + REST).
+      state = state.copyWith(tokenEpoch: state.tokenEpoch + 1);
+      _scheduleRefresh();
+      return newAccess;
+    } catch (_) {
+      // Refresh endgültig fehlgeschlagen -> Sitzung aufräumen. Die
+      // aufrufende Stelle zeigt ihren Login-Zustand statt 401-Würmer.
+      await logout();
+      return null;
+    }
+  }
+
   Future<void> logout() async {
     _refreshTimer?.cancel();
     final prefs = await SharedPreferences.getInstance();

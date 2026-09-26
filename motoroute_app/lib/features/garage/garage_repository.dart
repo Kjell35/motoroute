@@ -658,6 +658,10 @@ final garageSessionProvider =
     StateNotifierProvider<GarageSessionController, AsyncValue<GarageSession?>>((ref) => GarageSessionController(ref));
 
 /// Aktuelle Garage (Fahrzeugliste), abhaengig von der Session.
+/// WICHTIG: Niemals State aendern (logout) WAEHREND des Builds - das
+/// liess frueher den ganzen Tab grau werden. Bei 401/403 geben wir
+/// einfach eine leere Liste zurueck; die Session-Aufraeumung macht der
+/// naechste Interaktionszyklus (Screen invalidiert selbst).
 final garageListProvider = FutureProvider<List<GarageVehicle>>((ref) async {
   final session = ref.watch(garageSessionProvider).value;
   if (session == null) return [];
@@ -666,9 +670,9 @@ final garageListProvider = FutureProvider<List<GarageVehicle>>((ref) async {
   try {
     return await repo.garage(baseUrl, session.token);
   } on GarageApiException catch (e) {
-    if (e.statusCode == 401) {
-      // Token abgelaufen -> Session verwerfen, Login-Karte erscheint.
-      await ref.read(garageSessionProvider.notifier).logout();
+    if (e.statusCode == 401 || e.statusCode == 403) {
+      // Token abgelaufen: Ohne Build-Seiteneffekt behandeln. Die
+      // Session wird beim naechsten Login-Versuch ohnehin ueberschrieben.
       return [];
     }
     rethrow;

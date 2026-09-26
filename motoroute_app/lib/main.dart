@@ -30,6 +30,8 @@ import 'package:motoroute_app/features/group_routes/presentation/group_route_cre
 import 'package:motoroute_app/features/group_routes/presentation/group_route_list_screen.dart';
 import 'package:motoroute_app/features/group_routes/presentation/group_route_planner_screen.dart';
 import 'package:motoroute_app/features/group_routes/presentation/group_route_start_screen.dart';
+import 'package:motoroute_app/core/network/api_client.dart';
+import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/group_rides/presentation/group_ride_screen.dart';
 import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
 
@@ -43,6 +45,18 @@ Future<void> main() async {
   // massiv verzögert - ohne In-App-Ping schläft der Free-Tier-Server
   // ein und jede erste Aktion läuft in "Verbindung prüfen").
   ServerKeepAlive.instance.start();
+  // Zentraler 401-Auto-Refresh: Der ApiClient erneuert abgelaufene
+  // Access-Tokens selbstständig (ein Refresher für ALLE Features -
+  // Marktplatz, Chat, Admin, Favoriten laufen danach wieder, ohne dass
+  // der Nutzer sich abmelden muss).
+  ApiClient.bindAuth(
+    refresher: () async {
+      final root = WidgetsBinding.instance.rootElement;
+      if (root == null) return null; // Vor dem ersten Frame: kein Scope.
+      final container = ProviderScope.containerOf(root, listen: false);
+      return container.read(authControllerProvider.notifier).refreshTokenNow();
+    },
+  );
   runApp(const MotoRouteApp());
 }
 
@@ -91,9 +105,9 @@ class _MotoRouteAppBody extends ConsumerWidget {
         // Tab-Aliase (Deep-Links aus Nicht-Shell-Kontexten): Shell mit
         // dem jeweiligen Start-Tab.
         '/map': (context) => const HomeShell(initialTab: 0),
-        '/tours': (context) => const HomeShell(initialTab: 1),
-        '/chat': (context) => const HomeShell(initialTab: 2),
-        '/settings': (context) => const HomeShell(initialTab: 3),
+        '/tours': (context) => const HomeShell(initialTab: 3),
+        '/chat': (context) => const HomeShell(initialTab: 4),
+        '/settings': (context) => const HomeShell(initialTab: 5),
         '/onboarding': (context) => const OnboardingScreen(),
         // Recht & Info (aus den Einstellungen erreichbar).
         '/privacy': (context) => const PrivacyScreen(),

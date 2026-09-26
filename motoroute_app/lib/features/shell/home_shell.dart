@@ -13,8 +13,8 @@ import 'package:motoroute_app/features/marketplace/marketplace_screen.dart';
 import 'package:motoroute_app/features/settings/settings_screen.dart';
 import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
 
-/// Tab-Shell: Karte, Marktplatz, Touren (Wegpunkt-Planung), Chat und
-/// Einstellungen als echte Bottom-Navigation. IndexedStack hält alle
+/// Tab-Shell: 4 Navigationspunkte - Home (Karte), Garage, "Mehr" (Sheet
+/// mit Marktplatz/Touren/Chat) und Einstellungen. IndexedStack hält alle
 /// Screens alive - Karten- und Chat-Verbindungen überleben Tab-Wechsel.
 class HomeShell extends ConsumerStatefulWidget {
   final int initialTab;
@@ -28,10 +28,68 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   late int _tab;
 
+  /// Index in der 4-Punkt-Navigationsleiste für den aktuellen Stack-Tab.
+  int get _navIndex => switch (_tab) {
+    0 => 0, // Karte -> Home
+    2 => 1, // Garage
+    1 || 3 || 4 => 2, // Marktplatz/Touren/Chat -> "Mehr"
+    _ => 3, // Einstellungen
+  };
+
+  /// "Mehr"-Sheet: Marktplatz, Touren und Chat als große Touch-Ziele.
+  void _openMoreSheet() {
+    final i18n = ref.read(i18nProvider);
+    final notif = ref.read(notificationsEnabledProvider);
+    final unread = ref.read(chatOverviewProvider).totalUnread;
+    final chatBadge = notif && unread > 0;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.bgSurfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            for (final entry in [
+              (1, Icons.storefront, i18n.marketplaceTab),
+              (3, Icons.route, i18n.toursTab),
+              (4, Icons.forum, i18n.chatTab),
+            ])
+              ListTile(
+                leading: Icon(entry.$2, color: AppColors.accentPrimaryDark, size: 28),
+                title: Text(
+                  entry.$3,
+                  style: const TextStyle(
+                    color: AppColors.textPrimaryDark,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 17,
+                  ),
+                ),
+                trailing: entry.$1 == 4 && chatBadge
+                    ? Badge(
+                        label: Text('$unread'),
+                        backgroundColor: AppColors.statusDanger,
+                      )
+                    : const Icon(Icons.chevron_right, color: AppColors.textSecondaryDark),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  if (_tab != entry.$1) setState(() => _tab = entry.$1);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    _tab = widget.initialTab.clamp(0, 4);
+    _tab = widget.initialTab.clamp(0, 5);
     // Begrüßung beim Start (Anforderung: App begrüßt den Nutzer), nur
     // wenn eine Sitzung existiert - einmal pro Shell-Instanz.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -91,12 +149,22 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           backgroundColor: AppColors.bgSurfaceDark,
           indicatorColor: AppColors.accentPrimaryDark.withValues(alpha: 0.22),
           height: 64,
-          selectedIndex: _tab,
+          // Navigationsleiste hat 4 Punkte; die Stack-Indizes 1 (Markt-
+          // platz), 3 (Touren) und 4 (Chat) werden über das "Mehr"-Sheet
+          // erreicht und highlighten ebenfalls den "Mehr"-Punkt.
+          selectedIndex: _navIndex,
           onDestinationSelected: (index) {
-            if (index != _tab) {
-              HapticFeedback.selectionClick();
+            HapticFeedback.selectionClick();
+            if (index == 2) {
+              _openMoreSheet();
+              return;
             }
-            setState(() => _tab = index);
+            final target = switch (index) {
+              0 => 0, // Home -> Karte
+              1 => 2, // Garage
+              _ => 5, // Einstellungen
+            };
+            if (target != _tab) setState(() => _tab = target);
           },
           destinations: [
             NavigationDestination(
@@ -105,30 +173,20 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               label: i18n.mapTab,
             ),
             NavigationDestination(
-              icon: const Icon(Icons.storefront_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.storefront, color: AppColors.accentPrimaryDark),
-              label: i18n.marketplaceTab,
-            ),
-            NavigationDestination(
               icon: const Icon(Icons.garage_outlined, color: AppColors.textSecondaryDark),
               selectedIcon: const Icon(Icons.garage, color: AppColors.accentPrimaryDark),
               label: i18n.garageTab,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.route_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.route, color: AppColors.accentPrimaryDark),
-              label: i18n.toursTab,
             ),
             NavigationDestination(
               icon: showChatBadge
                   ? Badge(
                       label: Text('$totalUnread'),
                       backgroundColor: AppColors.statusDanger,
-                      child: const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark),
+                      child: const Icon(Icons.apps, color: AppColors.textSecondaryDark),
                     )
-                  : const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.forum, color: AppColors.accentPrimaryDark),
-              label: i18n.chatTab,
+                  : const Icon(Icons.apps, color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.apps, color: AppColors.accentPrimaryDark),
+              label: i18n.moreTab,
             ),
             NavigationDestination(
               icon: const Icon(Icons.settings_outlined, color: AppColors.textSecondaryDark),

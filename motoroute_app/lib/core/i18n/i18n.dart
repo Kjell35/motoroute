@@ -44,6 +44,13 @@ class I18n {
   String get mpTitle => tr('mp.title');
   String get mpNotLoggedIn => tr('mp.notLoggedIn');
   String get mpLoadFailed => tr('mp.loadFailed');
+  String get errNetwork => tr('err.network');
+  String get errUnauthorized => tr('err.unauthorized');
+  String get errForbidden => tr('err.forbidden');
+  String get errNotFound => tr('err.notFound');
+  String get errRateLimited => tr('err.rateLimited');
+  String get errServer => tr('err.server');
+  String get errUnknown => tr('err.unknown');
   String get mpSearchHint => tr('mp.searchHint');
   String get mpFavorites => tr('mp.favorites');
   String get mpMyListings => tr('mp.myListings');
@@ -85,6 +92,7 @@ class I18n {
   String get mpSubmitFailed => tr('mp.submitFailed');
   String get settingsTab => tr('tab.settings');
   String get garageTab => tr('tab.garage');
+  String get moreTab => tr('tab.more');
 
   // Garage
   String get gTitle => tr('garage.title');
@@ -287,6 +295,7 @@ const _catalog = <String, Map<String, String>>{
     'tab.tours': 'Touren',
     'tab.chat': 'Chat',
     'tab.settings': 'Einstellungen',
+    'tab.more': 'Mehr',
     'tab.garage': 'Garage',
     // Garage
     'garage.title': 'Garage',
@@ -493,6 +502,13 @@ const _catalog = <String, Map<String, String>>{
     'mp.title': 'Marktplatz',
     'mp.notLoggedIn': 'Bitte melde dich an, um den Marktplatz zu nutzen.',
     'mp.loadFailed': 'Laden fehlgeschlagen',
+    'err.network': 'Keine Verbindung - bitte Internet prüfen',
+    'err.unauthorized': 'Sitzung abgelaufen - bitte neu anmelden',
+    'err.forbidden': 'Kein Zugriff',
+    'err.notFound': 'Nicht gefunden',
+    'err.rateLimited': 'Zu viele Anfragen - bitte kurz warten',
+    'err.server': 'Server nicht verfügbar - bitte später erneut versuchen',
+    'err.unknown': 'Etwas ist schiefgelaufen - bitte erneut versuchen',
     'mp.searchHint': 'Angebot suchen',
     'mp.favorites': 'Meine Favoriten',
     'mp.myListings': 'Meine Angebote',
@@ -552,6 +568,7 @@ const _catalog = <String, Map<String, String>>{
     'tab.tours': 'Tours',
     'tab.chat': 'Chat',
     'tab.settings': 'Settings',
+    'tab.more': 'More',
     'tab.garage': 'Garage',
     // Garage
     'garage.title': 'Garage',
@@ -757,6 +774,13 @@ const _catalog = <String, Map<String, String>>{
     'mp.title': 'Marketplace',
     'mp.notLoggedIn': 'Please sign in to use the marketplace.',
     'mp.loadFailed': 'Loading failed',
+    'err.network': 'No connection - please check your internet',
+    'err.unauthorized': 'Session expired - please sign in again',
+    'err.forbidden': 'No access',
+    'err.notFound': 'Not found',
+    'err.rateLimited': 'Too many requests - please wait a moment',
+    'err.server': 'Server unavailable - please try again later',
+    'err.unknown': 'Something went wrong - please try again',
     'mp.searchHint': 'Search listings',
     'mp.favorites': 'My favorites',
     'mp.myListings': 'My listings',

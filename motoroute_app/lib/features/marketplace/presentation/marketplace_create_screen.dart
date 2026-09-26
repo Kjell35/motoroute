@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/i18n/i18n.dart';
+import '../../../core/network/error_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../marketplace_repository.dart';
+import '../marketplace_taxonomy.dart';
 
 /// Angebot erstellen (Anforderung 4 + 16): geführter Dialog mit
 /// Kategorien, Fotos, Infos, Preis - und dem Ergebnis der SERVERSEITIGEN
@@ -94,8 +96,11 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
   List<MpSubcategoryDef> get _subcategories {
     final key = _category?.name;
     if (key == null) return const [];
-    // Bevorzugt den Server-Katalog, sonst lokal leer (Validierung serverseitig).
-    return _catalog?.categories.where((c) => c.key == key).expand((c) => c.subcategories).toList() ?? const [];
+    // Bevorzugt den Server-Katalog; Fallback: lokaler Spiegel (UI bleibt
+    // auch ohne Server-Antwort bedienbar - Validierung bleibt serverseitig).
+    final fromServer = _catalog?.categories.where((c) => c.key == key).expand((c) => c.subcategories).toList();
+    if (fromServer != null && fromServer.isNotEmpty) return fromServer;
+    return fallbackCatalog.where((c) => c.key == key).expand((c) => c.subcategories).toList();
   }
 
   Future<void> _submit() async {
@@ -153,7 +158,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      _showSnack('${i18n.mpSubmitFailed}: $e', error: true);
+      _showSnack('${i18n.mpSubmitFailed}: ${friendlyErrorMessage(e, i18n)}', error: true);
     }
   }
 

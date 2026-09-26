@@ -1,6 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Wird vom AuthController registriert: zentrale Refresh-Funktion, die
+/// den Access-Token erneuert und den neuen Token zurueckgibt - oder
+/// null, wenn die Sitzung nicht mehr rettbar ist.
+typedef TokenRefresher = Future<String?> Function();
+
 /// Zentraler HTTP-Client für alle Repositories. Die Basis-URL zeigt
 /// AUSSCHLIESSLICH auf das eigene Backend (motoroute_api) - kein
 /// Drittanbieter-Key liegt jemals im App-Bundle, siehe
@@ -30,6 +35,14 @@ class ApiClient {
   /// alle bestehenden Provider-Stellen (ApiClient.create()) unverändert
   /// synchron bleiben. Initialisiert in main() (ApiClient.init()).
   static String? _cachedOverride;
+
+  /// Zentraler Token-Refresher (vom AuthController in main() gebunden).
+  static TokenRefresher? _tokenRefresher;
+
+  /// Registriert den Refresh-Callback (einmalig beim Start).
+  static void bindAuth({required TokenRefresher refresher}) {
+    _tokenRefresher = refresher;
+  }
 
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -80,6 +93,7 @@ class ApiClient {
         receiveTimeout: const Duration(seconds: 45),
       ),
     );
+    dio.interceptors.add(_TokenRefreshInterceptor());
     dio.interceptors.add(_ColdStartRetryInterceptor(dio));
     return dio;
   }
@@ -88,6 +102,61 @@ class ApiClient {
   static String asWebSocketUrl(String baseUrl) => baseUrl
       .replaceFirst('http://', 'ws://')
       .replaceFirst('https://', 'wss://');
+}
+
+/// Zentraler 401-Handler: Bei einer 401 fuehrt EIN Refresher den
+/// Refresh-Call aus (pro App serialisiert, damit nicht 5 Screens
+/// gleichzeitig 5 Refreshes feuern) und der Original-Request wird mit
+/// dem frischen Token wiederholt. Scheitert der Refresh, wird der
+/// Fehler normal durchgereicht - die Screens zeigen dann ihren
+/// freundlichen Nicht-eingeloggt-Zustand.
+class _TokenRefreshInterceptor extends Interceptor {
+  static Future<String?>? _inFlight;
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode != 401) {
+      handler.next(err);
+      return;
+    }
+    final refresher = ApiClient._tokenRefresher;
+    if (refresher == null) {
+      handler.next(err);
+      return;
+    }
+
+    // Login/Refresh-Requests selbst NIE refreshen (Endlosschleife).
+    final path = err.requestOptions.path;
+    if (path.contains('/auth/login') ||
+        path.contains('/auth/refresh') ||
+        path.contains('/auth/register')) {
+      handler.next(err);
+      return;
+    }
+
+    // Serielles Refreshen: Nur der erste 401 loest den Call aus.
+    _inFlight ??= refresher().whenComplete(() => _inFlight = null);
+    final newToken = await _inFlight;
+    if (newToken == null || newToken.isEmpty) {
+      handler.next(err);
+      return;
+    }
+
+    // Original-Request mit frischem Token wiederholen.
+    final options = err.requestOptions;
+    options.headers['Authorization'] = 'Bearer $newToken';
+    try {
+      final dio = Dio(BaseOptions(
+        baseUrl: options.baseUrl,
+        connectTimeout: const Duration(seconds: 25),
+        receiveTimeout: const Duration(seconds: 45),
+      ));
+      final response = await dio.fetch<dynamic>(options);
+      handler.resolve(response);
+    } on DioException catch (e) {
+      handler.next(e);
+    }
+  }
 }
 
 /// Wiederholt VERBINDUNGS-Fehler (Kaltstart des Render-Free-Tiers).

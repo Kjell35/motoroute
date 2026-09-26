@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/i18n/i18n.dart';
+import '../../core/network/error_message.dart';
 import 'marketplace_notifications.dart';
 import 'marketplace_repository.dart';
 import 'presentation/marketplace_create_screen.dart';
@@ -172,7 +173,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '${ref.read(i18nProvider).mpLoadFailed}: $e';
+        _error = friendlyErrorMessage(e, ref.read(i18nProvider));
       });
     }
   }

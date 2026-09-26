@@ -43,6 +43,17 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  /// Aufklappbare Sektionen (Key = Section-Titel): Sekundäres ist
+  /// eingeklappt, damit die Seite auf dem Handy übersichtlich bleibt.
+  final Set<String> _collapsed = {
+    'settings.offlineMaps',
+    'settings.rideHistory',
+    'settings.chatName',
+    'settings.chatCommunity',
+    'settings.legal',
+    'Server & Verbindung',
+    'settings.notifications',
+  };
   bool _runningHealthCheck = false;
   String? _garageUrlOverride;
   String? _healthResult; // null = noch nicht getestet
@@ -121,9 +132,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           children: [
-            _buildAccountSection(context, ref, auth),
-            const SizedBox(height: AppSpacing.lg),
-            _buildSection(i18n.navigation, [
+            _buildSection(i18n.navigation, icon: Icons.navigation_outlined, children: [
               ListTile(
                 leading: const Icon(Icons.motorcycle, color: AppColors.textSecondaryDark, size: 20),
                 title: Text('Fahrzeugstandard', style: AppTypography.body),
@@ -199,7 +208,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             _buildPoiSection(categories),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection(i18n.tr('settings.notifications'), [
+            _buildOfflineMapsSection(),
+            const SizedBox(height: AppSpacing.lg),
+            _buildAccountSection(context, ref, auth),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSection(i18n.tr('settings.notifications'), icon: Icons.notifications_outlined, children: [
               _buildSwitchTile(
                 Icons.notifications_outlined,
                 'Ungelesen-Hinweis am Chat-Tab',
@@ -223,15 +236,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             _buildChatNameSection(),
             const SizedBox(height: AppSpacing.lg),
-            _buildOfflineMapsSection(),
-            const SizedBox(height: AppSpacing.lg),
             _buildRideHistorySection(),
-            const SizedBox(height: AppSpacing.lg),
-            _buildServerSection(),
             const SizedBox(height: AppSpacing.lg),
             _buildLanguageAppearanceSection(),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection(i18n.tr('settings.legal'), [
+            _buildServerSection(),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSection(i18n.tr('settings.legal'), icon: Icons.gavel_outlined, children: [
               _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Welche Daten MotoRoute verarbeitet', () {
                 Navigator.of(context).pushNamed('/privacy');
               }),
@@ -259,7 +270,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ------------------------------------------------------------------
   Widget _buildAccountSection(BuildContext context, WidgetRef ref, AuthState auth) {
     if (!auth.isAuthenticated) {
-      return _buildSection('Konto', [
+      return _buildSection('Konto', children: [
         ListTile(
           leading: const Icon(Icons.person_outline, color: AppColors.textSecondaryDark, size: 20),
           title: Text('Nicht angemeldet', style: AppTypography.body),
@@ -273,7 +284,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     final user = auth.user!;
-    return _buildSection('Konto', [
+    return _buildSection('Konto', children: [
       ListTile(
         leading: CircleAvatar(
           backgroundColor: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
@@ -487,7 +498,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final i18n = ref.watch(i18nProvider);
     final state = ref.watch(offlineMapsProvider);
 
-    return _buildSection(i18n.tr('settings.offlineMaps'), [
+    return _buildSection(i18n.tr('settings.offlineMaps'), children: [
       ListTile(
         leading: const Icon(Icons.download_for_offline_outlined,
             color: AppColors.textSecondaryDark, size: 20),
@@ -595,7 +606,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildPoiSection(Set<PoiCategory> categories) {
     final i18n = ref.watch(i18nProvider);
-    return _buildSection(i18n.tr('settings.mapPoiSection'), [
+    return _buildSection(i18n.tr('settings.mapPoiSection'), children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
         child: Wrap(
@@ -640,7 +651,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // im APK (dart-define), normale Nutzer tragen nie etwas ein.
   // ------------------------------------------------------------------
   Widget _buildServerSection() {
-    return _buildSection('Server & Verbindung', [
+    return _buildSection('Server & Verbindung', children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
         child: Column(
@@ -754,7 +765,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final currentThemeMode = ref.watch(themeModeControllerProvider);
 
-    return _buildSection(i18n.tr('settings.languageAndAppearance'), [
+    return _buildSection(i18n.tr('settings.languageAndAppearance'), children: [
       ListTile(
         leading: const Icon(Icons.language, color: AppColors.textSecondaryDark, size: 20),
         title: Text(i18n.languageLabel, style: AppTypography.body),
@@ -812,7 +823,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final me = ref.watch(chatMeProvider).value;
     final token = ref.watch(chatSessionTokenProvider);
 
-    return _buildSection(i18n.tr('settings.chatName'), [
+    return _buildSection(i18n.tr('settings.chatName'), children: [
       ListTile(
         leading: const Icon(Icons.badge_outlined, color: AppColors.textSecondaryDark, size: 20),
         title: Text(i18n.tr('settings.chatName.mode'), style: AppTypography.body),
@@ -950,7 +961,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final token = ref.watch(chatSessionTokenProvider);
     final me = ref.watch(chatMeProvider).value;
     final i18n = ref.watch(i18nProvider);
-    return _buildSection(i18n.tr('settings.chatCommunity'), [
+    return _buildSection(i18n.tr('settings.chatCommunity'), children: [
       ListTile(
         leading: const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark, size: 20),
         title: const Text('Chat-Konto', style: AppTypography.body),
@@ -1011,52 +1022,79 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSection(String title, List<Widget> children) {
+  Widget _buildSection(String title, {required List<Widget> children, IconData? icon}) {
+    final collapsed = _collapsed.contains(title);
+    final header = Padding(
+      padding: const EdgeInsets.only(left: AppSpacing.xs),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: AppColors.textSecondaryDark),
+            const SizedBox(width: AppSpacing.sm),
+          ] else ...[
+            Container(
+              width: 3,
+              height: 14,
+              decoration: BoxDecoration(
+                color: AppColors.accentPrimaryDark,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+          ],
+          Expanded(
+            child: Text(
+              title.toUpperCase(),
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textSecondaryDark,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Alles, was optisch unter dem Header liegt, ist einklappbar.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section-Header mit Akzent-Marker - klarere Hierarchie als
-        // der alte reine Caption-Text.
-        Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.xs),
-          child: Row(
-            children: [
-              Container(
-                width: 3,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: AppColors.accentPrimaryDark,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => setState(() {
+            collapsed ? _collapsed.remove(title) : _collapsed.add(title);
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            child: Row(children: [
+              Expanded(child: header),
+              Icon(
+                collapsed ? Icons.expand_more : Icons.expand_less,
+                size: 20,
+                color: AppColors.textMutedDark,
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                title.toUpperCase(),
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.textSecondaryDark,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ],
+            ]),
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.bgSurfaceDark,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderHairlineDark),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
+        if (!collapsed) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.bgSurfaceDark,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderHairlineDark),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(children: children),
           ),
-          child: Column(children: children),
-        ),
+        ],
       ],
     );
   }
@@ -1104,7 +1142,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     }
 
-    return _buildSection(i18n.tr('settings.rideHistory'), [
+    return _buildSection(i18n.tr('settings.rideHistory'), children: [
       if (!ref.read(authControllerProvider).isAuthenticated)
         ListTile(
           dense: true,

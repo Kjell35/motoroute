@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/i18n/i18n.dart';
+import '../../../core/network/error_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../marketplace_repository.dart';
 
@@ -54,7 +56,7 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
       setState(() {
         _loading = false;
         _isAdmin = false;
-        _error = '$e';
+        _error = friendlyErrorMessage(e, ref.read(i18nProvider));
       });
     }
   }
