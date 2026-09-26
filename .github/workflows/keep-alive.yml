@@ -1,9 +1,10 @@
-# Keep-Alive: Hält das Render-Free-Tier-Backend wach.
+# Keep-Alive: Hält die Render-Free-Tier-Backends wach (MotoRoute-API
+# UND Garage-API).
 #
 # Render schläft nach ~15 min ohne Requests ein (Kaltstart 30-60 s).
-# Dieser Workflow pingt alle 5 Minuten die Health-URL - auch wenn GitHub
-# einen Lauf verzögert, bleibt die Lücke zwischen zwei Pings unter der
-# Schlaf-Schwelle. Kostenfrei (öffentliches Repo).
+# Dieser Workflow pingt alle 5 Minuten beide Health-URLs - auch wenn
+# GitHub einen Lauf verzögert, bleibt die Lücke zwischen zwei Pings
+# unter der Schlaf-Schwelle. Kostenfrei (öffentliches Repo).
 #
 # Hinweise:
 #  - GitHub deaktiviert Zeitpläne nach 60 Tagen ohne Repo-Aktivität;
@@ -37,4 +38,14 @@ jobs:
           cat /tmp/health.json || true
           if [ "$code" != "200" ]; then
             echo "::warning::Backend antwortete nicht mit 200 (HTTP $code)"
+          fi
+
+      - name: Garage-API aufwecken (v0.4.1+)
+        run: |
+          code=$(curl -s -o /tmp/garage-health.json -w "%{http_code}" --max-time 90 \
+            https://garage-api-4a7o.onrender.com/api/health || echo "000")
+          echo "Garage-Health: HTTP $code"
+          cat /tmp/garage-health.json || true
+          if [ "$code" != "200" ]; then
+            echo "::warning::Garage-API antwortete nicht mit 200 (HTTP $code)"
           fi
