@@ -511,11 +511,21 @@ export class MarketplaceService {
     }
 
     // Freitext-Suche ueber Titel/Beschreibung/Marke/Modell (Punkt 13).
+    // Intelligent: Jeder Suchbegriff muss IRGENDWO treffen (UND-Verknuepfung),
+    // damit "BMW Auspuff" den Titel "BMW R1250 GS Auspuff" findet - ein
+    // einzelnes ilike mit dem ganzen Begriff wuerde hier leer bleiben.
     if (filters.q && filters.q.trim().length >= 2) {
-      const term = filters.q.trim().replace(/[%,()]/g, '');
-      query = query.or(
-        `title.ilike.%${term}%,description.ilike.%${term}%,brand.ilike.%${term}%,model.ilike.%${term}%`,
-      );
+      const terms = filters.q
+        .trim()
+        .split(/\s+/)
+        .map((t) => t.replace(/[%,()]/g, '').trim())
+        .filter((t) => t.length >= 2)
+        .slice(0, 5);
+      for (const term of terms) {
+        query = query.or(
+          `title.ilike.%${term}%,description.ilike.%${term}%,brand.ilike.%${term}%,model.ilike.%${term}%`,
+        );
+      }
     }
 
     // Entfernungsfilter (Punkt 12): Bounding-Box-Vorfilter (Index-nutzbar).
