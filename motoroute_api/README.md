@@ -163,3 +163,20 @@ npm run build     # Produktions-Build
 4. Geocoding-Anbieter final entscheiden (Photon self-hosted empfohlen –
    der SearchService ist bereits gegen die Photon-API geschrieben) und
    `GEOCODING_URL` setzen.
+
+## Anonymes Fehler-Reporting (Telemetry)
+
+Die App meldet fehlgeschlagene Aktionen (Chat, Marktplatz, Garage, Crashes)
+anonym an `POST /v1/telemetry/errors` (202, Fire-and-Forget, gedrosselt).
+Admins lesen die Auswertung über `GET /v1/telemetry/admin/errors?limit=100`
+(user_hash = SHA-256(user_id + TELEMETRY_SALT), tagesstabil, kein
+Rückschluss auf Accounts).
+
+**Einmalige Aktivierung (Supabase-Dashboard → SQL-Editor):**
+Migration `supabase/migrations/0008_error_reports.sql` ausführen
+(Tabelle `app_error_reports` + RLS: INSERT nur für eingeloggte Nutzer,
+SELECT nur für Admins). Bis dahin verwirft das Backend Berichte still
+und die Admin-Auswertung liefert einen leeren Zustand.
+
+Optional: `TELEMETRY_SALT` als Env-Variablen auf Render setzen
+(sonst Default-Salz).

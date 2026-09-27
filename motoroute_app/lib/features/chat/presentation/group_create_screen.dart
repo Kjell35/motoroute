@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/error_message.dart' show technicalCause;
+import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
@@ -59,6 +60,7 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
         },
       );
     } catch (e) {
+      ErrorReporter.instance.report('chat.group', e);
       if (!mounted) return;
       setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(

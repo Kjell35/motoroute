@@ -1,7 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import '../../core/network/error_reporter.dart';
 import 'data/chat_realtime.dart';
 import 'data/chat_repository.dart';
 
@@ -149,6 +148,7 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
         error: null,
       );
     } catch (e) {
+      ErrorReporter.instance.report('chat.load', e);
       if (!mounted) return;
       // Bereits geladene Nachrichten bleiben sichtbar (Abschnitt 37);
       // der Fehler erscheint nur, wenn gar keine Daten da sind.

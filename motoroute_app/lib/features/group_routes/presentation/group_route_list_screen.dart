@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/network/error_message.dart' show technicalCause;
+import '../../../core/network/error_reporter.dart';
 import '../../chat/chat_providers.dart';
 import '../group_route_repository.dart';
 
@@ -49,6 +50,7 @@ class _GroupRouteListScreenState extends ConsumerState<GroupRouteListScreen> {
         _error = null;
       });
     } catch (e) {
+      ErrorReporter.instance.report('routes.load', e);
       if (!mounted) return;
       setState(() {
         _loading = false;

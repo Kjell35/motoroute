@@ -7,6 +7,7 @@ import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
 import 'package:motoroute_app/core/network/error_message.dart';
+import 'package:motoroute_app/core/network/error_reporter.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
@@ -56,6 +57,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   bool _runningDiagnostics = false;
   final Map<String, String> _diagResults = {};
+  bool _loadingAdminErrors = false;
+  List<Map<String, dynamic>>? _adminSummary;
+  String? _adminErrorsError;
   String _appVersion = '…';
 
   @override
@@ -560,6 +564,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ------------------------------------------------------------------
   List<Widget> _notificationChildren() {
     final notifications = ref.watch(notificationsEnabledProvider);
+    final telemetry = ref.watch(telemetryEnabledProvider);
     return [
       _buildSwitchTile(
         Icons.notifications_outlined,
@@ -575,6 +580,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
         title: Text(
           'Es gibt keine Push-Benachrichtigungen von Google - Hinweise erscheinen direkt in der App.',
+          style: AppTypography.caption,
+        ),
+      ),
+      const Divider(height: 1, color: AppColors.borderHairlineDark),
+      _buildSwitchTile(
+        Icons.error_outline,
+        'Anonyme Fehlerberichte senden',
+        telemetry,
+        (value) async {
+          ref.read(telemetryEnabledProvider.notifier).state = value;
+          await ErrorReporter.instance.setEnabled(value);
+        },
+      ),
+      ListTile(
+        dense: true,
+        leading: const Icon(Icons.shield_outlined, color: AppColors.textMutedDark, size: 18),
+        title: Text(
+          'Hilft dem Support, Ausfälle zu finden - ganz ohne Namen, E-Mail oder Standort. Jederzeit abschaltbar.',
           style: AppTypography.caption,
         ),
       ),
@@ -857,7 +880,83 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: Text(_runningDiagnostics ? 'Tests laufen…' : 'Tests starten', style: AppTypography.body),
         onTap: _runningDiagnostics ? null : _runDiagnostics,
       ),
+      ..._buildAdminErrorsChildren(),
     ]);
+  }
+
+  /// Admin-Bereich: anonyme Fehlerberichte ALLER Nutzer (aggregiert).
+  /// Fuer normale Nutzer unsichtbar.
+  List<Widget> _buildAdminErrorsChildren() {
+    final isAdmin = ref.watch(authControllerProvider).user?.isAdmin ?? false;
+    if (!isAdmin) return const [];
+    return [
+      const Divider(height: 1, color: AppColors.borderHairlineDark),
+      ListTile(
+        dense: true,
+        leading: _loadingAdminErrors
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.admin_panel_settings_outlined,
+                color: AppColors.accentPrimaryDark, size: 20),
+        title: const Text('Fehlerberichte aller Nutzer (Admin)', style: AppTypography.body),
+        subtitle: const Text('Anonyme Meldungen der letzten Tage - ohne Namen/IDs',
+            style: AppTypography.caption),
+        onTap: _loadingAdminErrors ? null : _loadAdminErrors,
+      ),
+      if (_adminErrorsError != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: Text('Laden fehlgeschlagen · $_adminErrorsError',
+              style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
+        ),
+      ...?_adminSummary?.map(
+        (s) => ListTile(
+          dense: true,
+          leading: Badge(
+            label: Text('${s['count'] ?? 0}'),
+            backgroundColor: AppColors.statusDanger,
+          ),
+          title: Text('${s['category'] ?? '?'}', style: AppTypography.body),
+          subtitle: Text(
+              '${s['count'] ?? 0} Meldungen · ${s['affectedUsers'] ?? '?'} betroffene Geräte',
+              style: AppTypography.caption),
+        ),
+      ),
+    ];
+  }
+
+  Future<void> _loadAdminErrors() async {
+    setState(() {
+      _loadingAdminErrors = true;
+      _adminErrorsError = null;
+    });
+    try {
+      final token = ref.read(authControllerProvider.notifier).accessToken;
+      if (token == null || token.isEmpty) throw Exception('Nicht angemeldet');
+      final res = await ApiClient.create()
+          .get<Map<String, dynamic>>(
+        '/v1/telemetry/admin/errors',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      )
+          .timeout(const Duration(seconds: 20));
+      final summary = ((res.data?['summary'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _adminSummary = summary;
+        _loadingAdminErrors = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _adminErrorsError = technicalCause(e);
+        _loadingAdminErrors = false;
+      });
+    }
   }
 
   /// Führt alle Prüfungen SEQUENZIELL aus (klare Reihenfolge, keine

@@ -31,6 +31,7 @@ import 'package:motoroute_app/features/group_routes/presentation/group_route_lis
 import 'package:motoroute_app/features/group_routes/presentation/group_route_planner_screen.dart';
 import 'package:motoroute_app/features/group_routes/presentation/group_route_start_screen.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
+import 'package:motoroute_app/core/network/error_reporter.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/group_rides/presentation/group_ride_screen.dart';
 import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
@@ -41,6 +42,11 @@ Future<void> main() async {
   // erste Widget gebaut wird (Provider-Startwerte lesen die Werte;
   // ApiClient.baseUrl muss vor dem ersten Request korrekt sein).
   await initSessionSettings();
+  // Anonymes Fehler-Reporting: Opt-out laden + Crash-Hooks installieren.
+  // Meldet fehlgeschlagene Aktionen/Abstuerze OHNE personenbezogene
+  // Daten, damit der Support ohne Screenshots sieht, was Nutzer trifft.
+  await ErrorReporter.instance.init();
+  installErrorReportingHooks();
   // Backend wachhalten, solange die App offen ist (GitHub-Cron wird
   // massiv verzögert - ohne In-App-Ping schläft der Free-Tier-Server
   // ein und jede erste Aktion läuft in "Verbindung prüfen").
@@ -57,6 +63,16 @@ Future<void> main() async {
       return container.read(authControllerProvider.notifier).refreshTokenNow();
     },
   );
+  // Reporter mit dem aktuellen Token verbinden (nur fuer den anonymen
+  // Tages-Hash - Rückschluss auf Accounts bleibt serverseitig aus-
+  // geschlossen).
+  ErrorReporter.instance.bindToken(() {
+    final root = WidgetsBinding.instance.rootElement;
+    if (root == null) return null;
+    return ProviderScope.containerOf(root, listen: false)
+        .read(authControllerProvider.notifier)
+        .accessToken;
+  });
   runApp(const MotoRouteApp());
 }
 

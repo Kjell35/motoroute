@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n/i18n.dart';
+import '../../core/network/error_reporter.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/auth_providers.dart';
 import 'garage_repository.dart';
@@ -391,6 +392,7 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
           .manufacturers(baseUrl, session.token, motorcycle: _category == GarageCategory.motorcycle);
       setState(() => _manufacturers = list);
     } catch (e) {
+      ErrorReporter.instance.report('garage.load', e);
       setState(() => _error = e.toString().split('\n').first);
     }
   }
@@ -465,6 +467,7 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
+      ErrorReporter.instance.report('garage.write', e);
       setState(() {
         _busy = false;
         _error = e.toString().split('\n').first;

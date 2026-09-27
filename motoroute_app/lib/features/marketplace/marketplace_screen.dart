@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/i18n/i18n.dart';
 import '../../core/network/error_message.dart';
+import '../../core/network/error_reporter.dart';
 import '../auth/auth_providers.dart';
 import 'marketplace_notifications.dart';
 import 'marketplace_repository.dart';
@@ -171,6 +172,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         _loading = false;
       });
     } catch (e) {
+      ErrorReporter.instance.report('mp.load', e);
       if (!mounted) return;
       setState(() {
         _loading = false;

@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/i18n/i18n.dart';
 import '../../../core/network/error_message.dart';
+import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../marketplace_repository.dart';
 import '../marketplace_taxonomy.dart';
@@ -156,6 +157,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
         _submitting = false;
       });
     } catch (e) {
+      ErrorReporter.instance.report('mp.create', e);
       if (!mounted) return;
       setState(() => _submitting = false);
       _showSnack('${i18n.mpSubmitFailed}: ${friendlyErrorMessage(e, i18n)}', error: true);

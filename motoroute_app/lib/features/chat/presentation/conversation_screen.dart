@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/error_message.dart' show technicalCause;
+import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
@@ -108,6 +109,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       });
       _jumpToBottom();
     } catch (e) {
+      ErrorReporter.instance.report('chat.load', e);
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -217,6 +219,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         _jumpToBottom();
       }
     } catch (e) {
+      ErrorReporter.instance.report('chat.send', e);
       if (!mounted) return;
       _inputController.text = text; // Text zurück ins Feld (nichts verloren)
       ScaffoldMessenger.of(context).showSnackBar(
@@ -260,6 +263,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             .toList(growable: false);
       });
     } catch (e) {
+      ErrorReporter.instance.report('chat.other', e);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: ${technicalCause(e)}')));

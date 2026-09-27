@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/error_reporter.dart';
 import '../auth/auth_providers.dart';
 import '../chat/chat_providers.dart';
 
@@ -706,9 +707,11 @@ class GarageSessionController extends StateNotifier<AsyncValue<GarageSession?>> 
         isAdmin: isAdmin,
       ));
       return true;
-    } catch (_) {
+    } catch (e) {
       // Offline/Kaltstart: keine Session, aber KEIN Fehler-Grau - die
-      // UI bietet einen Retry-Knopf (siehe GarageScreen).
+      // UI bietet einen Retry-Knopf (siehe GarageScreen). Anonym melden,
+      // damit der Support sieht, wenn die Provision dauerhaft scheitert.
+      ErrorReporter.instance.report('garage.connect', e);
       state = const AsyncValue.data(null);
       return false;
     }
