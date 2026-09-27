@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
+import 'package:motoroute_app/core/network/error_message.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
@@ -17,22 +18,30 @@ import 'package:motoroute_app/features/settings/theme_mode.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
+import 'package:motoroute_app/features/garage/garage_repository.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
+import 'package:motoroute_app/features/marketplace/marketplace_repository.dart';
 import 'package:motoroute_app/features/ride_history/ride_history_settings.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-/// Screen 11: Einstellungen (vollständig).
+/// Screen 11: Einstellungen (vollständig, neu gruppiert).
 ///
-/// Bereiche: Konto (Profil/Passwort/Konto löschen/Abmelden), Navigation
-/// (Fahrzeug/Einheiten/Energiesparen), Karte (POI-Kategorien),
-/// Benachrichtigungen (In-App-Badge), Server & Verbindung (URL +
-/// Verbindungstest), Sprache & Erscheinungsbild (ehrlich: fest verdrahtet),
-/// Datenschutz/Impressum/Über, App-Version.
+/// Aufbau von oben nach unten (die wichtigsten Bereiche zuerst):
+///   1. Fahrzeug & Navigation - Fahrzeugtyp, Einheiten, Energiesparen
+///   2. Konto - Profil, Passwort, Abmelden, Konto löschen
+///   3. Karte - Kartenstil (hell/dunkel) + Offline-Regionen
+///   4. Community (eingeklappt) - Chat-Status/-Name, Online-Status,
+///      Benachrichtigungen, Fahrhistorie-Privatsphäre
+///   5. Diagnose (eingeklappt) - testet Server/Anmeldung/Chat/Marktplatz/
+///      Garage DIREKT vom Gerät; macht sichtbar, welcher Bereich hakt,
+///      statt "Etwas ist schiefgelaufen" zu raten
+///   6. Sprache & Erscheinungsbild (eingeklappt)
+///   7. Recht & Info (eingeklappt) - Datenschutz/Impressum/Über/Version
 ///
-/// Bewusst NICHT vorhanden: manuelle Token-/Key-Eingaben. Chat und Konto
-/// laufen ausschließlich über die App-Anmeldung (Auth-Brücke); API-Keys
-/// liegen nur im Backend.
+/// Bewusst NICHT vorhanden: manuelle Token-/Key-/URL-Eingaben. Chat und
+/// Konto laufen ausschließlich über die App-Anmeldung (Auth-Brücke);
+/// Backend- und Garage-URL sind fest ins APK gebacken.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -41,19 +50,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  /// Aufklappbare Sektionen (Key = Section-Titel): Sekundäres ist
-  /// eingeklappt, damit die Seite auf dem Handy übersichtlich bleibt.
-  final Set<String> _collapsed = {
-    'settings.offlineMaps',
-    'settings.rideHistory',
-    'settings.chatName',
-    'settings.chatCommunity',
-    'settings.legal',
-    'Server & Verbindung',
-    'settings.notifications',
-  };
-  bool _runningHealthCheck = false;
-  String? _healthResult; // null = noch nicht getestet
+  /// Einklapp-Status pro Sektion (stabile IDs, nicht die Titel - sonst
+  /// kippt der Zustand beim Sprachwechsel). Sekundäres startet eingeklappt.
+  final Set<String> _collapsed = {'community', 'diagnostics', 'language', 'legal'};
+
+  bool _runningDiagnostics = false;
+  final Map<String, String> _diagResults = {};
   String _appVersion = '…';
 
   @override
@@ -67,49 +69,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }).catchError((_) {});
   }
 
-  /// Echter Verbindungstest: GET /v1/health (anonym, kein Auth nötig).
-  /// Misst Latenz und zeigt ein klares Ergebnis statt nur Fehlermeldungen.
-  Future<void> _runHealthCheck() async {
-    setState(() {
-      _runningHealthCheck = true;
-      _healthResult = null;
-    });
-    final sw = Stopwatch()..start();
-    try {
-      final response = await ApiClient.create()
-          .get<Map<String, dynamic>>('/v1/health')
-          .timeout(const Duration(seconds: 8));
-      sw.stop();
-      final ok = response.data?['status'] == 'ok';
-      if (!mounted) return;
-      setState(() {
-        _healthResult = ok
-            ? 'Verbunden - Antwort in ${sw.elapsedMilliseconds} ms ✓'
-            : 'Server antwortet, aber mit unerwartetem Inhalt';
-      });
-    } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _healthResult = e.type == DioExceptionType.connectionError ||
-                e.type == DioExceptionType.connectionTimeout
-            ? 'Nicht erreichbar: Host/Port falsch oder Server aus? URL prüfen.'
-            : 'Server antwortete mit Fehler (HTTP ${e.response?.statusCode ?? '?'})';
-      });
-    } on TimeoutException {
-      if (!mounted) return;
-      setState(() => _healthResult = 'Keine Antwort innerhalb von 8 s');
-    } finally {
-      if (mounted) setState(() => _runningHealthCheck = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final vehicleType = ref.watch(vehicleTypeProvider);
     final auth = ref.watch(authControllerProvider);
     final unit = ref.watch(distanceUnitProvider);
     final energy = ref.watch(energySaverControllerProvider);
-    final notifications = ref.watch(notificationsEnabledProvider);
     final i18n = ref.watch(i18nProvider);
 
     return Scaffold(
@@ -123,7 +88,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           children: [
-            _buildSection(i18n.navigation, icon: Icons.navigation_outlined, children: [
+            // --------------------------------------------- 1. Navigation
+            _buildSection('nav', i18n.navigation, icon: Icons.navigation_outlined, children: [
               ListTile(
                 leading: const Icon(Icons.motorcycle, color: AppColors.textSecondaryDark, size: 20),
                 title: Text('Fahrzeugstandard', style: AppTypography.body),
@@ -197,41 +163,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
             ]),
             const SizedBox(height: AppSpacing.lg),
-            _buildOfflineMapsSection(),
-            const SizedBox(height: AppSpacing.lg),
+
+            // -------------------------------------------------- 2. Konto
             _buildAccountSection(context, ref, auth),
             const SizedBox(height: AppSpacing.lg),
-            _buildSection(i18n.tr('settings.notifications'), icon: Icons.notifications_outlined, children: [
-              _buildSwitchTile(
-                Icons.notifications_outlined,
-                'Ungelesen-Hinweis am Chat-Tab',
-                notifications,
-                (value) {
-                  ref.read(notificationsEnabledProvider.notifier).state = value;
-                  persistNotificationsEnabled(value);
-                },
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
-                title: Text(
-                  'Es gibt keine Push-Benachrichtigungen von Google - Hinweise erscheinen direkt in der App.',
-                  style: AppTypography.caption,
-                ),
-              ),
+
+            // -------------------------------------------------- 3. Karte
+            _buildMapSection(),
+            const SizedBox(height: AppSpacing.lg),
+
+            // ---------------------------------------------- 4. Community
+            _buildSection('community', 'Community', icon: Icons.forum_outlined, children: [
+              ..._notificationChildren(),
+              const Divider(height: 1, color: AppColors.borderHairlineDark),
+              ..._chatChildren(),
+              const Divider(height: 1, color: AppColors.borderHairlineDark),
+              ..._rideHistoryChildren(),
             ]),
             const SizedBox(height: AppSpacing.lg),
-            _buildChatStatusSection(),
+
+            // ----------------------------------------------- 5. Diagnose
+            _buildDiagnosticsSection(),
             const SizedBox(height: AppSpacing.lg),
-            _buildChatNameSection(),
+
+            // ------------------------------------------------ 6. Sprache
+            _buildLanguageSection(),
             const SizedBox(height: AppSpacing.lg),
-            _buildRideHistorySection(),
-            const SizedBox(height: AppSpacing.lg),
-            _buildLanguageAppearanceSection(),
-            const SizedBox(height: AppSpacing.lg),
-            _buildServerSection(),
-            const SizedBox(height: AppSpacing.lg),
-            _buildSection(i18n.tr('settings.legal'), icon: Icons.gavel_outlined, children: [
+
+            // -------------------------------------------- 7. Recht & Info
+            _buildSection('legal', i18n.tr('settings.legal'), icon: Icons.gavel_outlined, children: [
               _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Welche Daten MotoRoute verarbeitet', () {
                 Navigator.of(context).pushNamed('/privacy');
               }),
@@ -241,13 +201,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _buildListTile(Icons.info_outline, 'Über MotoRoute', 'Version, Datenquellen, Danksagung', () {
                 Navigator.of(context).pushNamed('/about');
               }),
+              ListTile(
+                dense: true,
+                title: Text(i18n.appVersion, style: AppTypography.body),
+                trailing: Text(_appVersion, style: AppTypography.caption),
+              ),
             ]),
-            const SizedBox(height: AppSpacing.lg),
-            ListTile(
-              dense: true,
-              title: Text(i18n.appVersion, style: AppTypography.body),
-              trailing: Text(_appVersion, style: AppTypography.caption),
-            ),
           ],
         ),
       ),
@@ -255,11 +214,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ------------------------------------------------------------------
-  // Konto: Profil, Passwort, Konto löschen, Abmelden - alles echt.
+  // 1/2: Konto - Profil, Passwort, Konto löschen, Abmelden - alles echt.
   // ------------------------------------------------------------------
   Widget _buildAccountSection(BuildContext context, WidgetRef ref, AuthState auth) {
     if (!auth.isAuthenticated) {
-      return _buildSection('Konto', children: [
+      return _buildSection('account', 'Konto', icon: Icons.person_outline, children: [
         ListTile(
           leading: const Icon(Icons.person_outline, color: AppColors.textSecondaryDark, size: 20),
           title: Text('Nicht angemeldet', style: AppTypography.body),
@@ -273,7 +232,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     final user = auth.user!;
-    return _buildSection('Konto', children: [
+    return _buildSection('account', 'Konto', icon: Icons.person_outline, children: [
       ListTile(
         leading: CircleAvatar(
           backgroundColor: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
@@ -284,17 +243,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         title: Text(user.name, style: AppTypography.body),
         subtitle: Text(user.email, style: AppTypography.caption),
-      ),
-      // Tarif-Status (Premium-Vorbereitung): wird aus /v1/users/me
-      // gelesen; in der Testphase ist alles kostenlos.
-      ListTile(
-        dense: true,
-        leading: const Icon(Icons.workspace_premium_outlined, color: AppColors.accentPrimaryDark, size: 20),
-        title: Text('Testphase - alle Funktionen kostenlos', style: AppTypography.caption),
-        subtitle: Text(
-          'Premium (10 €/Monat) ist später geplant, aktuell ohne Paywall.',
-          style: AppTypography.caption,
-        ),
       ),
       _buildListTile(Icons.edit_outlined, 'Anzeigename ändern', user.name, () {
         _showEditProfileDialog(context, ref, user.displayName ?? '');
@@ -478,31 +426,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ------------------------------------------------------------------
-  // Karte: POI-Kategorien (persistent).
+  // 3: Karte - Kartenstil + Offline-Regionen in EINER Sektion.
   // ------------------------------------------------------------------
-  /// Offline-Karten: Region rund um Position/Ort herunterladen,
-  /// Liste der Regionen, Löschen. Gekapselt in [_OfflineMapsCard] -
-  /// die Dialoglogik (Ort/Radius) wäre sonst 200 Zeilen im Screen.
-  Widget _buildOfflineMapsSection() {
+  Widget _buildMapSection() {
     final i18n = ref.watch(i18nProvider);
-    final state = ref.watch(offlineMapsProvider);
+    final currentStyle = ref.watch(mapStyleChoiceProvider);
+    final offlineState = ref.watch(offlineMapsProvider);
 
-    return _buildSection(i18n.tr('settings.offlineMaps'), children: [
+    return _buildSection('map', 'Karte', icon: Icons.map_outlined, children: [
+      ListTile(
+        leading: const Icon(Icons.brightness_6_outlined, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.mapStyleTitle, style: AppTypography.body),
+        trailing: SegmentedButton<MapStyleChoice>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: MapStyleChoice.light, label: Text(i18n.light)),
+            ButtonSegment(value: MapStyleChoice.dark, label: Text(i18n.dark)),
+          ],
+          selected: {currentStyle},
+          onSelectionChanged: (selection) {
+            ref.read(mapStyleChoiceProvider.notifier).set(selection.first);
+          },
+        ),
+      ),
+      const Divider(height: 1, color: AppColors.borderHairlineDark),
       ListTile(
         leading: const Icon(Icons.download_for_offline_outlined,
             color: AppColors.textSecondaryDark, size: 20),
         title: Text(i18n.tr('settings.offlineMaps.add'), style: AppTypography.body),
-        subtitle: state.isDownloading
-            ? LinearProgressIndicator(value: state.activeDownloadProgress)
+        subtitle: offlineState.isDownloading
+            ? LinearProgressIndicator(value: offlineState.activeDownloadProgress)
             : Text(i18n.tr('settings.offlineMaps.addHint'), style: AppTypography.caption),
-        onTap: state.isDownloading ? null : () => _showOfflineRegionDialog(),
+        onTap: offlineState.isDownloading ? null : () => _showOfflineRegionDialog(),
       ),
-      if (state.error != null)
+      if (offlineState.error != null)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
-          child: Text(state.error!, style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
+          child: Text(offlineState.error!, style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
         ),
-      ...state.regions.map(
+      ...offlineState.regions.map(
         (r) => ListTile(
           leading: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark, size: 20),
           title: Text(r.name, style: AppTypography.body),
@@ -594,131 +556,70 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ------------------------------------------------------------------
-  // Server & Verbindung: Status + echter Verbindungstest gegen
-  // /v1/health. KEIN URL-Eingabefeld mehr - die Backend-URL ist fest
-  // im APK (dart-define), normale Nutzer tragen nie etwas ein.
+  // 4: Community - Benachrichtigungen + Chat-Status/-Name + Privatsphäre.
   // ------------------------------------------------------------------
-  Widget _buildServerSection() {
-    return _buildSection('Server & Verbindung', children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _runningHealthCheck ? null : _runHealthCheck,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentPrimaryDark,
-                    side: const BorderSide(color: AppColors.accentPrimaryDark),
-                  ),
-                  icon: _runningHealthCheck
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.network_check, size: 18),
-                  label: const Text('Verbindung testen'),
-                ),
-              ],
-            ),
-            if (_healthResult != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(_healthResult!, style: AppTypography.caption),
-            ],
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Die Verbindung zum MotoRoute-Server ist fest konfiguriert - kein API-Key und keine URL nötig. Falls Probleme auftreten, hier testen.',
-              style: AppTypography.caption,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
+  List<Widget> _notificationChildren() {
+    final notifications = ref.watch(notificationsEnabledProvider);
+    return [
+      _buildSwitchTile(
+        Icons.notifications_outlined,
+        'Ungelesen-Hinweis am Chat-Tab',
+        notifications,
+        (value) {
+          ref.read(notificationsEnabledProvider.notifier).state = value;
+          persistNotificationsEnabled(value);
+        },
+      ),
+      ListTile(
+        dense: true,
+        leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
+        title: Text(
+          'Es gibt keine Push-Benachrichtigungen von Google - Hinweise erscheinen direkt in der App.',
+          style: AppTypography.caption,
         ),
       ),
-    ]);
+    ];
   }
 
-  // ------------------------------------------------------------------
-  // Chat-Status (read-only): Token kommt automatisch aus der App-
-  // Anmeldung (Auth-Brücke) - hier gibt es bewusst kein Eingabefeld mehr.
-  // ------------------------------------------------------------------
-  /// Sprache (DE/EN) + Kartenstil (HELL als Standard / Dunkel). Beide
-  /// Wahlem werden GERAETEWEIT persistiert und wirken sofort (Provider).
-  Widget _buildLanguageAppearanceSection() {
+  List<Widget> _chatChildren() {
     final i18n = ref.watch(i18nProvider);
-    final currentLanguage = ref.watch(languageControllerProvider);
-    final currentStyle = ref.watch(mapStyleChoiceProvider);
-
-    final currentThemeMode = ref.watch(themeModeControllerProvider);
-
-    return _buildSection(i18n.tr('settings.languageAndAppearance'), children: [
-      ListTile(
-        leading: const Icon(Icons.language, color: AppColors.textSecondaryDark, size: 20),
-        title: Text(i18n.languageLabel, style: AppTypography.body),
-        trailing: SegmentedButton<AppLanguage>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: AppLanguage.de, label: const Text('🇩🇪 DE')),
-            ButtonSegment(value: AppLanguage.en, label: const Text('🇬🇧 EN')),
-          ],
-          selected: {currentLanguage},
-          onSelectionChanged: (selection) {
-            ref.read(languageControllerProvider.notifier).set(selection.first);
-          },
-        ),
-      ),
-      ListTile(
-        leading: const Icon(Icons.brightness_6_outlined, color: AppColors.textSecondaryDark, size: 20),
-        title: Text(i18n.themeModeTitle, style: AppTypography.body),
-        trailing: SegmentedButton<AppThemeMode>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: AppThemeMode.system, label: Text(i18n.themeModeSystem)),
-            ButtonSegment(value: AppThemeMode.light, label: Text(i18n.themeModeLight)),
-            ButtonSegment(value: AppThemeMode.dark, label: Text(i18n.themeModeDark)),
-          ],
-          selected: {currentThemeMode},
-          onSelectionChanged: (selection) {
-            ref.read(themeModeControllerProvider.notifier).set(selection.first);
-          },
-        ),
-      ),
-      ListTile(
-        leading: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark, size: 20),
-        title: Text(i18n.mapStyleTitle, style: AppTypography.body),
-        trailing: SegmentedButton<MapStyleChoice>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: MapStyleChoice.light, label: Text(i18n.light)),
-            ButtonSegment(value: MapStyleChoice.dark, label: Text(i18n.dark)),
-          ],
-          selected: {currentStyle},
-          onSelectionChanged: (selection) {
-            ref.read(mapStyleChoiceProvider.notifier).set(selection.first);
-          },
-        ),
-      ),
-    ]);
-  }
-
-  /// Chat-Anzeigename: welcher Name in ALLEN Chats erscheint
-  /// (Benutzername / Vorname / eigener Name). Persistiert im Profil
-  /// (users-Tabelle) - gilt damit geräteübergreifend.
-  Widget _buildChatNameSection() {
-    final i18n = ref.watch(i18nProvider);
-    final me = ref.watch(chatMeProvider).value;
     final token = ref.watch(chatSessionTokenProvider);
+    final me = ref.watch(chatMeProvider).value;
 
-    return _buildSection(i18n.tr('settings.chatName'), children: [
+    return [
+      ListTile(
+        leading: const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark, size: 20),
+        title: const Text('Chat-Konto', style: AppTypography.body),
+        subtitle: Text(
+          token == null
+              ? 'Nicht verbunden - Anmeldung in der App nötig'
+              : 'Verbunden als ${me?.effectiveName ?? '…'}',
+          style: AppTypography.caption,
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.visibility_outlined, color: AppColors.textSecondaryDark, size: 20),
+        title: const Text('Online-Status anzeigen', style: AppTypography.body),
+        enabled: token != null,
+        trailing: Switch(
+          value: me?.showOnline ?? true,
+          onChanged: token == null
+              ? null
+              : (value) async {
+                  try {
+                    await ref.read(chatRepositoryProvider).updateMe(token, showOnline: value);
+                    ref.invalidate(chatMeProvider);
+                  } catch (_) {}
+                },
+          activeColor: AppColors.accentPrimaryDark,
+          inactiveThumbColor: AppColors.textMutedDark,
+          inactiveTrackColor: AppColors.bgSurfaceRaisedDark,
+        ),
+      ),
       ListTile(
         leading: const Icon(Icons.badge_outlined, color: AppColors.textSecondaryDark, size: 20),
         title: Text(i18n.tr('settings.chatName.mode'), style: AppTypography.body),
-        subtitle: Text(
-          me?.effectiveName ?? '–',
-          style: AppTypography.caption,
-        ),
+        subtitle: Text(me?.effectiveName ?? '–', style: AppTypography.caption),
         trailing: token == null
             ? null
             : SegmentedButton<String>(
@@ -756,7 +657,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.textMutedDark),
         onTap: token == null ? null : _editFirstName,
       ),
-    ]);
+    ];
   }
 
   Future<void> _saveChatNameSettings({String? chatNameMode, String? chatDisplayName, String? firstName}) async {
@@ -845,43 +746,244 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _saveChatNameSettings(firstName: name);
   }
 
-  Widget _buildChatStatusSection() {
-    final token = ref.watch(chatSessionTokenProvider);
-    final me = ref.watch(chatMeProvider).value;
+  /// Fahrhistorie: 5 Privatsphäre-Schalter (Default alles privat).
+  /// Server ist die Wahrheit, optimistische UI mit Rollback.
+  List<Widget> _rideHistoryChildren() {
+    final settings = ref.watch(rideHistorySettingsProvider);
+    final controller = ref.read(rideHistorySettingsProvider.notifier);
     final i18n = ref.watch(i18nProvider);
-    return _buildSection(i18n.tr('settings.chatCommunity'), children: [
-      ListTile(
-        leading: const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark, size: 20),
-        title: const Text('Chat-Konto', style: AppTypography.body),
-        subtitle: Text(
-          token == null
-              ? 'Nicht verbunden - Anmeldung in der App nötig'
-              : 'Verbunden als ${me?.effectiveName ?? '…'}',
+
+    Future<void> change(Future<bool> Function() call) async {
+      final ok = await call();
+      if (mounted && !ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Konnte nicht gespeichert werden - offline?')),
+        );
+      }
+    }
+
+    return [
+      if (!ref.read(authControllerProvider).isAuthenticated)
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
+          title: Text(
+            i18n.tr('rideHistory.requiresLogin'),
+            style: AppTypography.caption,
+          ),
+        )
+      else ...[
+        _buildSwitchTile(
+          Icons.history,
+          i18n.tr('rideHistory.enabled'),
+          settings.rideHistoryEnabled,
+          (v) => change(() => controller.update(rideHistoryEnabled: v)),
+        ),
+        _buildSwitchTile(
+          Icons.public,
+          i18n.tr('rideHistory.publicProfile'),
+          settings.isPublic,
+          (v) => change(() => controller.update(authPrivacy: v ? 'public' : 'private')),
+        ),
+        if (settings.isPublic) ...[
+          _buildSwitchTile(
+            Icons.route,
+            i18n.tr('rideHistory.shareRides'),
+            settings.shareRides,
+            (v) => change(() => controller.update(shareRides: v)),
+          ),
+          _buildSwitchTile(
+            Icons.place_outlined,
+            i18n.tr('rideHistory.sharePlaces'),
+            settings.sharePlaces,
+            (v) => change(() => controller.update(sharePlaces: v)),
+          ),
+          _buildSwitchTile(
+            Icons.visibility_off_outlined,
+            i18n.tr('rideHistory.hideStartEnd'),
+            settings.hideStartEnd,
+            (v) => change(() => controller.update(hideStartEnd: v)),
+          ),
+        ],
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.lock_outline, color: AppColors.textMutedDark, size: 18),
+          title: Text(
+            settings.isPublic
+                ? i18n.tr('rideHistory.hintPublic')
+                : i18n.tr('rideHistory.hintPrivate'),
+            style: AppTypography.caption,
+          ),
+        ),
+      ],
+    ];
+  }
+
+  // ------------------------------------------------------------------
+  // 5: Diagnose - testet alle Server-Bereiche DIREKT vom Gerät. Damit
+  // sieht der Nutzer (und wir im Support), welcher Bereich wirklich
+  // hakt - statt "Etwas ist schiefgelaufen" ohne Ursache zu raten.
+  // ------------------------------------------------------------------
+  Widget _buildDiagnosticsSection() {
+    final entries = _diagResults.entries.toList();
+    return _buildSection('diagnostics', 'Diagnose', icon: Icons.troubleshoot_outlined, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+        child: Text(
+          'Testet Server, Anmeldung, Chat, Marktplatz und Garage direkt vom Gerät aus. '
+          'Nützlich, wenn ein Bereich "Etwas ist schiefgelaufen" zeigt.',
           style: AppTypography.caption,
         ),
       ),
+      for (final e in entries)
+        ListTile(
+          dense: true,
+          leading: Icon(
+            e.value.startsWith('✓') ? Icons.check_circle : Icons.error_outline,
+            color: e.value.startsWith('✓') ? AppColors.statusSuccess : AppColors.statusDanger,
+            size: 20,
+          ),
+          title: Text(e.key, style: AppTypography.body),
+          subtitle: Text(e.value.substring(2), style: AppTypography.caption),
+        ),
       ListTile(
-        leading: const Icon(Icons.visibility_outlined, color: AppColors.textSecondaryDark, size: 20),
-        title: const Text('Online-Status anzeigen', style: AppTypography.body),
-        enabled: token != null,
-        trailing: Switch(
-          value: me?.showOnline ?? true,
-          onChanged: token == null
-              ? null
-              : (value) async {
-                  try {
-                    await ref.read(chatRepositoryProvider).updateMe(token, showOnline: value);
-                    ref.invalidate(chatMeProvider);
-                  } catch (_) {}
-                },
-          activeColor: AppColors.accentPrimaryDark,
-          inactiveThumbColor: AppColors.textMutedDark,
-          inactiveTrackColor: AppColors.bgSurfaceRaisedDark,
+        leading: _runningDiagnostics
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.play_arrow, color: AppColors.accentPrimaryDark),
+        title: Text(_runningDiagnostics ? 'Tests laufen…' : 'Tests starten', style: AppTypography.body),
+        onTap: _runningDiagnostics ? null : _runDiagnostics,
+      ),
+    ]);
+  }
+
+  /// Führt alle Prüfungen SEQUENZIELL aus (klare Reihenfolge, keine
+  /// konkurrierenden setStates). Jede Zeile zeigt ✓/✗ plus Detail.
+  Future<void> _runDiagnostics() async {
+    setState(() {
+      _runningDiagnostics = true;
+      _diagResults.clear();
+    });
+
+    Future<void> report(String name, Future<String> Function() run) async {
+      try {
+        final detail = await run();
+        if (!mounted) return;
+        setState(() => _diagResults[name] = '✓ $detail');
+      } on TimeoutException {
+        if (!mounted) return;
+        setState(() => _diagResults[name] = '✗ Keine Antwort (Timeout)');
+      } on DioException catch (e) {
+        if (!mounted) return;
+        setState(() => _diagResults[name] = '✗ ${friendlyErrorMessage(e, ref.read(i18nProvider))}');
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _diagResults[name] = '✗ $e');
+      }
+    }
+
+    // 1) Backend-Grundgesundheit (anonym).
+    String? token;
+    await report('Server (API)', () async {
+      final sw = Stopwatch()..start();
+      final res = await ApiClient.create()
+          .get<Map<String, dynamic>>('/v1/health')
+          .timeout(const Duration(seconds: 20));
+      final ok = res.data?['status'] == 'ok';
+      return '${ok ? 'HTTP 200' : 'unerwartete Antwort'} · ${sw.elapsedMilliseconds} ms';
+    });
+
+    // 2) Anmeldung (Token da?).
+    await report('Anmeldung', () async {
+      token = ref.read(authControllerProvider.notifier).accessToken;
+      if (token == null || token!.isEmpty) {
+        return 'Nicht angemeldet - bitte einloggen';
+      }
+      return 'Sitzung aktiv';
+    });
+
+    // 3) Chat: Konversationen laden (gleicher Call wie der Chat-Hub).
+    await report('Chat', () async {
+      if (token == null) return 'übersprungen (nicht angemeldet)';
+      await ref.read(chatRepositoryProvider).conversations(token!).timeout(const Duration(seconds: 20));
+      return 'Konversationen geladen';
+    });
+
+    // 4) Marktplatz: Katalog laden (gleicher Call wie der Markt-Screen).
+    await report('Marktplatz', () async {
+      if (token == null) return 'übersprungen (nicht angemeldet)';
+      final cat = await ref
+          .read(marketplaceRepositoryProvider)
+          .catalog(token: token!)
+          .timeout(const Duration(seconds: 20));
+      return '${cat.categories.length} Kategorien geladen';
+    });
+
+    // 5) Garage: Übersicht laden (gleicher Call wie der Garage-Screen).
+    await report('Garage', () async {
+      final base = await ref.read(garageBaseUrlProvider.future);
+      final session = ref.read(garageSessionProvider).value;
+      if (session == null) return 'Nicht verbunden - Garage verbindet sich automatisch';
+      await ref
+          .read(garageRepositoryProvider)
+          .garage(base, session.token)
+          .timeout(const Duration(seconds: 20));
+      return 'verbunden (${base.replaceAll('https://', '')})';
+    });
+
+    if (!mounted) return;
+    setState(() => _runningDiagnostics = false);
+  }
+
+  // ------------------------------------------------------------------
+  // 6: Sprache & Erscheinungsbild.
+  // ------------------------------------------------------------------
+  Widget _buildLanguageSection() {
+    final i18n = ref.watch(i18nProvider);
+    final currentLanguage = ref.watch(languageControllerProvider);
+    final currentThemeMode = ref.watch(themeModeControllerProvider);
+
+    return _buildSection('language', i18n.tr('settings.languageAndAppearance'), icon: Icons.language, children: [
+      ListTile(
+        leading: const Icon(Icons.language, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.languageLabel, style: AppTypography.body),
+        trailing: SegmentedButton<AppLanguage>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: AppLanguage.de, label: const Text('🇩🇪 DE')),
+            ButtonSegment(value: AppLanguage.en, label: const Text('🇬🇧 EN')),
+          ],
+          selected: {currentLanguage},
+          onSelectionChanged: (selection) {
+            ref.read(languageControllerProvider.notifier).set(selection.first);
+          },
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.contrast, color: AppColors.textSecondaryDark, size: 20),
+        title: Text(i18n.themeModeTitle, style: AppTypography.body),
+        trailing: SegmentedButton<AppThemeMode>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: AppThemeMode.system, label: Text(i18n.themeModeSystem)),
+            ButtonSegment(value: AppThemeMode.light, label: Text(i18n.themeModeLight)),
+            ButtonSegment(value: AppThemeMode.dark, label: Text(i18n.themeModeDark)),
+          ],
+          selected: {currentThemeMode},
+          onSelectionChanged: (selection) {
+            ref.read(themeModeControllerProvider.notifier).set(selection.first);
+          },
         ),
       ),
     ]);
   }
 
+  // ------------------------------------------------------------------
+  // Wiederverwendbare Bausteine.
+  // ------------------------------------------------------------------
   Future<bool?> _confirmDialog(
     BuildContext context, {
     required String title,
@@ -910,8 +1012,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSection(String title, {required List<Widget> children, IconData? icon}) {
-    final collapsed = _collapsed.contains(title);
+  /// Sektion mit einklappbarem Header. `id` ist stabil (Sprachwechsel-
+  /// fest), `title` wird angezeigt.
+  Widget _buildSection(String id, String title, {required List<Widget> children, IconData? icon}) {
+    final collapsed = _collapsed.contains(id);
     final header = Padding(
       padding: const EdgeInsets.only(left: AppSpacing.xs),
       child: Row(
@@ -951,7 +1055,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: () => setState(() {
-            collapsed ? _collapsed.remove(title) : _collapsed.add(title);
+            collapsed ? _collapsed.remove(id) : _collapsed.add(id);
           }),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
@@ -1010,81 +1114,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
     );
-  }
-
-  // ------------------------------------------------------------------
-  // Fahrhistorie: 5 Privatsphäre-Schalter (Default alles privat).
-  // Server ist die Wahrheit, optimistische UI mit Rollback.
-  // ------------------------------------------------------------------
-  Widget _buildRideHistorySection() {
-    final settings = ref.watch(rideHistorySettingsProvider);
-    final controller = ref.read(rideHistorySettingsProvider.notifier);
-    final i18n = ref.watch(i18nProvider);
-
-    Future<void> change(Future<bool> Function() call) async {
-      final ok = await call();
-      if (mounted && !ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Konnte nicht gespeichert werden - offline?')),
-        );
-      }
-    }
-
-    return _buildSection(i18n.tr('settings.rideHistory'), children: [
-      if (!ref.read(authControllerProvider).isAuthenticated)
-        ListTile(
-          dense: true,
-          leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
-          title: Text(
-            i18n.tr('rideHistory.requiresLogin'),
-            style: AppTypography.caption,
-          ),
-        )
-      else ...[
-        _buildSwitchTile(
-          Icons.history,
-          i18n.tr('rideHistory.enabled'),
-          settings.rideHistoryEnabled,
-          (v) => change(() => controller.update(rideHistoryEnabled: v)),
-        ),
-        _buildSwitchTile(
-          Icons.public,
-          i18n.tr('rideHistory.publicProfile'),
-          settings.isPublic,
-          (v) => change(() => controller.update(authPrivacy: v ? 'public' : 'private')),
-        ),
-        if (settings.isPublic) ...[
-          _buildSwitchTile(
-            Icons.route,
-            i18n.tr('rideHistory.shareRides'),
-            settings.shareRides,
-            (v) => change(() => controller.update(shareRides: v)),
-          ),
-          _buildSwitchTile(
-            Icons.place_outlined,
-            i18n.tr('rideHistory.sharePlaces'),
-            settings.sharePlaces,
-            (v) => change(() => controller.update(sharePlaces: v)),
-          ),
-          _buildSwitchTile(
-            Icons.visibility_off_outlined,
-            i18n.tr('rideHistory.hideStartEnd'),
-            settings.hideStartEnd,
-            (v) => change(() => controller.update(hideStartEnd: v)),
-          ),
-        ],
-        ListTile(
-          dense: true,
-          leading: const Icon(Icons.lock_outline, color: AppColors.textMutedDark, size: 18),
-          title: Text(
-            settings.isPublic
-                ? i18n.tr('rideHistory.hintPublic')
-                : i18n.tr('rideHistory.hintPrivate'),
-            style: AppTypography.caption,
-          ),
-        ),
-      ],
-    ]);
   }
 }
 
