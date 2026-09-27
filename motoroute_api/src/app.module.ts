@@ -19,6 +19,7 @@ import { HazardsModule } from './modules/hazards/hazards.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { RideHistoryModule } from './modules/ride-history/ride-history.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { BadgesModule } from './modules/badges/badges.module';
 import { TelemetryModule } from './modules/telemetry/telemetry.module';
 import { HealthController } from './modules/health/health.controller';
 
@@ -63,6 +64,7 @@ import { HealthController } from './modules/health/health.controller';
     WeatherModule,
     RideHistoryModule,
     MarketplaceModule,
+    BadgesModule,
     TelemetryModule,
   ],
   controllers: [HealthController],
