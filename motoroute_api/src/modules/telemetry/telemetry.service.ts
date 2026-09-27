@@ -73,6 +73,18 @@ export class TelemetryService {
       .order('created_at', { ascending: false })
       .limit(Math.min(limit, 200));
     if (error) {
+      // Migration 0008 noch nicht im Dashboard angewendet -> PostgREST
+      // meldet fehlende Tabelle. Das ist ein definierter Zustand, kein
+      // Fehler: leere Auswertung liefern, damit die Admin-Ansicht in
+      // der App nicht in einen 500 laeuft.
+      const code = (error as { code?: string }).code ?? '';
+      if (
+        code === 'PGRST205' ||
+        code === '42P01' ||
+        /could not find the table/i.test(error.message)
+      ) {
+        return { reports: [], summary: [], total: 0 };
+      }
       throw new HttpException(
         { error: 'TELEMETRY_READ_FAILED', message: error.message },
         HttpStatus.INTERNAL_SERVER_ERROR,
