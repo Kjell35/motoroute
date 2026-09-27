@@ -180,3 +180,14 @@ und die Admin-Auswertung liefert einen leeren Zustand.
 
 Optional: `TELEMETRY_SALT` als Env-Variablen auf Render setzen
 (sonst Default-Salz).
+
+## Pass-Knacker & Badges (Gamification)
+
+GPS-Check-ins an Pässen/Bikertreffs schalten Trophäen frei:
+`POST /v1/badges/checkin` (auth, 10/min) + `GET /v1/badges/me`.
+
+**Einmalige Aktivierung (Supabase-Dashboard → SQL-Editor):**
+Migration `supabase/migrations/0009_badges_pass_knacker.sql` ausführen
+(aktiviert PostGIS, legt `badges`/`user_badges` + RPC `match_badge_at`
+an und seedet 19 Pässe/Treffs). Bis dahin antworten die Endpunkte mit
+503 `BADGES_RPC_FAILED` - die App zeigt die Ursache sauber an.
