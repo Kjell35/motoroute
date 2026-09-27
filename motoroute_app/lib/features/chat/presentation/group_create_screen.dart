@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/error_message.dart' show technicalCause;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
@@ -57,11 +58,11 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
           'group': group,
         },
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gruppe konnte nicht erstellt werden')),
+        SnackBar(content: Text('Gruppe konnte nicht erstellt werden · ${technicalCause(e)}')),
       );
     }
   }

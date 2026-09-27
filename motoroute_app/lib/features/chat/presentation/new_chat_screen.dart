@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/error_message.dart' show technicalCause;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
@@ -63,10 +64,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
         _results = results;
         _searching = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Suche fehlgeschlagen - bitte Verbindung prüfen';
+        _error = 'Suche fehlgeschlagen · ${technicalCause(e)}';
         _searching = false;
       });
     }

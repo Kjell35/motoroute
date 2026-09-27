@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/error_message.dart' show technicalCause;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
@@ -110,7 +111,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Nachrichten konnten nicht geladen werden';
+        _error = 'Nachrichten konnten nicht geladen werden · ${technicalCause(e)}';
       });
     }
   }
@@ -219,7 +220,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       if (!mounted) return;
       _inputController.text = text; // Text zurück ins Feld (nichts verloren)
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Senden fehlgeschlagen: ${e.toString().split('(').first.trim()}')),
+        SnackBar(content: Text('Senden fehlgeschlagen: ${technicalCause(e)}')),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -261,7 +262,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Löschen fehlgeschlagen')));
+            .showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: ${technicalCause(e)}')));
       }
     }
   }

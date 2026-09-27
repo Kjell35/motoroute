@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/error/failure.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
+import 'package:motoroute_app/core/network/error_message.dart' show technicalCause;
 
 /// Chat-Domain-Modelle - Spiegel der Backend-Endpunkte unter /v1/chat.
 /// Bewusst einfache Klassen statt freezed: der Chat hat wenige, stabile
@@ -468,6 +469,7 @@ class ChatRepository {
 }
 
 /// Dio-Fehler -> Failure (bestehendes Fehlermodell der App).
+/// [technicalCause] kommt aus core/network/error_message.dart.
 Failure chatFailure(Object error) {
   if (error is DioException) {
     final status = error.response?.statusCode;
@@ -486,7 +488,7 @@ Failure chatFailure(Object error) {
     if (status == 403) return const NetworkFailure('Kein Zugriff');
     if (status == 404) return const NetworkFailure('Nicht gefunden');
     if (status == 503) return const NetworkFailure('Dienst nicht verfügbar');
-    return NetworkFailure('Fehler (${status ?? 'keine Antwort'})');
+    return NetworkFailure(technicalCause(error));
   }
   return const UnexpectedFailure();
 }

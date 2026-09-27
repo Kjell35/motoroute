@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
+import 'package:motoroute_app/core/network/error_message.dart' show technicalCause;
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
@@ -483,10 +484,10 @@ class _AdminReportsSheetState extends State<_AdminReportsSheet> {
         _reports = reports;
         _busy = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Meldungen konnten nicht geladen werden (kein Admin-Zugriff?)';
+        _error = 'Meldungen konnten nicht geladen werden · ${technicalCause(e)}';
         _busy = false;
       });
     }

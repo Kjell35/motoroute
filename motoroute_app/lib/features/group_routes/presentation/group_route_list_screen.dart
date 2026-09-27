@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/network/error_message.dart' show technicalCause;
 import '../../chat/chat_providers.dart';
 import '../group_route_repository.dart';
 
@@ -51,7 +52,7 @@ class _GroupRouteListScreenState extends ConsumerState<GroupRouteListScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Routen konnten nicht geladen werden';
+        _error = 'Routen konnten nicht geladen werden · ${technicalCause(e)}';
       });
     }
   }
