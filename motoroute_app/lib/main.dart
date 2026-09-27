@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/features/auth/welcome_screen.dart';
+import 'package:motoroute_app/features/badges/presentation/badges_screen.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/features/navigation_session/active_navigation_screen.dart';
@@ -208,6 +209,8 @@ class _MotoRouteAppBody extends ConsumerWidget {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
           return GroupRideScreen(routeId: args?['routeId'] as String);
         },
+        // --------------------------- Pass-Knacker & Badges (🏆)
+        '/badges': (context) => const BadgesScreen(),
       },
     );
   }

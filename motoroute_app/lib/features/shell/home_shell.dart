@@ -79,6 +79,24 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   if (_tab != entry.$1) setState(() => _tab = entry.$1);
                 },
               ),
+            // Pass-Knacker: bewusst eigener Einstieg über Route (kein
+            // Shell-Tab - der Trophäenschrank ist ein Ziel, kein Hub).
+            ListTile(
+              leading: const Icon(Icons.emoji_events, color: AppColors.statusWarning, size: 28),
+              title: Text(
+                i18n.tr('badges.shelfEntry'),
+                style: const TextStyle(
+                  color: AppColors.textPrimaryDark,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondaryDark),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pushNamed('/badges');
+              },
+            ),
             const SizedBox(height: 8),
           ],
         ),
