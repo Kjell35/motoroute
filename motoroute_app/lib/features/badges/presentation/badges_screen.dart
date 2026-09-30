@@ -6,7 +6,9 @@ import '../../../core/i18n/i18n.dart';
 import '../../../core/network/error_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../auth/auth_providers.dart';
 import '../badges_repository.dart';
+import 'badge_icon.dart';
 
 /// Trophäenschrank ("Pass-Knacker"): Alle Badges als Grid - freige-
 /// schaltet mit farbigem Icon + Datum, gesperrt ausgegraut mit Schloss.
@@ -137,7 +139,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Text(b.category.emoji, style: const TextStyle(fontSize: 34)),
+                  BadgeIcon(iconUrl: b.iconUrl, category: b.category),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -176,6 +178,112 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
     );
   }
 
+  /// Admin: neuen Pass/Treff/Landmark anlegen (ohne SQL im Dashboard).
+  Future<void> _adminCreateBadge() async {
+    final i18n = ref.read(i18nProvider);
+    final token = ref.read(badgesTokenProvider);
+    if (token == null) {
+      _toast(i18n.tr('badges.loginRequired'));
+      return;
+    }
+    final title = TextEditingController();
+    final description = TextEditingController();
+    final lat = TextEditingController();
+    final lon = TextEditingController();
+    final radius = TextEditingController(text: '150');
+    final iconUrl = TextEditingController();
+    var category = BadgeCategory.pass;
+    String? formError;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          backgroundColor: AppColors.bgSurfaceRaisedDark,
+          title: Text(i18n.tr('badges.adminAdd'), style: AppTypography.title),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: title, decoration: InputDecoration(labelText: i18n.tr('badges.adminTitle'))),
+                TextField(controller: description, decoration: InputDecoration(labelText: i18n.tr('badges.adminDescription'))),
+                DropdownButton<BadgeCategory>(
+                  value: category,
+                  isExpanded: true,
+                  items: [
+                    for (final c in BadgeCategory.values)
+                      DropdownMenuItem(value: c, child: Text('${c.emoji} ${c.name}')),
+                  ],
+                  onChanged: (v) => setLocal(() => category = v ?? category),
+                ),
+                TextField(
+                  controller: lat,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: InputDecoration(labelText: i18n.tr('badges.adminLat')),
+                ),
+                TextField(
+                  controller: lon,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: InputDecoration(labelText: i18n.tr('badges.adminLon')),
+                ),
+                TextField(
+                  controller: radius,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: i18n.tr('badges.adminRadius')),
+                ),
+                TextField(controller: iconUrl, decoration: InputDecoration(labelText: i18n.tr('badges.adminIconUrl'))),
+                if (formError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(formError!, style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(i18n.tr('badges.adminCancel')),
+            ),
+            TextButton(
+              onPressed: () {
+                final la = double.tryParse(lat.text.trim().replaceAll(',', '.'));
+                final lo = double.tryParse(lon.text.trim().replaceAll(',', '.'));
+                final r = int.tryParse(radius.text.trim());
+                if (title.text.trim().length < 2 ||
+                    la == null || la < -90 || la > 90 ||
+                    lo == null || lo < -180 || lo > 180 ||
+                    r == null || r < 20 || r > 500) {
+                  setLocal(() => formError = i18n.tr('badges.adminInvalid'));
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: Text(i18n.tr('badges.adminSave')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) return;
+    try {
+      await ref.read(badgesRepositoryProvider).createBadge(
+            token: token,
+            title: title.text.trim(),
+            description: description.text.trim(),
+            category: category,
+            lat: double.parse(lat.text.trim().replaceAll(',', '.')),
+            lon: double.parse(lon.text.trim().replaceAll(',', '.')),
+            radiusMeters: int.parse(radius.text.trim()),
+            iconUrl: iconUrl.text.trim(),
+          );
+      _toast(i18n.tr('badges.adminCreated'));
+      await _load();
+    } catch (e) {
+      _toast(i18n.tr('badges.adminFailed', {'cause': technicalCause(e)}));
+    }
+  }
+
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -198,6 +306,14 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
       appBar: AppBar(
         backgroundColor: surface,
         title: Text(i18n.tr('badges.title'), style: AppTypography.title),
+        actions: [
+          if (ref.watch(authControllerProvider).user?.isAdmin ?? false)
+            IconButton(
+              tooltip: i18n.tr('badges.adminAdd'),
+              icon: const Icon(Icons.add_location_alt_outlined),
+              onPressed: _adminCreateBadge,
+            ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _checkingIn ? null : _checkin,
@@ -341,9 +457,7 @@ class _BadgeCard extends StatelessWidget {
             children: [
               Opacity(
                 opacity: unlocked ? 1 : 0.35,
-                child: badge.iconUrl != null
-                    ? const Icon(Icons.image, size: 40) // icon_url (optional, Phase 2)
-                    : Text(badge.category.emoji, style: const TextStyle(fontSize: 34)),
+                child: BadgeIcon(iconUrl: badge.iconUrl, category: badge.category),
               ),
               if (!unlocked)
                 Icon(Icons.lock, size: 20, color: textSecondary),

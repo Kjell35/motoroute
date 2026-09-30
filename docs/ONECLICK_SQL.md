@@ -1,3 +1,114 @@
+# Migrationen 0008 + 0009 in einem Schritt (Copy-Paste)
+
+Diese Datei fasst zwei Migrationen zusammen, die nur im Supabase-Dashboard
+ausgeführt werden können:
+
+- **0008** – Tabelle `app_error_reports` (anonymes Fehler-Reporting)
+- **0009** – Badges / „Pass-Knacker“ (PostGIS, Tabellen `badges` + `user_badges`,
+  Funktion `match_badge_at(p_user_id, lat, lon)`, RLS, 19 Seed-Einträge)
+
+Beide sind idempotent (`if not exists` / `on conflict do nothing`) und können
+gefahrlos ein zweites Mal ausgeführt werden.
+
+> **Reihenfolge:** Zuerst das Backend mit dem Code dieses Releases deployen
+> (es ruft `match_badge_at` mit `p_user_id` auf), dann diesen Block ausführen.
+
+## So geht's
+
+1. Supabase-Dashboard öffnen → Projekt `icdjggzlwyeacuwsudtu`
+2. Links **SQL Editor** → **New query**
+3. **Den kompletten SQL-Block unten** einfügen (nur den Inhalt zwischen den
+   ```` ```sql ````-Zeilen)
+4. **Run** klicken. Erwartet: „Success. No rows returned“
+5. Prüfen (neue Query):
+
+```sql
+select table_name from information_schema.tables
+ where table_schema='public' and table_name in ('app_error_reports','badges','user_badges');  -- 3 Zeilen
+select count(*) from public.badges;                                                            -- 19
+select proname from pg_proc where proname = 'match_badge_at';                                  -- 1 Zeile
+select relname, relrowsecurity from pg_class where relname in ('badges','user_badges');        -- beide true
+```
+
+## Seed-Koordinaten: Stand der Prüfung
+
+- **Geprüft (gegen Wikipedia) und korrigiert:** Jaufenpass (46.8400 / 11.3075),
+  Sustenpass (46.7300 / 8.4490), Passo Pordoi (46.4847 / 11.8361), Furkapass
+  (46.5725 / 8.4142), Oberalppass (46.6586 / 8.6711), Nufenenpass (46.4746 /
+  8.3883) und Bastei (50.9619 / 14.0732). Die ursprünglichen Werte lagen teils
+  400 m bis 4,4 km daneben (Bastei war der größte Ausreißer).
+- **Nicht verifizierbar:** Namen und genaue Lage einiger Bikertreffs (z. B.
+  „Mosel-Coil“, „Hafenrummel Bikerstop“) - hier bitte die Punkte auf der Karte
+  gegenprüfen und bei Abweichung korrigieren.
+- Pässe haben jetzt 300 m Radius (Wikipedia-Koordinaten sind gerundet).
+- Korrekturen sind jederzeit möglich, ohne diese Migration zu ändern:
+  per `update public.badges set pass_lat = …, pass_lon = … where title = '…';`
+  oder über das neue Admin-Formular in der App (Plus-Symbol im Pass-Knacker).
+
+## SQL
+
+```sql
+-- ---------------------------------------------------------------------------
+-- 0008: Anonymes Fehler-/Crash-Reporting (app_error_reports)
+--
+-- Zweck: Die App meldet fehlgeschlagene Aktionen (Chat laden, Marktplatz
+-- einreichen, Garage verbinden, Abstuerze) OHNE personenbezogene Daten an
+-- diese Tabelle. Support/Admin sieht dann im Backend, WELCHE Bereiche bei
+-- WIE VIELEN Nutzern haken - ohne Screenshots.
+--
+-- Anonymisierung (durchgesetzt in der App, hier nur Spaltenstruktur):
+--   - user_hash = SHA-256(user_id + tageswechselndes Salz): erlaubt
+--     "wie viele EINZELNE Nutzer betroffen" ohne Rückschluss auf IDs.
+--   - Keine user_id, keine E-Mail, keine Free-Text-Logs. Nur Kategorie,
+--     technische Ursache (kurz), HTTP-Status, Plattform, App-Version.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.app_error_reports (
+  id uuid primary key default gen_random_uuid(),
+  user_hash text not null,                -- SHA-256, 64 Hex-Zeichen, tageswechselnd
+  category text not null,                 -- z. B. chat.load, mp.create, crash
+  cause text not null,                    -- technische Ursache (max 300 Zeichen)
+  http_status int,                        -- null bei Netz-/Timeout-Fehlern
+  platform text not null,                 -- android / ios / web
+  app_version text not null,              -- z. B. 0.4.6
+  created_at timestamptz not null default now()
+);
+
+create index if not exists app_error_reports_created_idx
+  on public.app_error_reports (created_at desc);
+create index if not exists app_error_reports_category_idx
+  on public.app_error_reports (category, created_at desc);
+
+-- RLS: Standardmaessig alles zu. Der Service-Client (Backend, SERVICE_ROLE)
+-- schreibt/liest ueber RLS-hinweg; die App insertet mit USER-Token:
+--   - INSERT nur fuer eingeloggte Nutzer (anonym = verworfen)
+--   - SELECT/UPDATE/DELETE fuer Endnutzer: nie
+alter table public.app_error_reports enable row level security;
+
+drop policy if exists "app_error_reports_insert_authed" on public.app_error_reports;
+create policy "app_error_reports_insert_authed"
+  on public.app_error_reports for insert
+  to authenticated
+  with check (true);
+
+-- Admin-Lesezugriff (Dashboard/SQL-Editor & Backend-Admin-Endpunkt):
+drop policy if exists "app_error_reports_admin_select" on public.app_error_reports;
+create policy "app_error_reports_admin_select"
+  on public.app_error_reports for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.users u
+      where u.id = auth.uid() and u.role = 'admin'
+    )
+  );
+
+-- ----------------------------------------------------------------------
+-- Pruef-Ausgabe: Objekte der Migration
+-- ----------------------------------------------------------------------
+-- select table_name from information_schema.tables
+--   where table_schema='public' and table_name='app_error_reports';
+
 -- ---------------------------------------------------------------------------
 -- 0009: Gamification - "Pass-Knacker" & Badges
 --
@@ -195,3 +306,4 @@ insert into public.badges (title, description, icon_url, required_category, pass
   ('Loreley',            'Schieferfelsen und engste Rhein-Schleife.',                       NULL, 'sight',   50.13870, 7.72950,  150),
   ('Bastei',             'Sandstein-Brücke über der sächsischen Schweiz.',                  NULL, 'sight',   50.96190, 14.07320, 150)
 on conflict (title) do nothing;
+```

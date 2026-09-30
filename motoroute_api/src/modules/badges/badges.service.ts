@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   ServiceUnavailableException,
@@ -70,6 +72,9 @@ export class BadgesService {
     }
 
     const { data, error } = await this.adminClient.rpc('match_badge_at', {
+      // Service-Role-Client: auth.uid() ist dort NULL -> Nutzer explizit
+      // übergeben (bereits per JWT-Guard verifiziert).
+      p_user_id: user.id,
       p_lat: lat,
       p_lon: lon,
     });
@@ -182,6 +187,81 @@ export class BadgesService {
       badges,
       unlockedCount: badges.filter((b) => b.unlocked).length,
       totalCount: badges.length,
+    };
+  }
+
+  /**
+   * Admin: neuen Pass/Treff/Landmark anlegen, ohne SQL im Dashboard.
+   * Die Rolle kommt aus dem JWT-Guard (users.role), die Schreibaktion
+   * läuft über den Service-Role-Client (Tabelle hat RLS ohne Schreib-
+   * policy für Endnutzer).
+   */
+  async createBadge(
+    user: AuthenticatedUser,
+    input: {
+      title: string;
+      description?: string;
+      category: 'pass' | 'meeting' | 'sight';
+      lat: number;
+      lon: number;
+      radiusMeters?: number;
+      iconUrl?: string | null;
+    },
+  ): Promise<{
+    id: string;
+    title: string;
+    description: string;
+    iconUrl: string | null;
+    category: string;
+    lat: number;
+    lon: number;
+    radiusMeters: number;
+  }> {
+    if (user.role !== 'admin') {
+      throw new ForbiddenException({ error: 'ADMIN_ONLY', message: 'Nur für Admins' });
+    }
+    if (!this.adminClient) {
+      throw new ServiceUnavailableException({
+        error: 'DB_NOT_CONFIGURED',
+        message: 'Badges nicht konfiguriert',
+      });
+    }
+    const { data, error } = await this.adminClient
+      .from('badges')
+      .insert({
+        title: input.title.trim(),
+        description: (input.description ?? '').trim(),
+        icon_url: input.iconUrl ? input.iconUrl.trim() : null,
+        required_category: input.category,
+        pass_lat: input.lat,
+        pass_lon: input.lon,
+        radius_meters: input.radiusMeters ?? 150,
+      })
+      .select('id, title, description, icon_url, required_category, pass_lat, pass_lon, radius_meters')
+      .single();
+    if (error) {
+      // 23505 = unique_violation (title ist unique)
+      if ((error as { code?: string }).code === '23505') {
+        throw new ConflictException({
+          error: 'BADGE_EXISTS',
+          message: 'Ein Badge mit diesem Titel existiert bereits',
+        });
+      }
+      throw new ServiceUnavailableException({
+        error: 'BADGES_WRITE_FAILED',
+        message: error.message,
+      });
+    }
+    const b = data as BadgeCatalogRow;
+    return {
+      id: b.id,
+      title: b.title,
+      description: b.description,
+      iconUrl: b.icon_url,
+      category: b.required_category,
+      lat: b.pass_lat,
+      lon: b.pass_lon,
+      radiusMeters: b.radius_meters,
     };
   }
 }

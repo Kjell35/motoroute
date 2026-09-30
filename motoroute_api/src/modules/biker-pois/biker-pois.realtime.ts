@@ -83,8 +83,10 @@ export class BikerPoisRealtimeBridge implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     if (!this.configured) {
-      this.logger.warn(
-        'BIKER_POI_SERVICE_URL nicht gesetzt - kein Push für kuratierte POIs (Delta-Sync bleibt verfügbar).',
+      // Optionales Feature (eigener POI-Dienst mit PostGIS + TomTom-Key):
+      // ohne URL ist das ein gewollter Normalzustand, keine Warnung.
+      this.logger.log(
+        'Kuratierte Biker-POIs deaktiviert (BIKER_POI_SERVICE_URL nicht gesetzt) - OSM-POIs decken die Karte ab.',
       );
       return;
     }

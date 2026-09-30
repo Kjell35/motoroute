@@ -132,6 +132,32 @@ class BadgesRepository {
     );
   }
 
+  /// Admin: neuen Badge anlegen (POST /v1/badges, nur role=admin).
+  Future<void> createBadge({
+    required String token,
+    required String title,
+    required String description,
+    required BadgeCategory category,
+    required double lat,
+    required double lon,
+    int radiusMeters = 150,
+    String? iconUrl,
+  }) async {
+    _auth(token);
+    await _dio.post<Map<String, dynamic>>(
+      '/v1/badges',
+      data: {
+        'title': title,
+        'description': description,
+        'category': category.name,
+        'lat': lat,
+        'lon': lon,
+        'radiusMeters': radiusMeters,
+        if (iconUrl != null && iconUrl.isNotEmpty) 'iconUrl': iconUrl,
+      },
+    );
+  }
+
   /// Trophäenschrank: Katalog + Freischaltungen des Nutzers.
   Future<BadgeShelf> shelf({required String token}) async {
     _auth(token);

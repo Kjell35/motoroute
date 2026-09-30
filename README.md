@@ -13,8 +13,28 @@ Routing. Siehe die Phase-Dokumente für den vollständigen Kontext:
 |---|---|---|
 | `graphhopper-curvature-ext/` | Java-Erweiterung: Kurvigkeits-Bewertung pro Straßenkante | Geschrieben, nicht gegen echte GraphHopper-Version kompiliert – siehe `motoroute_api/docs/GRAPHHOPPER_SETUP.md` |
 | `motoroute_poi_service/` | **NEU**: Eigenständiger Biker-POI-Dienst (TomTom Search API): täglicher Welt-Scan über ~195 Länder × 8 Biker-Kategorien, Biker-Score 0–100, PostGIS-Deduplizierung (75 m), REST-Delta-Sync + Socket.IO-Push | Vollständig funktionsfähig – benötigt eigene Postgres/PostGIS-Instanz + eigenen TomTom-Key (siehe `motoroute_poi_service/README.md`) |
-| `motoroute_api/` | Backend (NestJS) inkl. GraphHopper-Konfiguration | Kompiliert, Unit-Tests grün: Routing/POI/Search/Traffic/Weather/User/Chat/GroupRoutes/GroupRides/Hazards + echte Supabase-JWT-Guards. Roundtrip weiterhin bewusst 501 (Post-MVP) |
-| `motoroute_app/` | Mobile App (Flutter) | Kompiliert ohne Analyzer-Errors/Warnings, 48 Tests grün: alle Screens + Chat-/Community-System + kollaborativer Gruppen-Routenplaner + Live-Gruppenfahrt (opt-in) – inkl. aktiver Navigation mit GPS-Stream, Off-Route-Erkennung (60 m) und automatischem Rerouting mit Präferenz-Erhalt |
+| `motoroute_api/` | Backend (NestJS) inkl. GraphHopper-Konfiguration | Kompiliert, 174 Unit-Tests grün (Stand v0.4.8): Routing/POI/Search/Traffic/Weather/User/Chat/GroupRoutes/GroupRides/Hazards/Marktplatz/Badges/Telemetry + echte Supabase-JWT-Guards. Roundtrip weiterhin bewusst 501 (Post-MVP) |
+| `motoroute_app/` | Mobile App (Flutter) | Kompiliert ohne Analyzer-Errors, ca. 130 Tests (Stand v0.4.8): alle Screens + Chat-/Community-System + kollaborativer Gruppen-Routenplaner + Live-Gruppenfahrt (opt-in) – inkl. aktiver Navigation mit GPS-Stream, Off-Route-Erkennung (60 m) und automatischem Rerouting mit Präferenz-Erhalt |
+
+## Stand v0.4.8 – was seit den Phase-Dokumenten dazukam
+
+| Bereich | Kurzbeschreibung |
+|---|---|
+| **Garage** (`garage/garage-api/`) | Eigener Dienst (Prisma): Fahrzeuge, Wartung, Erinnerungen, Kosten. Die App verbindet sich ohne Login per kurzlebigem HMAC-Ticket vom MotoRoute-Backend (`GARAGE_TICKET_SECRET`). |
+| **Marktplatz** | Katalog, Inserate, Einreichen mit KI-Prüfung (Gemini), Favoriten, Bewertungen, Benachrichtigungen. |
+| **Admin-Rolle** | `users.role = 'admin'` schaltet Chat-Reports, Marktplatz-Moderation, Fehler-Auswertung und das Anlegen von Badges frei. |
+| **Tour-Tagebuch + GPX** | Fahrten aufzeichnen, ansehen, als GPX exportieren. |
+| **Fehler-Reporting (anonym)** | App sendet an `POST /v1/telemetry/errors`, Speicher: Tabelle `app_error_reports` (Migration 0008). Admin-Auswertung: `GET /v1/telemetry/admin/errors`. |
+| **Badges / Pass-Knacker** | GPS-Check-in (`POST /v1/badges/checkin`), Trophäenschrank (`GET /v1/badges/me`), Admin: `POST /v1/badges`. DB: Migration 0009 (PostGIS, RLS, `match_badge_at(p_user_id, lat, lon)` nur für `service_role`). |
+| **Geräte-Diagnose** | Einstellungen → Diagnose prüft Server, Chat, Marktplatz, Garage und die Karten-Style-Kette. |
+
+### Datenbank-Migrationen
+
+Die Migrationen `motoroute_api/supabase/migrations/0001…0009` kann nur ein Mensch im Supabase-Dashboard ausführen (SQL-Editor). Für 0008 + 0009 gibt es einen Copy-Paste-Block: [`docs/ONECLICK_SQL.md`](docs/ONECLICK_SQL.md).
+
+### Optionale Dienste
+
+`BIKER_POI_SERVICE_URL` ist bewusst **nicht** gesetzt, solange `motoroute_poi_service/` nicht separat gehostet wird (eigene PostGIS-DB + TomTom-Key). Das Backend loggt dann nur eine Info-Zeile; die Karte zeigt OSM-POIs.
 
 ## Chat-System (neu)
 

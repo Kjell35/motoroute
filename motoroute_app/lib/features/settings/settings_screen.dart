@@ -21,6 +21,7 @@ import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
 import 'package:motoroute_app/features/garage/garage_repository.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
+import 'package:motoroute_app/features/map/data/map_style_check.dart';
 import 'package:motoroute_app/features/marketplace/marketplace_repository.dart';
 import 'package:motoroute_app/features/ride_history/ride_history_settings.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
@@ -853,7 +854,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
         child: Text(
-          'Testet Server, Anmeldung, Chat, Marktplatz und Garage direkt vom Gerät aus. '
+          'Testet Server, Anmeldung, Chat, Marktplatz, Garage und die Karte (Stil, Kacheln, Schrift) direkt vom Gerät aus. '
           'Nützlich, wenn ein Bereich "Etwas ist schiefgelaufen" zeigt.',
           style: AppTypography.caption,
         ),
@@ -1031,6 +1032,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           .garage(base, session.token)
           .timeout(const Duration(seconds: 20));
       return 'verbunden (${base.replaceAll('https://', '')})';
+    });
+
+    // 6) Karte: Stil -> TileJSON -> Kachel -> Sprite -> Glyphen (dieselben
+    //    Requests wie MapLibre auf dem Gerät). Bei grauer Karte zeigt sich
+    //    hier, welche Stufe hakt.
+    final mapItems = await runMapStyleCheck(choice: ref.read(mapStyleChoiceProvider));
+    if (!mounted) return;
+    setState(() {
+      for (final item in mapItems) {
+        _diagResults['Karte · ${item.name}'] = '${item.ok ? '✓' : '✗'} ${item.detail}';
+      }
     });
 
     if (!mounted) return;
