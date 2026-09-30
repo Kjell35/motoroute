@@ -35,9 +35,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 ///   3. Karte - Kartenstil (hell/dunkel) + Offline-Regionen
 ///   4. Community (eingeklappt) - Chat-Status/-Name, Online-Status,
 ///      Benachrichtigungen, Fahrhistorie-Privatsphäre
-///   5. Diagnose (eingeklappt) - testet Server/Anmeldung/Chat/Marktplatz/
-///      Garage DIREKT vom Gerät; macht sichtbar, welcher Bereich hakt,
-///      statt "Etwas ist schiefgelaufen" zu raten
+///   5. Diagnose (AUFGEKLAPPT, auffällig umrandet) - testet Server/
+///      Anmeldung/Chat/Marktplatz/Garage/Karte DIREKT vom Gerät;
+///      macht sichtbar, welcher Bereich hakt, statt "Etwas ist
+///      schiefgelaufen" zu raten
 ///   6. Sprache & Erscheinungsbild (eingeklappt)
 ///   7. Recht & Info (eingeklappt) - Datenschutz/Impressum/Über/Version
 ///
@@ -53,8 +54,10 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// Einklapp-Status pro Sektion (stabile IDs, nicht die Titel - sonst
-  /// kippt der Zustand beim Sprachwechsel). Sekundäres startet eingeklappt.
-  final Set<String> _collapsed = {'community', 'diagnostics', 'language', 'legal'};
+  /// kippt der Zustand beim Sprachwechsel). Sekundäres startet eingeklappt;
+  /// die Diagnose bleibt AUFGEKLAPPT: sie ist der erste Anlauf, wenn etwas
+  /// nicht funktioniert, und darf sich nicht verstecken.
+  final Set<String> _collapsed = {'community', 'language', 'legal'};
 
   bool _runningDiagnostics = false;
   final Map<String, String> _diagResults = {};
@@ -850,9 +853,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ------------------------------------------------------------------
   Widget _buildDiagnosticsSection() {
     final entries = _diagResults.entries.toList();
-    return _buildSection('diagnostics', 'Diagnose', icon: Icons.troubleshoot_outlined, children: [
+    // Eigenständige, auffällige Karte (kein einklappbarer Sektions-Kon-
+    // tainer): Wer hier sucht, hat ein Problem - der Einstieg muss sichtbar sein.
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgSurfaceDark,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.accentPrimaryDark.withValues(alpha: 0.35)),
+      ),
+      child: Column(children: [_buildDiagnosticsInner()]),
+    );
+  }
+
+  Widget _buildDiagnosticsInner() {
+    final entries = _diagResults.entries.toList();
+    return Column(children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+        child: Row(
+          children: [
+            const Icon(Icons.troubleshoot_outlined, color: AppColors.accentPrimaryDark, size: 22),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text('Diagnose', style: AppTypography.bodyStrong),
+            ),
+          ],
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
         child: Text(
           'Testet Server, Anmeldung, Chat, Marktplatz, Garage und die Karte (Stil, Kacheln, Schrift) direkt vom Gerät aus. '
           'Nützlich, wenn ein Bereich "Etwas ist schiefgelaufen" zeigt.',
