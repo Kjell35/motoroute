@@ -10,6 +10,13 @@ ausgeführt werden können:
 Beide sind idempotent (`if not exists` / `on conflict do nothing`) und können
 gefahrlos ein zweites Mal ausgeführt werden.
 
+> **Fix 01.10.2026:** In `match_badge_at` kollidierte die unqualifizierte
+> Spalte `badge_id` mit dem gleichnamigen Output-Parameter der Funktion
+> (Postgres-Fehler 42702 "column reference is ambiguous") — jeder Check-in
+> endete in 503. Unten steht die korrigierte Funktion; wer die Migration
+> schon ausgeführt hat, muss NUR den Funktionsblock erneut ausführen
+> (siehe `docs/SUPABASE_HOTFIX_MATCH_BADGE_AT.sql`).
+
 > **Reihenfolge:** Zuerst das Backend mit dem Code dieses Releases deployen
 > (es ruft `match_badge_at` mit `p_user_id` auf), dann diesen Block ausführen.
 
@@ -223,8 +230,12 @@ begin
   -- Menge der VOR diesem Call bereits freigeschalteten Badges merken:
   -- daraus wird pro Treffer "unlocked_now" abgeleitet (exakt, ohne
   -- Temp-Tabellen oder Trigger).
-  select coalesce(array_agg(badge_id), '{}') into v_had
-  from public.user_badges where user_id = v_user;
+  -- WICHTIG: Alle Spaltenreferenzen qualifiziert (ub.-Alias). Unqualifiziert
+  -- wuerde 'badge_id' hier mit dem gleichnamigen Output-Parameter aus
+  -- 'returns table (...)' kollidieren -> 42702 'column reference is ambiguous'
+  -- beim ERSTEN Aufruf (diese Zeile laeuft vor dem return query!).
+  select coalesce(array_agg(ub.badge_id), '{}') into v_had
+  from public.user_badges ub where ub.user_id = v_user;
 
   -- Kandidaten im Radius freischalten (idempotent): unlocked_at bleibt
   -- beim ERSTEN Besuch, Duplikate laufen ins leere DO NOTHING.
@@ -238,16 +249,16 @@ begin
 
   return query
     select
-      b.id,
+      b.id as matched_badge_id,
       b.title,
       b.description,
       b.icon_url,
       b.required_category,
       -- Distanz fürs UI ("56 m vom Gipfel entfernt")
-      st_distance(b.geog, st_setsrid(st_makepoint(p_lon, p_lat), 4326)::geography)::int,
+      st_distance(b.geog, st_setsrid(st_makepoint(p_lon, p_lat), 4326)::geography)::int as matched_distance,
       -- Neu in DIESEM Call? Genau dann, wenn er vorhin noch nicht da war.
-      not (b.id = any(v_had)),
-      v_after
+      not (b.id = any(v_had)) as is_new_unlock,
+      v_after as matched_total
     from public.badges b
     where st_dwithin(b.geog, st_setsrid(st_makepoint(p_lon, p_lat), 4326)::geography, b.radius_meters);
 end;
