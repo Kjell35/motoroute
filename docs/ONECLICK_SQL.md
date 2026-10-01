@@ -10,11 +10,12 @@ ausgeführt werden können:
 Beide sind idempotent (`if not exists` / `on conflict do nothing`) und können
 gefahrlos ein zweites Mal ausgeführt werden.
 
-> **Fix 01.10.2026:** In `match_badge_at` kollidierte die unqualifizierte
-> Spalte `badge_id` mit dem gleichnamigen Output-Parameter der Funktion
-> (Postgres-Fehler 42702 "column reference is ambiguous") — jeder Check-in
-> endete in 503. Unten steht die korrigierte Funktion; wer die Migration
-> schon ausgeführt hat, muss NUR den Funktionsblock erneut ausführen
+> **Fix 01.10.2026 (v2):** In `match_badge_at` gab es ZWEI Ambiguitätsstellen
+> gegen den Output-Parameter `badge_id`: die `array_agg(badge_id)`-Zeile
+> (unqualifiziert, gefixt via `ub.`-Alias) und die Spalten-Inferenz in
+> `on conflict (user_id, badge_id)` (gefixt via `on constraint`). Jeder
+> Check-in endete sonst in 503. Wer die Migration schon ausgeführt hat,
+> muss NUR den Funktionsblock erneut ausführen
 > (siehe `docs/SUPABASE_HOTFIX_MATCH_BADGE_AT.sql`).
 
 > **Reihenfolge:** Zuerst das Backend mit dem Code dieses Releases deployen
@@ -243,7 +244,11 @@ begin
   select v_user, b.id
   from public.badges b
   where st_dwithin(b.geog, st_setsrid(st_makepoint(p_lon, p_lat), 4326)::geography, b.radius_meters)
-  on conflict (user_id, badge_id) do nothing;
+  -- ON CONSTRAINT statt Spaltenliste: Bei Spalten-Inferenz in ON CONFLICT
+  -- kollidiert 'badge_id' mit dem gleichnamigen Output-Parameter aus
+  -- 'returns table (...)' (42702, zweite Ambiguitaetsstelle neben der
+  -- array_agg-Zeile). Die Constraint-Variante braucht keine Spaltennamen.
+  on conflict on constraint user_badges_pkey do nothing;
 
   select count(*) into v_after from public.user_badges where user_id = v_user;
 
@@ -263,6 +268,10 @@ begin
     where st_dwithin(b.geog, st_setsrid(st_makepoint(p_lon, p_lat), 4326)::geography, b.radius_meters);
 end;
 $$;
+
+-- Alte 2-Arg-Ueberladung (auth.uid()-basiert, Claudes Original) entfernen,
+-- damit PostgREST eindeutig die 3-Arg-Version (p_user_id) auftreibt:
+drop function if exists public.match_badge_at(double precision, double precision);
 
 revoke all on function public.match_badge_at(uuid, double precision, double precision) from public, anon, authenticated;
 grant execute on function public.match_badge_at(uuid, double precision, double precision) to service_role;

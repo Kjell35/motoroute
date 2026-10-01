@@ -1,18 +1,22 @@
 -- ---------------------------------------------------------------------------
--- HOTFIX (01.10.2026): match_badge_at - 42702 "column reference badge_id is ambiguous"
+-- HOTFIX v2 (01.10.2026): match_badge_at - 42702 "column reference badge_id is ambiguous"
 --
 -- Wer Migration 0009 bzw. den SQL-Block aus docs/ONECLICK_SQL.md VOR diesem
 -- Datum ausgefuehrt hat, hat die gebrochene Funktion im Dashboard: Jeder
 -- Badge-Check-in endet in HTTP 503 BADGES_RPC_FAILED, obwohl Tabellen und
 -- Seeds korrekt angelegt wurden.
 --
--- Ursache: In
---     select coalesce(array_agg(badge_id), '{}') into v_had ...
--- kollidiert die unqualifizierte Spalte badge_id (user_badges) mit dem
--- gleichnamigen Output-Parameter aus 'returns table (badge_id, ...)'. PL/pgSQL
--- bricht mit 42702 ab, sobald die Funktion das erste Mal laeuft. Fix: alle
--- Spaltenreferenzen qualifiziert (ub.-Alias) und die Ausgaben des return
--- query eindeutig benannt.
+-- Ursache (ZWEI Stellen, beide gegen den Output-Parameter 'badge_id' aus
+-- 'returns table (badge_id, ...)'):
+--   1. 'select coalesce(array_agg(badge_id) ...' - unqualifizierte Spalte
+--      -> Fix: Alias 'ub.' (war bereits in Hotfix v1 drin)
+--   2. 'on conflict (user_id, badge_id)' - die Spalten-Inferenz kollidiert
+--      ebenfalls mit dem Output-Parameter (Qualifizieren dort syntaktisch
+--      verboten) -> Fix: 'on conflict on constraint user_badges_pkey'
+--
+-- Zusaetzlich wird die ALTE 2-Arg-Ueberladung (auth.uid()-basiert, aus dem
+-- ersten Patch) gedroppt, damit PostgREST eindeutig die 3-Arg-Version
+-- (p_user_id) auftreibt.
 --
 -- ANWENDUNG: Diesen GESAMTEN Inhalt in den Supabase-SQL-Editor kopieren und
 -- ausfuehren. CREATE OR REPLACE ersetzt NUR die Funktion - Tabellen, Seeds,
@@ -69,7 +73,11 @@ begin
   select v_user, b.id
   from public.badges b
   where st_dwithin(b.geog, st_setsrid(st_makepoint(p_lon, p_lat), 4326)::geography, b.radius_meters)
-  on conflict (user_id, badge_id) do nothing;
+  -- ON CONSTRAINT statt Spaltenliste: Bei Spalten-Inferenz in ON CONFLICT
+  -- kollidiert 'badge_id' mit dem gleichnamigen Output-Parameter aus
+  -- 'returns table (...)' (42702, zweite Ambiguitaetsstelle neben der
+  -- array_agg-Zeile). Die Constraint-Variante braucht keine Spaltennamen.
+  on conflict on constraint user_badges_pkey do nothing;
 
   select count(*) into v_after from public.user_badges where user_id = v_user;
 
@@ -89,6 +97,10 @@ begin
     where st_dwithin(b.geog, st_setsrid(st_makepoint(p_lon, p_lat), 4326)::geography, b.radius_meters);
 end;
 $$;
+
+-- Alte 2-Arg-Ueberladung (auth.uid()-basiert, Claudes Original) entfernen,
+-- damit PostgREST eindeutig die 3-Arg-Version (p_user_id) auftreibt:
+drop function if exists public.match_badge_at(double precision, double precision);
 
 revoke all on function public.match_badge_at(uuid, double precision, double precision) from public, anon, authenticated;
 grant execute on function public.match_badge_at(uuid, double precision, double precision) to service_role;
