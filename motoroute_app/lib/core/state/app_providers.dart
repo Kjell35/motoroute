@@ -15,6 +15,7 @@ const _kVehicleType = 'settings.vehicleType';
 const _kDistanceUnit = 'settings.distanceUnit';
 const _kPoiCategories = 'settings.poiCategories';
 const _kNotifications = 'settings.notifications';
+const _kVoiceAnnouncements = 'settings.voiceAnnouncements';
 
 /// Persistierte Werte laden (in main() VOR runApp aufrufen).
 Future<void> initSessionSettings() async {
@@ -38,6 +39,7 @@ Future<void> initSessionSettings() async {
         .toSet();
   }
   persistedNotificationsEnabled = prefs.getBool(_kNotifications) ?? true;
+  persistedVoiceAnnouncementsEnabled = prefs.getBool(_kVoiceAnnouncements) ?? true;
 }
 
 /// Von initSessionSettings gesetzte Startwerte (Riverpod-Provider
@@ -47,6 +49,10 @@ VehicleType persistedVehicleType = VehicleType.motorcycle;
 DistanceUnit persistedDistanceUnit = DistanceUnit.kilometers;
 Set<PoiCategory> persistedPoiCategories = {PoiCategory.fuel};
 bool persistedNotificationsEnabled = true;
+
+/// Sprachansagen während der Navigation (Standard: an - unter Motorrad-
+/// fahrern ist Ansage die Primär-UX, das Display bleibt Sekundär).
+bool persistedVoiceAnnouncementsEnabled = true;
 
 final vehicleTypeProvider =
     StateProvider<VehicleType>((ref) => persistedVehicleType);
@@ -65,6 +71,10 @@ final activePoiCategoriesProvider =
 /// Schalter steuert nur den sichtbaren Hinweis in der App.
 final notificationsEnabledProvider =
     StateProvider<bool>((ref) => persistedNotificationsEnabled);
+
+/// Sprachansagen-Ein/Aus (Toggle im aktiven Nav-Screen, persistiert).
+final voiceAnnouncementsEnabledProvider =
+    StateProvider<bool>((ref) => persistedVoiceAnnouncementsEnabled);
 
 /// Persistenz-Schreiber: Fahrzeugtyp, Einheit und POI-Kategorien.
 /// Die Screens rufen diese nach der State-Änderung auf (bewusst
@@ -85,6 +95,10 @@ Future<void> persistPoiCategories(Set<PoiCategory> value) async {
 
 Future<void> persistNotificationsEnabled(bool value) async {
   (await SharedPreferences.getInstance()).setBool(_kNotifications, value);
+}
+
+Future<void> persistVoiceAnnouncementsEnabled(bool value) async {
+  (await SharedPreferences.getInstance()).setBool(_kVoiceAnnouncements, value);
 }
 
 /// Ergebnis der zuletzt berechneten Route - wird zwischen

@@ -488,6 +488,9 @@ const _catalog = <String, Map<String, String>>{
     // Karte
     'map.attribution': '© OpenStreetMap-Mitwirkende © CARTO',
     'map.offlineNote': 'Karte offline - POIs, Routing und Navigation funktionieren weiter',
+    // Navigation
+    'nav.voiceOn': 'Sprachansagen an',
+    'nav.voiceOff': 'Sprachansagen aus',
     // Tour-Tagebuch
     'tour.saveTitle': 'Tour speichern',
     'tour.saveHint': 'z. B. Alpenrunde mit Vati',
@@ -792,6 +795,9 @@ const _catalog = <String, Map<String, String>>{
     // Karte
     'map.attribution': '© OpenStreetMap contributors © CARTO',
     'map.offlineNote': 'Map offline - POIs, routing and navigation keep working',
+    // Navigation
+    'nav.voiceOn': 'Voice announcements on',
+    'nav.voiceOff': 'Voice announcements off',
     // Tour diary
     'tour.saveTitle': 'Save tour',
     'tour.saveHint': 'e.g. Alpine loop with dad',

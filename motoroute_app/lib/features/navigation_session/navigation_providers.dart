@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/utils/geo.dart';
 import 'package:motoroute_app/features/map/data/location_repository.dart';
 import 'package:motoroute_app/features/navigation_session/speed_camera_warner.dart';
+import 'package:motoroute_app/features/navigation_session/voice_announcer.dart';
 import 'package:motoroute_app/features/routing/data/routing_providers.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart'
@@ -103,9 +105,19 @@ class NavigationController extends StateNotifier<NavigationState> {
   Position? _lastPosition;
   int? _lastPositionIndex;
   List<double> _cumulative = const [];
+  VoiceAnnouncer? _voice;
+  ProviderSubscription<bool>? _voicePrefSub;
 
   NavigationController(this._ref, this._locationRepository) : super(const NavigationState()) {
     _watchEnergySaver();
+    // Sprachansagen-Toggle: Live-Sync während der Fahrt - der Screen-
+    // Schalter wirkt ohne Neustart; Ausschalten stoppt laufende Ansagen.
+    _voicePrefSub = _ref.listen<bool>(voiceAnnouncementsEnabledProvider, (prev, next) {
+      final voice = _voice;
+      if (voice == null) return;
+      voice.enabled = next;
+      if (!next) voice.stop();
+    });
   }
 
   void start(ComputedRoute route) {
@@ -133,6 +145,12 @@ class NavigationController extends StateNotifier<NavigationState> {
           geometry: route.geometry,
           durationSeconds: route.durationSeconds,
         );
+    // Sprachansagen: Stimme folgt der App-Sprache, Ein/Aus aus den
+    // Persistenz-Einstellungen (Toggle im Nav-Screen ändert live).
+    final voice = VoiceAnnouncer(
+      german: !_ref.read(i18nProvider).isEnglish,
+    )..enabled = _ref.read(voiceAnnouncementsEnabledProvider);
+    _voice = voice;
   }
 
   /// Proaktive Umleitung: lauscht auf Traffic-Refreshes und leitet um,
@@ -233,6 +251,8 @@ class NavigationController extends StateNotifier<NavigationState> {
             isRerouting: false,
             rerouteReason: reason,
           );
+          // Neue Route = neue Manöver: Dedupe-Historie leeren + Ansage.
+          unawaited(_voice?.onReroute(reason: reason));
         },
       );
     } catch (_) {
@@ -300,6 +320,24 @@ class NavigationController extends StateNotifier<NavigationState> {
             speedMps: position.speed.isNegative ? 0 : position.speed,
           ),
     );
+
+    // Sprachansagen: ebenfalls Fire-and-forget (dedupliziert intern).
+    unawaited(_announceVoice(position));
+  }
+
+  Future<void> _announceVoice(Position position) async {
+    final voice = _voice;
+    final route = state.route;
+    if (voice == null || !voice.enabled || route == null) return;
+    try {
+      final turn = route.nextTurn(state.traveledMeters);
+      if (turn != null) {
+        await voice.onTurn(instruction: turn.text, distanceMeters: turn.distanceMeters);
+      }
+      await voice.onDestination(remainingMeters: state.remainingMeters);
+    } catch (_) {
+      // TTS-Probleme dürfen die Navigation nie beeinträchtigen.
+    }
   }
 
   /// Neuberechnung ab aktueller Position - mit DERSELBEN Präferenz wie
@@ -335,6 +373,8 @@ class NavigationController extends StateNotifier<NavigationState> {
           final computed = ComputedRoute.fromDomain(newRoute);
           _cumulative = cumulativeDistances(computed.geometry);
           state = NavigationState(isNavigating: true, route: computed, isRerouting: false);
+          // Off-Route-Reroute: Fahrer weiß sonst nicht, dass die Route neu ist.
+          unawaited(_voice?.onReroute());
         },
       );
     } catch (_) {
@@ -350,6 +390,9 @@ class NavigationController extends StateNotifier<NavigationState> {
     _trafficSub?.close();
     _trafficSub = null;
     _ref.read(trafficControllerProvider.notifier).stopNavigationMonitoring();
+    // Ansagen stoppen (auch mitten im Satz) + Historie leeren.
+    _voice?.stop();
+    _voice = null;
     state = const NavigationState();
   }
 
@@ -375,6 +418,7 @@ class NavigationController extends StateNotifier<NavigationState> {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _voicePrefSub?.close();
     super.dispose();
   }
 }

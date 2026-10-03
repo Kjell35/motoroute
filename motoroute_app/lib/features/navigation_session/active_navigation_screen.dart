@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -350,6 +352,7 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
 
   Widget _buildTopZone(ComputedRoute? route, NavigationState state) {
     final i18n = ref.watch(i18nProvider);
+    final voiceOn = ref.watch(voiceAnnouncementsEnabledProvider);
     if (route == null) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
@@ -429,6 +432,21 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
                     ),
                   ),
               ],
+            ),
+          ),
+          // Sprachansagen-Toggle: wirkt live (Controller hört auf denselben
+          // Provider), Zustand persistiert über Fahrten.
+          IconButton(
+            tooltip: voiceOn ? i18n.tr('nav.voiceOn') : i18n.tr('nav.voiceOff'),
+            onPressed: () {
+              final nextValue = !voiceOn;
+              ref.read(voiceAnnouncementsEnabledProvider.notifier).state = nextValue;
+              unawaited(persistVoiceAnnouncementsEnabled(nextValue));
+            },
+            icon: Icon(
+              voiceOn ? Icons.volume_up : Icons.volume_off,
+              color: voiceOn ? AppColors.accentSecondary : AppColors.textMutedDark,
+              size: 28,
             ),
           ),
         ],
