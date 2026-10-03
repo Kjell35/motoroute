@@ -160,6 +160,35 @@ describe('WeatherService', () => {
     expect(report.alert).toBeNull();
   });
 
+  it('OWM-Ausfall: fallback auf keyless Open-Meteo statt leerem Radar', async () => {
+    const service = buildService({ OPENWEATHER_API_KEY: 'k' }, jest.fn());
+    const axiosGet = jest.spyOn(require('axios'), 'get');
+    axiosGet.mockReset();
+    // 1. Call (OWM One Call) faehlt; 2. Call (Open-Meteo) liefert Gewitter.
+    axiosGet
+      .mockRejectedValueOnce(new Error('owm down'))
+      .mockResolvedValueOnce({
+        data: {
+          hourly: {
+            time: [new Date(Date.now() + 10 * 60_000).toISOString().slice(0, 16)],
+            temperature_2m: [18],
+            precipitation: [9],
+            wind_gusts_10m: [20],
+            weathercode: [95],
+          },
+        },
+      });
+
+    const report = await service.getRouteWeather(geometry, 600);
+    expect(report.isEnabled).toBe(true);
+    expect(report.segments.length).toBeGreaterThan(0);
+    expect(report.alert).not.toBeNull();
+    expect(report.alert!.severity).toBe('danger');
+    // Beweis im Call-Protokoll: erst openweathermap, dann open-meteo.
+    expect(axiosGet.mock.calls[0][0]).toContain('openweathermap.org');
+    expect(axiosGet.mock.calls[1][0]).toContain('open-meteo.com');
+  });
+
   it('Shelter-Fehler kippt die Wetterwarnung nicht', async () => {
     const poiFind = jest.fn().mockRejectedValue(new Error('POI down'));
     const service = buildService({ OPENWEATHER_API_KEY: 'k' }, poiFind);

@@ -297,7 +297,18 @@ export class WeatherService {
     try {
       let hourly: OwmHourly[];
       if (this.provider === 'owm') {
-        hourly = await this.fetchOwm(lat, lng);
+        try {
+          hourly = await this.fetchOwm(lat, lng);
+        } catch (owmErr) {
+          // OWM-Ausfall (Key-Problem, Quota, Netz) -> keyless Open-Meteo
+          // statt leeres Radar. Böen kommen dort aus wind_gusts_10m, das
+          // Sturm-Tracking bleibt damit voll funktionsfähig; der OWM-
+          // Fehler bleibt im Log sichtbar.
+          this.logger.warn(
+            `OWM nicht erreichbar, fallback auf Open-Meteo: ${String(owmErr)}`,
+          );
+          hourly = await this.fetchOpenMeteo(lat, lng);
+        }
       } else {
         hourly = await this.fetchOpenMeteo(lat, lng);
       }
