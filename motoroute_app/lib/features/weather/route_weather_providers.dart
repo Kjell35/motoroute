@@ -161,6 +161,35 @@ class RouteWeatherRepository {
   }
 }
 
+/// Verdichtet die Routen-Polyline vor dem Senden auf maximal [maxPoints]
+/// Punkte (gleichmäßiges Ausdünnen, Start und Ziel bleiben immer
+/// erhalten).
+///
+/// Der Wetter-Service sampelt ohnehin nur wenige Streckenpunkte ab;
+/// die volle OSRM-Geometrie einer Langstrecke (z. B. Köln -> Stilfser
+/// Joch: ~17.000 Punkte) kostet rund 25x mehr Payload ohne jeden
+/// Informationsgewinn und sprengt den Backend-Cap (50.000). Erreicht
+/// die Route das Limit nicht, wird sie unverändert durchgereicht.
+List<List<double>> thinGeometryForWeather(
+  List<List<double>> geometry,
+  int maxPoints,
+) {
+  if (geometry.length <= maxPoints) return geometry;
+  if (maxPoints < 2) return [geometry.first, geometry.last];
+  // Index-Formel: k-te Stelle exakt gleichverteilt, Start (k=0) und Ziel
+  // (k=maxPoints-1) sind dadurch immer enthalten; Rundungs-De-Dupe hält
+  // das Ergebnis hart unter dem Cap.
+  final n = geometry.length;
+  final thinned = <List<double>>[];
+  for (var k = 0; k < maxPoints; k++) {
+    final idx = (k * (n - 1) / (maxPoints - 1)).round();
+    if (thinned.isEmpty || !identical(thinned.last, geometry[idx])) {
+      thinned.add(geometry[idx]);
+    }
+  }
+  return thinned;
+}
+
 final routeWeatherRepositoryProvider = Provider<RouteWeatherRepository>((ref) {
   return RouteWeatherRepository(ApiClient.create());
 });
@@ -223,7 +252,7 @@ class RouteWeatherController extends StateNotifier<RouteWeatherState> {
     state = state.copyWith(isLoading: true);
     try {
       final report = await _repository.fetchForRoute(
-        geometry: _geometry,
+        geometry: thinGeometryForWeather(_geometry, 2000),
         durationSeconds: _durationSeconds,
       );
       state = RouteWeatherState(report: report);

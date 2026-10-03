@@ -1,25 +1,64 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  IsArray,
   IsNumber,
   Max,
   Min,
+  ValidateBy,
+  ValidationArguments,
+  buildMessage,
 } from 'class-validator';
 import { RouteWeatherReport, WeatherService } from './weather.service';
 
 /**
- * Polyline als [[lng, lat], ...] - exakt die Geometrie, die
- * POST /v1/routes zurückgibt, damit die App sie unverändert
- * durchreichen kann (kein klientseitiges Umschreiben).
+ * Validiert eine Polyline im Route-Format [[lng, lat], ...] - exakt die
+ * Geometrie, die POST /v1/routes zurückgibt und die App unverändert
+ * durchreicht.
+ *
+ * Bewusst ein eigener Validator statt @IsNumber({ each: true }): "each"
+ * validiert die ELEMENTE von geometry - das sind aber Arrays, keine
+ * Zahlen, sodass das App-Format IMMER mit 400 abgelehnt wurde und der
+ * Wetter-Radar in Produktion unbenutzbar war (Audit 03.10.2026: App-
+ * Format -> 400, flaches Array -> 500 im Service; kein gültiges Format
+ * existierte). Zusätzlich prüft er pro Punkt Bereich und Länge 2.
+ *
+ * Cap 50.000 Punkte (~1 MB worst case): Lange Touren (z. B. Köln ->
+ * Stilfser Joch) haben ~17.000 Punkte. Der Service sampelt ohnehin auf
+ * wenige Wetter-Samples herunter; der Cap schützt nur vor Missbrauch.
+ * Ab v0.4.9 verdichtet die App vor dem Senden auf 2.000 Punkte.
  */
+const MAX_ROUTE_POINTS = 50_000;
+
+const IsLngLatPolyline = (maxPoints: number = MAX_ROUTE_POINTS) =>
+  ValidateBy({
+    name: 'isLngLatPolyline',
+    constraints: [maxPoints],
+    validator: {
+      validate(value: unknown, args?: ValidationArguments): boolean {
+        const [max] = args!.constraints as number[];
+        if (!Array.isArray(value) || value.length < 2 || value.length > max) {
+          return false;
+        }
+        return value.every(
+          (p) =>
+            Array.isArray(p) &&
+            p.length === 2 &&
+            Number.isFinite(p[0]) &&
+            Number.isFinite(p[1]) &&
+            p[0] >= -180 &&
+            p[0] <= 180 && // lng
+            p[1] >= -90 &&
+            p[1] <= 90, // lat
+        );
+      },
+      defaultMessage: buildMessage(
+        (eachPrefix) =>
+          `${eachPrefix}$property muss eine Polyline [[lng, lat], ...] mit 2..$constraint1 Punkten sein`,
+      ),
+    },
+  });
+
 export class RouteWeatherDto {
-  @IsArray()
-  @ArrayMinSize(2)
-  @ArrayMaxSize(2000)
-  @IsNumber({}, { each: true })
-  @ArrayMaxSize(200)
+  @IsLngLatPolyline()
   geometry: number[][];
 
   /** Gesamte Fahrzeit der Route (Sekunden) für die ETA-Zuordnung. */
