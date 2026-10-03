@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -270,8 +272,11 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
                           clipBehavior: Clip.antiAlias,
-                          child: Image.network(
-                            p.path,
+                          // LOKALE Datei (ImagePicker) -> Image.file. Image.
+                          // network kann mit einem Gerätepfaad niemals laden
+                          // (früher: Vorschau zeigte immer nur den Platzhalter).
+                          child: Image.file(
+                            File(p.path),
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.image)),
                           ),
