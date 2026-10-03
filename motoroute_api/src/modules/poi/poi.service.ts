@@ -60,6 +60,21 @@ const CURATED_TOMTOM: Partial<Record<PoiCategory, { setId: string; query: string
  */
 const BIKER_KEYWORDS = /biker|motorrad|motorcycle|harley|\bmc\b/i;
 
+/** Google Places API (New): Timeout + TTL-Cache für Detail-Anreicherung. */
+const GOOGLE_TIMEOUT_MS = 6000;
+const GOOGLE_ENRICH_TTL_MS = 24 * 60 * 60 * 1000; // Detail-Daten ändern sich selten
+const GOOGLE_ENRICH_CACHE_MAX = 2000;
+
+interface GoogleEnrichment {
+  description: string | null;
+  website: string | null;
+  imageUrl: string | null; // Backend-relativer Foto-Proxy-Pfad
+  googleMapsUri: string | null;
+  googleSummary: string | null;
+  photoAttribution: string | null;
+  matched: boolean;
+}
+
 function computeBikerScore(category: PoiCategory, name: string): number {
   let score = 40;
   if (category === PoiCategory.BIKER_MEETUP) score += 35;
@@ -112,9 +127,13 @@ declare module './entities/poi.entity' {
 export class PoiService {
   private readonly logger = new Logger(PoiService.name);
   private readonly tomtomKey: string;
+  private readonly googleKey: string;
 
   /** TTL-Cache für TomTom-Antworten pro Kategorie+BBox-Rasterzelle. */
   private curatedCache = new Map<string, { data: Poi[]; expiresAt: number }>();
+
+  /** TTL-Cache für Google-Detail-Anreicherung pro poi-id. */
+  private googleEnrichCache = new Map<string, { data: GoogleEnrichment | null; expiresAt: number }>();
 
   constructor(
     private readonly config: ConfigService,
@@ -123,6 +142,9 @@ export class PoiService {
     // Gleicher Key wie der Verkehrsdienst: Der Betreiber gibt EINEN
     // TomTom-Key an, der für Traffic UND Kuratierung arbeitet.
     this.tomtomKey = config.get<string>('TRAFFIC_API_KEY') ?? '';
+    // Google Places (New) für die Detail-Anreicherung (Name/Bild/Beschreibung/
+    // Website). Ohne Key degradiert der Endpunkt auf OSM/DB-Daten.
+    this.googleKey = config.get<string>('GOOGLE_PLACES_API_KEY') ?? '';
   }
 
   async findInBoundingBox(query: QueryPoisDto): Promise<Poi[]> {
@@ -156,26 +178,25 @@ export class PoiService {
    * POIs stammen vom Biker-POI-Dienst (TomTom-Kuratierung), OSM-POIs von
    * OpenStreetMap - wir erfinden keine Nutzer-Ersteller.
    */
-  async findDetail(id: string): Promise<PoiDetail | null> {
-    if (!this.supabase) return null;
-
+  async findDetail(
+    id: string,
+    lat?: number,
+    lng?: number,
+    categoryHint?: string,
+  ): Promise<PoiDetail | null> {
     let row: Record<string, unknown> | null = null;
-    const { data, error } = await this.supabase
-      .from('poi')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-    if (!error && data) row = data as Record<string, unknown>;
-
-    if (!row) {
-      // Nicht in der Tabelle: OSM-IDs können on-demand nachgeladen
-      // werden - hier bewusst schlank: ohne DB-Zeile keine Metadaten.
-      return null;
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('poi')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (!error && data) row = data as Record<string, unknown>;
     }
 
-    const meta = (row.metadata ?? {}) as Record<string, unknown>;
+    const meta = (row?.metadata ?? {}) as Record<string, unknown>;
     const websiteRaw = typeof meta['website'] === 'string' ? meta['website'] : null;
-    const website = websiteRaw
+    let website = websiteRaw
       ? websiteRaw.startsWith('http')
         ? websiteRaw
         : `https://${websiteRaw}`
@@ -184,30 +205,214 @@ export class PoiService {
     const opening = typeof meta['opening_hours'] === 'string' ? meta['opening_hours'] : null;
     const address = typeof meta['address'] === 'string' ? meta['address'] : null;
     const descriptionParts = [opening, address].filter(Boolean) as string[];
+    let description = descriptionParts.length > 0 ? descriptionParts.join(' · ') : null;
+    let imageUrl = typeof meta['image_url'] === 'string' ? meta['image_url'] : null;
 
-    const source = String(row.source ?? 'OSM');
-    const category = String(row.category);
+    const source = String(row?.source ?? 'OSM');
+    const category = String(row?.category ?? categoryHint ?? 'FUEL');
+    const name = String(row?.name ?? '');
+    const poiLat = row ? Number(row.lat) : lat;
+    const poiLng = row ? Number(row.lng) : lng;
+
+    // Ohne DB-Zeile UND ohne Koordinaten gibt es keine verlässliche
+    // Quelle - ehrlich null statt ein Detail erfinden.
+    if (!row && (poiLat == null || poiLng == null)) return null;
+
+    // Google-Anreicherung (Detail-Abrufe sind selten -> Kosten ok).
+    const enrich = await this.enrichFromGoogle(
+      id,
+      name,
+      category,
+      poiLat as number,
+      poiLng as number,
+    );
+    if (enrich) {
+      if (!description && enrich.description) description = enrich.description;
+      if (!website && enrich.website) website = enrich.website;
+      if (!imageUrl && enrich.imageUrl) imageUrl = enrich.imageUrl;
+    }
+
+    // Vertrag: Ohne DB-Zeile lohnt die Antwort nur MIT Google-Anreicherung
+    // (sonst enthält sie nichts, was die App nicht schon hat) - dann null
+    // (404), das Sheet zeigt die Basis-Daten aus dem Karten-Treffer.
+    if (!row && !enrich?.matched) return null;
+
+    const publishedBy =
+      source === 'CURATED'
+        ? 'Biker-POI-Kuratierung (TomTom)'
+        : source === 'COMMUNITY'
+          ? 'MotoRoute Community'
+          : enrich?.matched
+            ? 'Google Places'
+            : 'OpenStreetMap';
 
     return {
-      id: String(row.id),
+      id: String(row?.id ?? id),
       category,
-      name: String(row.name),
-      lat: Number(row.lat),
-      lng: Number(row.lng),
-      source,
-      description: descriptionParts.length > 0 ? descriptionParts.join(' · ') : null,
+      name: name || (enrich?.googleSummary ?? '') || 'POI',
+      lat: Number(poiLat),
+      lng: Number(poiLng),
+      source: enrich?.matched ? `${source}+GOOGLE` : source,
+      description,
       website,
-      imageUrl: typeof meta['image_url'] === 'string' ? meta['image_url'] : null,
+      imageUrl,
       bikerScore: typeof meta['bikerScore'] === 'number' ? (meta['bikerScore'] as number) : null,
       originTag: typeof meta['origin_tag'] === 'string' ? meta['origin_tag'] : null,
-      publishedAt: typeof row.created_at === 'string' ? row.created_at : null,
-      publishedBy:
-        source === 'CURATED'
-          ? 'Biker-POI-Kuratierung (TomTom)'
-          : source === 'COMMUNITY'
-            ? 'MotoRoute Community'
-            : 'OpenStreetMap',
+      publishedAt:
+        typeof row?.created_at === 'string'
+          ? (row.created_at as string)
+          : enrich?.matched
+            ? new Date().toISOString()
+            : null,
+      publishedBy,
+      googleMapsUri: enrich?.googleMapsUri ?? null,
+      googleSummary: enrich?.matched ? enrich.description : null,
+      photoAttribution: enrich?.photoAttribution ?? null,
     };
+  }
+
+  /**
+   * Google Places Foto-Proxy: lädt ein Foto serverseitig (der API-Key
+   * bleibt im Backend) und streamt die Bytes. Die App löst die relative
+   * Proxy-URL gegen ihre API-Basis auf - Google-Key landet nie im Client.
+   */
+  async fetchGooglePhoto(name: string): Promise<{ data: Buffer; contentType: string } | null> {
+    if (!this.googleKey) return null;
+    // Strenges Format: der Query-Param darf kein SSRF-/Key-Träger sein.
+    if (!/^places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+\/media$/.test(name)) return null;
+    try {
+      const response = await axios.get<ArrayBuffer>(
+        `https://places.googleapis.com/v1/${name}`,
+        {
+          params: { key: this.googleKey, maxHeightPx: 800, maxWidthPx: 800, skipHttpRedirect: true },
+          timeout: GOOGLE_TIMEOUT_MS,
+          responseType: 'arraybuffer',
+        },
+      );
+      const contentType = String(response.headers['content-type'] ?? 'image/jpeg');
+      if (!contentType.startsWith('image/')) return null;
+      return { data: Buffer.from(response.data), contentType };
+    } catch (e) {
+      this.logger.warn(`Google-Foto fehlgeschlagen: ${String(e)}`);
+      return null;
+    }
+  }
+
+  /**
+   * OSM-ID-Format "osm-<type>-<id>" erkennen (node/way/relation). Die
+   * sachliche Kategorie kommt aus dem App-Kontext (Kategorien-Filter) -
+   * der ID-Typ allein sagt nichts über FUEL/RESTAURANT/... aus.
+   */
+  private isOsmId(id: string): boolean {
+    return /^osm-[a-z]+-[0-9]+$/.test(id);
+  }
+
+  /**
+   * Google Places (New) Detail-Anreicherung: Nearby-Match an den
+   * POI-Koordinaten (50 m) liefert Foto, Summary, Website, Maps-Deeplink.
+   * 24-h-Cache pro poi-id; Fehler und "kein Key" degradieren zu null
+   * (App zeigt die OSM/DB-Daten), wirft niemals.
+   */
+  private async enrichFromGoogle(
+    id: string,
+    name: string,
+    category: string,
+    lat: number,
+    lng: number,
+  ): Promise<GoogleEnrichment | null> {
+    if (!this.googleKey) return null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    const cached = this.googleEnrichCache.get(id);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+    let result: GoogleEnrichment | null = null;
+    try {
+      // Google-Typ passend zur POI-Kategorie. Blitzer (SPEED_CAMERA)
+      // hat bei Google keine Entsprechung -> gar nicht erst suchen.
+      const typeFor: Record<string, string | undefined> = {
+        FUEL: 'gas_station',
+        MOTO_HOTEL: 'hotel',
+        BIKER_MEETUP: 'bar',
+        CAMPSITE: 'campground',
+        ICE_CREAM: 'ice_cream_shop',
+        RESTAURANT: 'restaurant',
+        PUB: 'bar',
+        SNACK: 'fast_food',
+      };
+      const googleType = typeFor[category];
+      if (!googleType) return null;
+
+      const search = await axios.post(
+        'https://places.googleapis.com/v1/places:searchNearby',
+        {
+          includedTypes: [googleType],
+          maxResultCount: 5,
+          locationRestriction: {
+            circle: { center: { latitude: lat, longitude: lng }, radius: 50 },
+          },
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': this.googleKey,
+            'X-Goog-FieldMask':
+              'places.id,places.displayName,places.formattedAddress,places.websiteUri,places.googleMapsUri,places.photos,places.editorialSummary',
+          },
+          timeout: GOOGLE_TIMEOUT_MS,
+        },
+      );
+
+      const places: Array<Record<string, unknown>> = search.data?.places ?? [];
+      // Nächster Treffer mit gleichem/ähnlichem Namen - ein reiner
+      // 50-m-Näherungs-Treffer mit ganz anderem Namen wäre falsch.
+      const norm = (s: string) =>
+        s.toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
+      const want = norm(name);
+      const chosen =
+        places.find((p) => {
+          const dn = (p['displayName'] as { text?: string } | undefined)?.text ?? '';
+          return want && (norm(dn).includes(want) || want.includes(norm(dn)));      }) ?? places[0];
+
+      if (chosen) {
+        const photo = (chosen['photos'] as Array<Record<string, unknown>> | undefined)?.[0];
+        const photoName = typeof photo?.['name'] === 'string' ? (photo['name'] as string) : null;
+        const summaryText =
+          (chosen['editorialSummary'] as { text?: string } | undefined)?.text ?? null;
+        const addr = (chosen['formattedAddress'] as string | undefined) ?? null;
+        const gSummary = summaryText ?? addr;
+        const authorAttr =
+          (photo?.['authorAttributions'] as Array<Record<string, unknown>> | undefined)?.[0];
+        result = {
+          description: gSummary,
+          website: (chosen['websiteUri'] as string | undefined) ?? null,
+          imageUrl: photoName ? `/v1/pois/photo?name=${encodeURIComponent(photoName)}` : null,
+          googleMapsUri: (chosen['googleMapsUri'] as string | undefined) ?? null,
+          googleSummary: summaryText ?? null,
+          photoAttribution:
+            typeof authorAttr?.['displayName'] === 'string'
+              ? (authorAttr['displayName'] as string)
+              : null,
+          matched: true,
+        };
+      }
+    } catch (e) {
+      // Degradation: kein Google -> OSM/DB-Daten reichen; Log sichtbar.
+      this.logger.warn(`Google-Enrichment fehlgeschlagen: ${String(e)}`);
+      result = null;
+    }
+
+    this.googleEnrichCache.set(id, {
+      data: result,
+      expiresAt: Date.now() + GOOGLE_ENRICH_TTL_MS,
+    });
+    if (this.googleEnrichCache.size > GOOGLE_ENRICH_CACHE_MAX) {
+      const now = Date.now();
+      for (const [k, v] of this.googleEnrichCache) {
+        if (v.expiresAt <= now) this.googleEnrichCache.delete(k);
+      }
+    }
+    return result;
   }
 
   /**

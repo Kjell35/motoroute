@@ -113,6 +113,18 @@ class PoiMapLayer {
     _lastLoad = now;
     _lastLoadedBounds = bounds;
 
+    await _loadAndRender(ref, bounds);
+  }
+
+  /// Gemeinsamer Kern von refresh() und refreshIgnoringThrottle():
+  /// Viewport-Abfrage + Biker-Merge + Render. Fehler landen im Layer-
+  /// Controller, statt den Layer zu töten.
+  Future<void> _loadAndRender(WidgetRef ref, LatLngBounds bounds) async {
+    final categories = ref.read(activePoiCategoriesProvider);
+    if (categories.isEmpty) {
+      await _clear();
+      return;
+    }
     try {
       final pois = await ref.read(poiRepositoryProvider).fetchInBoundingBox(
             minLng: bounds.southwest.longitude,
@@ -185,6 +197,30 @@ class PoiMapLayer {
         );
     await _render(combined);
   }
+
+  /// Ob schon ein Viewport geladen wurde (für den Sofort-Filter:
+  /// Toggles vor dem ersten Kamera-Idle können nur leeren).
+  bool get hasLastBounds => _lastLoadedBounds != null;
+
+  /// Sofortiges Neuladen nach Kategorie-Toggle - bewusst OHNE die 5-s-
+  /// Drosselung und OHNE sameArea-Skip: Der Filter muss sich sofort
+  /// spürbar ändern (POI verschwindet in der Sekunde des Toggles),
+  /// nicht beim nächsten Kartenschubsen. Nur in der Nahsicht wird
+  /// nachgeladen (außerhalb ist der Layer ohnehin leer).
+  Future<void> refreshIgnoringThrottle(WidgetRef ref) async {
+    final bounds = _lastLoadedBounds;
+    if (bounds == null || !_isCloseUp(bounds)) {
+      _rendered = false;
+      await _clear();
+      return;
+    }
+    _lastLoad = DateTime.now();
+    await _loadAndRender(ref, bounds);
+  }
+
+  /// Harte Leerung ohne Nachladen (z. B. Toggle bevor die Karte bereit
+  /// ist) - der nächste Kamera-Idle lädt konsistent nach.
+  Future<void> clearNow() => _clear();
 
   bool _inBounds(Poi p, LatLngBounds bounds) {
     return p.lat >= bounds.southwest.latitude &&

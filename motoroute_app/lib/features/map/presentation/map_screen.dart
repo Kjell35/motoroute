@@ -65,6 +65,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     ref.listenManual<MapStyleChoice>(mapStyleChoiceProvider, (prev, next) {
       if (prev != next) _loadStyle();
     });
+    // POI-Kategorie-Toggles SOFORT anwenden: Vorher zeichnete der Layer
+    // nur bei der nächsten Kartenbewegung neu - ein frisch abgewählter
+    // POI blieb bis dahin sichtbar (Audit-Fund "Filter wirkt nicht").
+    ref.listenManual<Set<PoiCategory>>(activePoiCategoriesProvider, (prev, next) {
+      if (!mounted || identical(prev, next)) return;
+      if (_poiLayer.hasLastBounds) {
+        _poiLayer.refreshIgnoringThrottle(ref);
+      } else {
+        _poiLayer.clearNow();
+      }
+    });
   }
 
   /// Biker-POI-Live-Anbindung: 1) WS-Push (bikerpoi.batch über die
@@ -423,10 +434,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final bikerPoi = poi is BikerPoi ? poi : null;
 
     // Detail nachladen (Metadaten: website, image, published-at/by).
-    // Fehler/404 sind okay - das Sheet zeigt dann die Basis-Daten.
+    // Koordinaten + Kategorie gehen mit, damit das Backend Live-OSM-POIs
+    // ohne DB-Zeile über Google anreichern kann. Fehler/404 sind okay -
+    // das Sheet zeigt dann die Basis-Daten.
     PoiDetail? detail;
     try {
-      detail = await ref.read(poiRepositoryProvider).fetchDetail(poi.id);
+      detail = await ref.read(poiRepositoryProvider).fetchDetail(
+            poi.id,
+            lat: poi.lat,
+            lng: poi.lng,
+            category: poi.category,
+          );
     } catch (_) {}
 
     if (!mounted) return;
@@ -540,6 +558,35 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         '${poi.lat.toStringAsFixed(5)}, ${poi.lng.toStringAsFixed(5)}',
                         style: AppTypography.caption,
                       ),
+                      // Google-DeepLink ("In Google Maps öffnen") - nur
+                      // wenn der Backend-Match einen Link mitbringt.
+                      if (detail?.googleMapsUri != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: InkWell(
+                            onTap: () async {
+                              final uri = Uri.tryParse(detail!.googleMapsUri!);
+                              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            },
+                            child: const Text(
+                              'In Google Maps öffnen',
+                              style: TextStyle(
+                                color: AppColors.accentSecondary,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Pflicht-Attribution des Google-Fotos (ToS).
+                      if (detail?.photoAttribution != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Foto: ${detail!.photoAttribution}',
+                            style: AppTypography.caption,
+                          ),
+                        ),
                       const SizedBox(height: AppSpacing.md),
                       // Veröffentlichung (unten): wann und von wem -
                       // ehrlich je nach Quelle (OSM / Kuratierung / Community).

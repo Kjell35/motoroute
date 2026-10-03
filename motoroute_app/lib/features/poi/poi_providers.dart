@@ -42,7 +42,12 @@ extension on String {
         'CAMPSITE' => PoiCategory.campsite,
         'ICE_CREAM' => PoiCategory.iceCream,
         'SPEED_CAMERA' => PoiCategory.speedCamera,
-        _ => PoiCategory.fuel,
+        'RESTAURANT' => PoiCategory.restaurant,
+        'PUB' => PoiCategory.pub,
+        'SNACK' => PoiCategory.snack,
+        // Biker-Service-Fallback: unbekannte Kategorie als Restaurant
+        // (kräftiges Gelb, Kulinarik-Familie) statt still als Tankstelle.
+        _ => PoiCategory.restaurant,
       };
 }
 
@@ -60,6 +65,9 @@ class PoiDetail {
   final String? originTag;
   final String? publishedAt;
   final String? publishedBy;
+  final String? googleMapsUri;
+  final String? googleSummary;
+  final String? photoAttribution;
 
   const PoiDetail({
     required this.id,
@@ -73,6 +81,9 @@ class PoiDetail {
     required this.originTag,
     required this.publishedAt,
     required this.publishedBy,
+    required this.googleMapsUri,
+    required this.googleSummary,
+    required this.photoAttribution,
   });
 
   factory PoiDetail.fromJson(Map<String, dynamic> json) => PoiDetail(
@@ -87,6 +98,9 @@ class PoiDetail {
         originTag: json['originTag'] as String?,
         publishedAt: json['publishedAt'] as String?,
         publishedBy: json['publishedBy'] as String?,
+        googleMapsUri: json['googleMapsUri'] as String?,
+        googleSummary: json['googleSummary'] as String?,
+        photoAttribution: json['photoAttribution'] as String?,
       );
 }
 
@@ -125,16 +139,47 @@ class PoiRepository {
   }
 
   /// Detail-Daten für das POI-Sheet (404 -> PoiDetail?-null; das Sheet
-  /// zeigt dann die Basis-Infos aus dem Karten-Treffer).
-  Future<PoiDetail?> fetchDetail(String id) async {
+  /// zeigt dann die Basis-Infos aus dem Karten-Treffer). Koordinaten und
+  /// Kategorie gehen mit: Damit kann das Backend auch Live-OSM-POIs ohne
+  /// DB-Zeile über einen Google-Nearby-Match anreichern (Bild, Website,
+  /// Beschreibung). Relative Foto-Proxy-URLs (/v1/pois/photo?...) löst
+  /// diese Methode gegen die API-Basis auf - der Google-Key bleibt im
+  /// Backend.
+  Future<PoiDetail?> fetchDetail(
+    String id, {
+    double? lat,
+    double? lng,
+    PoiCategory? category,
+  }) async {
     if (id.startsWith('biker-')) {
       // Biker-Service-Delta-POIs leben im App-Cache, nicht in der
       // poi-Tabelle - ohne serverseitige Zeile gibt es kein erweitertes
       // Detail; das Sheet fällt auf die Basis-Daten zurück.
       return null;
     }
-    final res = await _dio.get<Map<String, dynamic>>('/v1/pois/$id');
-    return PoiDetail.fromJson(res.data ?? const {});
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/pois/$id',
+      queryParameters: {
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+        if (category != null) 'category': category.apiValue,
+      },
+    );
+    final detail = PoiDetail.fromJson(res.data ?? const {});
+    final img = detail.imageUrl;
+    if (img != null && img.startsWith('/')) {
+      // Relativer Foto-Proxy-Pfad -> gegen die Basis des injizierten
+      // Dio auflösen (dort steht die API-Basis inkl. Dart-Define).
+      final base = _dio.options.baseUrl;
+      final resolved = base.endsWith('/')
+          ? '${base.substring(0, base.length - 1)}$img'
+          : '$base$img';
+      return PoiDetail.fromJson({
+        ...res.data!,
+        'imageUrl': resolved,
+      });
+    }
+    return detail;
   }
 }
 
