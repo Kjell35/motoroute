@@ -146,16 +146,23 @@ class MpListing {
   }
 
   factory MpListing.fromJson(Map<String, dynamic> json) {
+    // Server-Vertrag: `image_urls` enthält FERTIGE Supabase-publicUrls
+    // (vom Server berechnet - die öffentliche Storage-Domain ist die
+    // Supabase-URL, nicht die API-Domain). `images` mit rohen storage_
+    // paths ist nur noch Legacy-Fallback für alte gecachte Responses.
     List<String> images = const [];
-    final rawImages = json['images'];
-    if (rawImages is List) {
-      images = rawImages
-          .map((e) => e is Map ? e['storage_path'] as String? : null)
-          .whereType<String>()
-          .map(_storagePathToUrl)
-          .toList(growable: false);
-    } else if (json['image_urls'] is List) {
-      images = (json['image_urls'] as List).cast<String>();
+    final rawUrls = json['image_urls'];
+    if (rawUrls is List) {
+      images = rawUrls.whereType<String>().toList(growable: false);
+    } else {
+      final rawImages = json['images'];
+      if (rawImages is List) {
+        images = rawImages
+            .map((e) => e is Map ? e['storage_path'] as String? : null)
+            .whereType<String>()
+            .map(_storagePathToUrl)
+            .toList(growable: false);
+      }
     }
 
     return MpListing(
@@ -180,7 +187,10 @@ class MpListing {
     );
   }
 
-  /// Storage-Pfad -> öffentliche URL im Bucket marketplace-photos.
+  /// LEGACY-Fallback: Storage-Pfad -> URL. Produziert URLs gegen die
+  /// API-Domain, wo der Storage-Pfad 404 liefert (Fotos liegen bei
+  /// Supabase). Nur noch für Responses OHNE image_urls - der Server
+  /// liefert die echten URLs seit dem Foto-Fix immer selbst.
   static String _storagePathToUrl(String path) =>
       '${ApiClient.baseUrl.replaceAll(RegExp(r'/v1$'), '')}/storage/v1/object/public/marketplace-photos/$path';
 }

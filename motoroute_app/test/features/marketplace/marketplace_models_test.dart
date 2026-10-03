@@ -66,6 +66,29 @@ void main() {
       expect(listing.reviewStatus.isPubliclyVisible, isFalse);
     });
 
+    test('image_urls (fertige Supabase-URLs vom Server) schlägt Legacy-Shape', () {
+      final listing = MpListing.fromJson({
+        'id': 'z',
+        'title': 'Mit Server-URLs',
+        'price_cents': 2500,
+        'condition': 'gut',
+        'category': 'motorradteile',
+        'subcategory': 'auspuff',
+        'location_label': 'Hamburg',
+        'created_at': '2026-10-03T10:00:00.000Z',
+        // Beide Shapes im Payload: image_urls MUSS gewinnen (sonst fällt
+        // der Parser auf den falschen API-Domain-URL-Builder zurück).
+        'images': [
+          {'storage_path': 'seller/listing/0.jpg', 'position': 0},
+        ],
+        'image_urls': ['https://supabase.example/storage/v1/object/public/marketplace-photos/seller/listing/0.jpg'],
+      });
+
+      expect(listing.imageUrls, [
+        'https://supabase.example/storage/v1/object/public/marketplace-photos/seller/listing/0.jpg',
+      ]);
+    });
+
     test('abgelehnt + Grund wird getragen (Punkt 6: Nutzer informieren)', () {
       final listing = MpListing.fromJson({
         'id': 'y',

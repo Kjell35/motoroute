@@ -53,6 +53,43 @@ export interface ListingRow {
   [key: string]: unknown;
 }
 
+/**
+ * Bild-Embed für Listing-Queries. Die RAW-Zeile enthält nur
+ * storage_paths - der Client DARF daraus keine URLs bauen (die öffentliche
+ * Storage-Domain ist die Supabase-URL, nicht die API-Domain; der frühere
+ * Client-seitige URL-Builder produzierte 404er für jedes Foto).
+ * Deshalb liefert der Server IMMER `image_urls` mit echten, von Supabase
+ * berechneten publicUrls (siehe withImageUrls).
+ */
+const LISTING_IMAGES = 'images:marketplace_images(storage_path, position)';
+
+/** Listing-Zeile mit Bild-Embed (storage_paths, noch ohne URLs). */
+const LISTING_SELECT_WITH_IMAGES = `${LISTING_SELECT}, ${LISTING_IMAGES}`;
+
+/**
+ * Ersetzt das rohe `images`-Embed (storage_paths) durch `image_urls` mit
+ * echten Supabase-publicUrls (positionssortiert). Entfernt das rohe Feld
+ * strikt, damit kein Client auf die falsche Url-Form zurückfallen kann.
+ */
+function withImageUrls(
+  supabase: SupabaseClient,
+  listing: Record<string, unknown>,
+): Record<string, unknown> {
+  const raw = Array.isArray(listing['images']) ? (listing['images'] as { storage_path?: string; position?: number }[]) : [];
+  const sorted = [...raw].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const urls = sorted
+    .filter((img) => typeof img.storage_path === 'string' && img.storage_path.length > 0)
+    .map((img) => {
+      const path = img.storage_path as string;
+      const { data: pub } = supabase.storage.from('marketplace-photos').getPublicUrl(path);
+      return pub.publicUrl as string;
+    });
+  const out = { ...listing };
+  delete out['images'];
+  out['image_urls'] = urls;
+  return out;
+}
+
 function mapSupabaseError(operation: string, error: { code?: string; message?: string } | null): never {
   const code = error?.code ?? '';
   const message = error?.message ?? 'unknown database error';
@@ -235,11 +272,11 @@ export class MarketplaceService {
         reviewed_at: new Date().toISOString(),
       })
       .eq('id', listingId)
-      .select(LISTING_SELECT)
+      .select(LISTING_SELECT_WITH_IMAGES)
       .single();
     if (updErr) mapSupabaseError('createListing.review', updErr);
 
-    return { listing: updated as ListingRow };
+    return { listing: withImageUrls(admin, updated as Record<string, unknown>) as ListingRow };
   }
 
   /**
@@ -350,10 +387,10 @@ export class MarketplaceService {
         reviewed_at: new Date().toISOString(),
       })
       .eq('id', listingId)
-      .select(LISTING_SELECT)
+      .select(LISTING_SELECT_WITH_IMAGES)
       .single();
     if (error) mapSupabaseError('runReview', error);
-    return { listing: data as ListingRow };
+    return { listing: withImageUrls(this.adminClient!, data as Record<string, unknown>) as ListingRow };
   }
 
   private async getOwnListing(user: AuthenticatedUser, listingId: string): Promise<ListingRow> {
@@ -391,11 +428,11 @@ export class MarketplaceService {
     this.ensureConfigured();
     const { data, error } = await this.adminClient!
       .from('marketplace_listings')
-      .select(LISTING_SELECT)
+      .select(LISTING_SELECT_WITH_IMAGES)
       .eq('seller_id', user.id)
       .order('created_at', { ascending: false });
     if (error) mapSupabaseError('myListings', error);
-    return { listings: (data ?? []) as ListingRow[] };
+    return { listings: (data ?? []).map((l) => withImageUrls(this.adminClient!, l as Record<string, unknown>)) as ListingRow[] };
   }
 
   async updateStatus(
@@ -424,10 +461,10 @@ export class MarketplaceService {
       .update({ status })
       .eq('id', listingId)
       .eq('seller_id', user.id)
-      .select(LISTING_SELECT)
+      .select(LISTING_SELECT_WITH_IMAGES)
       .single();
     if (error) mapSupabaseError('updateStatus', error);
-    return { listing: data as ListingRow };
+    return { listing: withImageUrls(this.adminClient!, data as Record<string, unknown>) as ListingRow };
   }
 
   async deleteListing(user: AuthenticatedUser, listingId: string): Promise<void> {
@@ -525,7 +562,7 @@ export class MarketplaceService {
 
     let query = admin
       .from('marketplace_listings')
-      .select(`${LISTING_SELECT}, images:marketplace_images(storage_path, position)`, { count: 'exact' })
+      .select(LISTING_SELECT_WITH_IMAGES, { count: 'exact' })
       .eq('status', 'active')
       .eq('review_status', 'approved');
 
@@ -599,7 +636,7 @@ export class MarketplaceService {
     if (error) mapSupabaseError('listPublic', error);
 
     return {
-      listings: (data ?? []) as Record<string, unknown>[],
+      listings: (data ?? []).map((l) => withImageUrls(admin, l as Record<string, unknown>)),
       total: count ?? 0,
     };
   }
@@ -615,7 +652,7 @@ export class MarketplaceService {
       .maybeSingle();
     if (error) mapSupabaseError('getPublicListing', error);
     if (!data) throw new NotFoundException({ error: 'LISTING_NOT_FOUND', message: 'Angebot nicht gefunden' });
-    return data as Record<string, unknown>;
+    return withImageUrls(this.adminClient!, data as Record<string, unknown>);
   }
 
   /** Verkaeufer-Info eines Angebots (oeffentliche Kennung, keine privaten Daten). */
@@ -691,16 +728,11 @@ export class MarketplaceService {
     // Bilder pro Listing nach position sortieren (im Code, da 'images'
     // nicht per foreignTable order erreichbar ist - siehe oben).
     const rows = (data ?? []) as unknown as { listing: Record<string, unknown> }[];
-    const listings = rows.map((row) => {
-      const listing = row.listing;
-      if (Array.isArray(listing.images)) {
-        (listing.images as { position?: number }[]).sort(
-          (a, b) => (a.position ?? 0) - (b.position ?? 0),
-        );
-      }
-      return listing;
-    });
-    return { listings };
+    // withImageUrls sortiert die Bilder intern nach position und liefert
+    // image_urls mit echten Supabase-URLs statt der rohen storage_paths.
+    return {
+      listings: rows.map((row) => withImageUrls(this.adminClient!, row.listing)),
+    };
   }
 
   // =========================================================================
@@ -762,12 +794,12 @@ export class MarketplaceService {
     await this.requireAdmin(user);
     const { data, error } = await this.adminClient!
       .from('marketplace_listings')
-      .select(LISTING_SELECT)
+      .select(LISTING_SELECT_WITH_IMAGES)
       .in('review_status', ['manual_review', 'rejected', 'pending'])
       .order('reviewed_at', { ascending: true, nullsFirst: true })
       .limit(100);
     if (error) mapSupabaseError('adminListPending', error);
-    return { listings: (data ?? []) as Record<string, unknown>[] };
+    return { listings: (data ?? []).map((l) => withImageUrls(this.adminClient!, l as Record<string, unknown>)) };
   }
 
   async adminListReports(user: AuthenticatedUser): Promise<{ reports: Record<string, unknown>[] }> {
@@ -802,10 +834,10 @@ export class MarketplaceService {
       .from('marketplace_listings')
       .update(update)
       .eq('id', listingId)
-      .select(LISTING_SELECT)
+      .select(LISTING_SELECT_WITH_IMAGES)
       .single();
     if (error) mapSupabaseError('adminSetStatus', error);
-    return data as Record<string, unknown>;
+    return withImageUrls(this.adminClient!, data as Record<string, unknown>);
   }
 
   async adminDeleteListing(user: AuthenticatedUser, listingId: string): Promise<void> {
