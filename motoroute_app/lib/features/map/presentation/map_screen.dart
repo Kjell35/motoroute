@@ -444,6 +444,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             lat: poi.lat,
             lng: poi.lng,
             category: poi.category,
+            name: poi.name,
           );
     } catch (_) {}
 
@@ -558,6 +559,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         '${poi.lat.toStringAsFixed(5)}, ${poi.lng.toStringAsFixed(5)}',
                         style: AppTypography.caption,
                       ),
+                      // Wikipedia-Quelle der Beschreibung (CC BY-SA macht
+                      // die Namensangabe zur Pflicht - ehrlich gekennzeichnet).
+                      if (detail?.descriptionSource == 'wikipedia')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Beschreibung: Wikipedia (CC BY-SA)',
+                            style: AppTypography.caption,
+                          ),
+                        ),
                       // Google-DeepLink ("In Google Maps öffnen") - nur
                       // wenn der Backend-Match einen Link mitbringt.
                       if (detail?.googleMapsUri != null)

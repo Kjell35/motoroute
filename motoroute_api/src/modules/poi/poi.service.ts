@@ -146,6 +146,9 @@ export class PoiService {
   /** TTL-Cache für Wikimedia-Bilder pro poi-id (keyless, kostenlos). */
   private wikiImageCache = new Map<string, { data: WikiImage | null; expiresAt: number }>();
 
+  /** TTL-Cache für Wikipedia-Extracts pro poi-id (keyless, kostenlos). */
+  private wikiDescCache = new Map<string, { data: string | null; expiresAt: number }>();
+
   constructor(
     private readonly config: ConfigService,
     @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient | null,
@@ -194,6 +197,7 @@ export class PoiService {
     lat?: number,
     lng?: number,
     categoryHint?: string,
+    nameHint?: string,
   ): Promise<PoiDetail | null> {
     let row: Record<string, unknown> | null = null;
     if (this.supabase) {
@@ -221,7 +225,9 @@ export class PoiService {
 
     const source = String(row?.source ?? 'OSM');
     const category = String(row?.category ?? categoryHint ?? 'FUEL');
-    const name = String(row?.name ?? '');
+    // Name: DB gewinnt; Live-OSM-POIs ohne Zeile bekommen ihn von der App
+    // mit (nötig für das Wikipedia-Namens-Gate).
+    const name = String(row?.name ?? nameHint ?? '');
     const poiLat = row ? Number(row.lat) : lat;
     const poiLng = row ? Number(row.lng) : lng;
 
@@ -253,10 +259,29 @@ export class PoiService {
       if (wikiImage) imageUrl = wikiImage.imageUrl;
     }
 
+    // Kostenlose Beschreibungs-Kette: ohne eigene Beschreibung holt
+    // Wikipedia (DE) per Geo-Search den Artikel-Extract - NUR wenn der
+    // Artikelname zum POI-Namen passt (Namens-Gate). So bekommt der
+    // "Stilfser Joch"-POI den Pass-Artikel, eine Tankstelle am Dom aber
+    // NICHT den Dom-Text (Genauigkeit schlägt Füllmenge).
+    let wikiDescApplied = false;
+    if (!description) {
+      const wikiDesc = await this.enrichDescriptionFromWikipedia(
+        id,
+        name,
+        poiLat as number,
+        poiLng as number,
+      );
+      if (wikiDesc) {
+        description = wikiDesc;
+        wikiDescApplied = true;
+      }
+    }
+
     // Vertrag: Ohne DB-Zeile lohnt die Antwort nur MIT Anreicherung
     // (sonst enthält sie nichts, was die App nicht schon hat) - dann null
     // (404), das Sheet zeigt die Basis-Daten aus dem Karten-Treffer.
-    if (!row && !enrich?.matched && !wikiImage) return null;
+    if (!row && !enrich?.matched && !wikiImage && !wikiDescApplied) return null;
 
     const publishedBy =
       source === 'CURATED'
@@ -289,6 +314,11 @@ export class PoiService {
       googleMapsUri: enrich?.googleMapsUri ?? null,
       googleSummary: enrich?.matched ? enrich.description : null,
       photoAttribution: enrich?.photoAttribution ?? wikiImage?.photoAttribution ?? null,
+      descriptionSource: wikiDescApplied
+        ? 'wikipedia'
+        : enrich?.matched && enrich.description
+          ? 'google'
+          : null,
     };
   }
 
@@ -508,6 +538,77 @@ export class PoiService {
       const now = Date.now();
       for (const [k, v] of this.wikiImageCache) {
         if (v.expiresAt <= now) this.wikiImageCache.delete(k);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Wikipedia (DE) Extract per Geo-Search: Pass-/Sehenswürdigkeits-
+   * Beschreibung keyless und kostenlos (CC BY-SA). Hartes Namens-Gate:
+   * Der Artikel-Titel muss zum POI-Namen passen (beidseitiger includes
+   * nach Normalisierung) - sonst würde die Tankstelle neben dem Dom
+   * dessen Text erben. 24-h-Cache, Fehler degradieren zu null.
+   */
+  private async enrichDescriptionFromWikipedia(
+    id: string,
+    name: string,
+    lat: number,
+    lng: number,
+  ): Promise<string | null> {
+    if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    const cacheKey = `desc:${id}`;
+    const cached = this.wikiDescCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+    let result: string | null = null;
+    try {
+      const { data } = await axios.get('https://de.wikipedia.org/w/api.php', {
+        params: {
+          action: 'query',
+          format: 'json',
+          formatversion: '2',
+          generator: 'geosearch',
+          ggscoord: `${lat}|${lng}`,
+          ggsradius: 200,
+          gslimit: 3,
+          prop: 'extracts',
+          exintro: 1,
+          explaintext: 1,
+          exchars: 400,
+          redirects: 1,
+        },
+        headers: { 'User-Agent': WIKIMEDIA_UA },
+        timeout: GOOGLE_TIMEOUT_MS,
+      });
+      // formatversion: 2 -> query.pages ist ein Array.
+      const pages =
+        (data as { query?: { pages?: Array<Record<string, unknown>> } })?.query?.pages ?? [];
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
+      const want = norm(name);
+      const hit =
+        want &&
+        pages.find((p) => {
+          const title = norm(String(p['title'] ?? ''));
+          return title.length > 0 && (title.includes(want) || want.includes(title));
+        });
+      const extract = hit ? String(hit['extract'] ?? '').trim() : '';
+      // Kurze Fragmente sind Verunreinigung, kein Extract.
+      result = extract.length >= 20 ? extract : null;
+    } catch (e) {
+      this.logger.warn(`Wikipedia-Extract fehlgeschlagen: ${String(e)}`);
+      result = null;
+    }
+
+    this.wikiDescCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + GOOGLE_ENRICH_TTL_MS,
+    });
+    if (this.wikiDescCache.size > GOOGLE_ENRICH_CACHE_MAX) {
+      const now = Date.now();
+      for (const [k, v] of this.wikiDescCache) {
+        if (v.expiresAt <= now) this.wikiDescCache.delete(k);
       }
     }
     return result;

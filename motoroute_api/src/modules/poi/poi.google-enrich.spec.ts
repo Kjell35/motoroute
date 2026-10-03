@@ -154,9 +154,7 @@ describe('PoiService - Google-Enrichment (Detail)', () => {
     expect((cfg as { headers: Record<string, string> }).headers['User-Agent']).toContain(
       'MotoRoute',
     );
-  });
-
-  it('DB-Zeile mit eigenem Bild: kein Wikimedia-Call (Kosten sparen)', async () => {
+  });    it('DB-Zeile mit eigenem Bild UND eigener Beschreibung: gar kein Enrichment-Call', async () => {
     const supabase = {
       from: () => ({
         select: () => ({
@@ -171,7 +169,10 @@ describe('PoiService - Google-Enrichment (Detail)', () => {
                   lng: 11.4,
                   source: 'CURATED',
                   created_at: '2026-09-01T10:00:00Z',
-                  metadata: { image_url: 'https://example.com/foto.jpg' },
+                  metadata: {
+                    image_url: 'https://example.com/foto.jpg',
+                    address: 'Dorfstraße 1',
+                  },
                 },
                 error: null,
               }),
@@ -189,6 +190,129 @@ describe('PoiService - Google-Enrichment (Detail)', () => {
     mockedAxios.get.mockResolvedValueOnce({ data: { query: { pages: [] } } });
     const detail = await service.findDetail('osm-node-42', 47.55, 11.03, 'RESTAURANT');
     expect(detail).toBeNull();
+  });
+
+  describe('Wikipedia-Extracts (Beschreibung)', () => {
+    const WIKI_HIT = {
+      data: {
+        query: {
+          pages: [
+            {
+              title: 'Stilfser Joch',
+              extract:
+                'Das Stilfser Joch (auch Stilfserjoch; italienisch Passo dello Stelvio) ist ein Gebirgspass in den Ortler-Alpen. Mit einer Höhe von 2757 m s. l. m. ist er die höchste Passstraße.',
+            },
+          ],
+        },
+      },
+    };
+
+    it('füllt die Beschreibung bei Namens-Treffer (Pass) und kennzeichnet die Quelle', async () => {
+      const service = await buildService({});
+      // 1. Call: Commons-Bild (kein Treffer), 2. Call: Wikipedia-Extract:
+      mockedAxios.get
+        .mockResolvedValueOnce({ data: { query: { pages: [] } } })
+        .mockResolvedValueOnce(WIKI_HIT);
+
+      const detail = await service.findDetail(
+        'osm-node-777',
+        46.5285,
+        10.4525,
+        'RESTAURANT',
+        'Stilfser Joch',
+      );
+
+      expect(detail).not.toBeNull();
+      expect(detail!.description).toContain('Gebirgspass');
+      expect(detail!.descriptionSource).toBe('wikipedia');
+      const [url, cfg] = mockedAxios.get.mock.calls[1];
+      expect(String(url)).toContain('de.wikipedia.org');
+      expect((cfg as { headers: Record<string, string> }).headers['User-Agent']).toContain(
+        'MotoRoute',
+      );
+    });
+
+    it('Namens-Gate: "Shell Tankstelle" neben dem Dom erbt dessen Wikipedia-Text NICHT - der Dom-POI selbst schon', async () => {
+      const service = await buildService({});
+      const DOM_HIT = {
+        data: {
+          query: {
+            pages: [
+              { title: 'Kölner Dom', extract: 'Der Kölner Dom ist eine römisch-katholische Kirche in Köln.' },
+            ],
+          },
+        },
+      };
+      // Pro Name: 1x Commons (leer) + 1x Wikipedia (Dom-Artikel).
+      mockedAxios.get
+        .mockResolvedValueOnce({ data: { query: { pages: [] } } })
+        .mockResolvedValueOnce(DOM_HIT)
+        .mockResolvedValueOnce({ data: { query: { pages: [] } } })
+        .mockResolvedValueOnce(DOM_HIT);
+
+      // (a) Fremd-Name: keine Beschreibung -> ohne sonstige Anreicherung
+      // ehrlich null (404-Pfad), der Dom-Text wird NICHT geerbt:
+      const fremd = await service.findDetail(
+        'osm-node-888',
+        50.9413,
+        6.9583,
+        'FUEL',
+        'Shell Tankstelle Köln',
+      );
+      expect(fremd).toBeNull();
+
+      // (b) Passender Name: der Dom-POI bekommt den Text:
+      const passend = await service.findDetail(
+        'osm-node-889',
+        50.9413,
+        6.9583,
+        'RESTAURANT',
+        'Kölner Dom',
+      );
+      expect(passend).not.toBeNull();
+      expect(passend!.description).toContain('römisch-katholische');
+      expect(passend!.descriptionSource).toBe('wikipedia');
+    });
+
+    it('cached den Extract (kein zweiter Wikipedia-Call)', async () => {
+      const service = await buildService({});
+      mockedAxios.get
+        .mockResolvedValueOnce({ data: { query: { pages: [] } } })
+        .mockResolvedValueOnce(WIKI_HIT)
+        .mockResolvedValueOnce({ data: { query: { pages: [] } } });
+
+      await service.findDetail('osm-node-777', 46.5285, 10.4525, 'RESTAURANT', 'Stilfser Joch');
+      await service.findDetail('osm-node-777', 46.5285, 10.4525, 'RESTAURANT', 'Stilfser Joch');
+      expect(mockedAxios.get).toHaveBeenCalledTimes(2); // 1x Commons + 1x Wikipedia, gecacht
+    });
+
+    it('DB-Zeile mit eigener Beschreibung + Bild: kein Wikipedia-Call (eigene Daten gewinnen)', async () => {
+      const supabase = {
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: {
+                    id: 'curated-pub-4',
+                    category: 'PUB',
+                    name: 'Stilfser Joch Stüberl',
+                    lat: 46.5285,
+                    lng: 10.4525,
+                    source: 'CURATED',
+                    created_at: '2026-09-01T10:00:00Z',
+                    metadata: { address: 'Passhöhe 1', image_url: 'https://example.com/f.jpg' },
+                  },
+                  error: null,
+                }),
+            }),
+          }),
+        }),
+      };
+      const service = await buildService({}, supabase);
+      await service.findDetail('curated-pub-4');
+      expect(mockedAxios.get).not.toHaveBeenCalled();
+    });
   });
 
   it('SPEED_CAMERA: kein Google-Call (keine Entsprechung)', async () => {

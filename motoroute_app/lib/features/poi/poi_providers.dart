@@ -68,6 +68,9 @@ class PoiDetail {
   final String? googleMapsUri;
   final String? googleSummary;
   final String? photoAttribution;
+  /// Herkunft der Beschreibung, wenn angereichert: 'wikipedia' (CC BY-SA),
+  /// 'google' oder null (eigene OSM/DB-Daten).
+  final String? descriptionSource;
 
   const PoiDetail({
     required this.id,
@@ -84,6 +87,7 @@ class PoiDetail {
     required this.googleMapsUri,
     required this.googleSummary,
     required this.photoAttribution,
+    required this.descriptionSource,
   });
 
   factory PoiDetail.fromJson(Map<String, dynamic> json) => PoiDetail(
@@ -101,6 +105,7 @@ class PoiDetail {
         googleMapsUri: json['googleMapsUri'] as String?,
         googleSummary: json['googleSummary'] as String?,
         photoAttribution: json['photoAttribution'] as String?,
+        descriptionSource: json['descriptionSource'] as String?,
       );
 }
 
@@ -150,6 +155,7 @@ class PoiRepository {
     double? lat,
     double? lng,
     PoiCategory? category,
+    String? name,
   }) async {
     if (id.startsWith('biker-')) {
       // Biker-Service-Delta-POIs leben im App-Cache, nicht in der
@@ -163,6 +169,9 @@ class PoiRepository {
         if (lat != null) 'lat': lat,
         if (lng != null) 'lng': lng,
         if (category != null) 'category': category.apiValue,
+        // Name für das Wikipedia-Namens-Gate (Pass-/Sehenswürdigkeits-
+        // Extracts nur bei passendem Artikel-Titel).
+        if (name != null && name.isNotEmpty) 'name': name,
       },
     );
     final detail = PoiDetail.fromJson(res.data ?? const {});

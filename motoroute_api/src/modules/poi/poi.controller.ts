@@ -50,12 +50,14 @@ export class PoiController {
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
     @Query('category') category?: string,
+    @Query('name') name?: string,
   ): Promise<PoiDetail> {
     const detail = await this.poiService.findDetail(
       id,
       lat != null ? Number(lat) : undefined,
       lng != null ? Number(lng) : undefined,
       category,
+      name,
     );
     if (!detail) {
       throw new NotFoundException({

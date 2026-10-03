@@ -45,4 +45,7 @@ export interface PoiDetail {
   googleSummary: string | null;
   /** Pflicht-Attribution des Google-Fotos ("Foto: Max Muster"), sonst null. */
   photoAttribution: string | null;
+  /** Herkunft der Beschreibung, wenn angereichert: 'wikipedia' (CC BY-SA),
+   *  'google' oder null (eigene OSM/DB-Daten). */
+  descriptionSource: string | null;
 }
