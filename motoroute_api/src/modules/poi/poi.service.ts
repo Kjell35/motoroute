@@ -65,6 +65,9 @@ const GOOGLE_TIMEOUT_MS = 6000;
 const GOOGLE_ENRICH_TTL_MS = 24 * 60 * 60 * 1000; // Detail-Daten ändern sich selten
 const GOOGLE_ENRICH_CACHE_MAX = 2000;
 
+// Wikimedia-Policy: aussagekräftiger User-Agent ist Pflicht (WMF UA-Policy).
+const WIKIMEDIA_UA = 'MotoRoute-Backend/1.0 (https://github.com/Kjell35/motoroute)';
+
 interface GoogleEnrichment {
   description: string | null;
   website: string | null;
@@ -73,6 +76,11 @@ interface GoogleEnrichment {
   googleSummary: string | null;
   photoAttribution: string | null;
   matched: boolean;
+}
+
+interface WikiImage {
+  imageUrl: string; // Direkte Commons-Thumbnail-URL (keyless, frei)
+  photoAttribution: string;
 }
 
 function computeBikerScore(category: PoiCategory, name: string): number {
@@ -134,6 +142,9 @@ export class PoiService {
 
   /** TTL-Cache für Google-Detail-Anreicherung pro poi-id. */
   private googleEnrichCache = new Map<string, { data: GoogleEnrichment | null; expiresAt: number }>();
+
+  /** TTL-Cache für Wikimedia-Bilder pro poi-id (keyless, kostenlos). */
+  private wikiImageCache = new Map<string, { data: WikiImage | null; expiresAt: number }>();
 
   constructor(
     private readonly config: ConfigService,
@@ -232,10 +243,20 @@ export class PoiService {
       if (!imageUrl && enrich.imageUrl) imageUrl = enrich.imageUrl;
     }
 
-    // Vertrag: Ohne DB-Zeile lohnt die Antwort nur MIT Google-Anreicherung
+    // Kostenlose Bild-Kette: ohne eigenes Bild UND ohne Google-Foto holt
+    // Wikimedia Commons per Geo-Search ein freies Foto (keyless, CC +
+    // Artist-Attribution). Läuft auch ohne Google-Key - dann sind Bilder
+    // für viele POIs trotzdem da.
+    let wikiImage: WikiImage | null = null;
+    if (!imageUrl) {
+      wikiImage = await this.enrichImageFromWikimedia(id, poiLat as number, poiLng as number);
+      if (wikiImage) imageUrl = wikiImage.imageUrl;
+    }
+
+    // Vertrag: Ohne DB-Zeile lohnt die Antwort nur MIT Anreicherung
     // (sonst enthält sie nichts, was die App nicht schon hat) - dann null
     // (404), das Sheet zeigt die Basis-Daten aus dem Karten-Treffer.
-    if (!row && !enrich?.matched) return null;
+    if (!row && !enrich?.matched && !wikiImage) return null;
 
     const publishedBy =
       source === 'CURATED'
@@ -267,7 +288,7 @@ export class PoiService {
       publishedBy,
       googleMapsUri: enrich?.googleMapsUri ?? null,
       googleSummary: enrich?.matched ? enrich.description : null,
-      photoAttribution: enrich?.photoAttribution ?? null,
+      photoAttribution: enrich?.photoAttribution ?? wikiImage?.photoAttribution ?? null,
     };
   }
 
@@ -410,6 +431,83 @@ export class PoiService {
       const now = Date.now();
       for (const [k, v] of this.googleEnrichCache) {
         if (v.expiresAt <= now) this.googleEnrichCache.delete(k);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Wikimedia Commons Geo-Search: freies Foto in ~80 m um den POI -
+   * keyless und kostenlos (Community-Daten). Attribution ist bei CC-
+   * Lizenzen Pflicht und wird als photoAttribution zurückgegeben.
+   * 24-h-Cache pro poi-id; Fehler degradieren zu null, wirft nie.
+   */
+  private async enrichImageFromWikimedia(
+    id: string,
+    lat: number,
+    lng: number,
+  ): Promise<WikiImage | null> {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    const cacheKey = `wiki:${id}`;
+    const cached = this.wikiImageCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+    let result: WikiImage | null = null;
+    try {
+      const { data } = await axios.get('https://commons.wikimedia.org/w/api.php', {
+        params: {
+          action: 'query',
+          format: 'json',
+          formatversion: '2',
+          generator: 'geosearch',
+          ggscoord: `${lat}|${lng}`,
+          ggsradius: 150,
+          // WICHTIG: Namespace 6 (File:) - ohne ihn liefert der Geo-
+          // Generator nur Commons-Artikel/Galerien ohne Bild-URLs.
+          ggsnamespace: 6,
+          ggslimit: 5,
+          prop: 'imageinfo',
+          iiprop: 'url|extmetadata',
+          iiurlwidth: 640,
+        },
+        headers: { 'User-Agent': WIKIMEDIA_UA },
+        timeout: GOOGLE_TIMEOUT_MS,
+      });
+      // formatversion: 2 -> query.pages ist ein Array.
+      const pages =
+        (data as { query?: { pages?: Array<Record<string, unknown>> } })?.query?.pages ?? [];
+      for (const page of pages) {
+        const info = (page['imageinfo'] as Array<Record<string, unknown>> | undefined)?.[0];
+        if (!info) continue;
+        const thumb = typeof info['thumburl'] === 'string' ? (info['thumburl'] as string) : null;
+        if (!thumb) continue;
+        const extmeta = (info['extmetadata'] ?? {}) as Record<string, { value?: string }>;
+        const artistHtml = extmeta['Artist']?.value ?? '';
+        const artist = artistHtml
+          .replace(/<[^>]*>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 60);
+        result = {
+          imageUrl: thumb,
+          photoAttribution: artist ? `${artist} / Wikimedia Commons` : 'Wikimedia Commons',
+        };
+        break;
+      }
+    } catch (e) {
+      this.logger.warn(`Wikimedia-Bild fehlgeschlagen: ${String(e)}`);
+      result = null;
+    }
+
+    this.wikiImageCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + GOOGLE_ENRICH_TTL_MS,
+    });
+    if (this.wikiImageCache.size > GOOGLE_ENRICH_CACHE_MAX) {
+      const now = Date.now();
+      for (const [k, v] of this.wikiImageCache) {
+        if (v.expiresAt <= now) this.wikiImageCache.delete(k);
       }
     }
     return result;

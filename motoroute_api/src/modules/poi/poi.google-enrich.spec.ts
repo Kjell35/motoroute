@@ -120,6 +120,77 @@ describe('PoiService - Google-Enrichment (Detail)', () => {
     expect(detail).toBeNull();
   });
 
+  it('KOSTENLOSE KETTE: Wikimedia Commons liefert das Bild ohne jeden Key', async () => {
+    const service = await buildService({});
+    // Commons-GeoSearch (formatversion 2 -> pages als Array):
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {
+        query: {
+          pages: [
+            {
+              title: 'File:Koelner Dom.jpg',
+              imageinfo: [
+                {
+                  thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/koeln.jpg/640px-koeln.jpg',
+                  extmetadata: {
+                    Artist: { value: '<a href="//commons.wikimedia.org">Max Fotograf</a>' },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const detail = await service.findDetail('osm-node-42', 50.9413, 6.9583, 'RESTAURANT');
+    expect(detail).not.toBeNull();
+    expect(detail!.imageUrl).toContain('upload.wikimedia.org');
+    expect(detail!.photoAttribution).toBe('Max Fotograf / Wikimedia Commons');
+    // Keyless bestätigt: kein Google-Call, Commons-URL mit Parametern:
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+    const [url, cfg] = mockedAxios.get.mock.calls[0];
+    expect(String(url)).toContain('commons.wikimedia.org');
+    expect((cfg as { headers: Record<string, string> }).headers['User-Agent']).toContain(
+      'MotoRoute',
+    );
+  });
+
+  it('DB-Zeile mit eigenem Bild: kein Wikimedia-Call (Kosten sparen)', async () => {
+    const supabase = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({
+                data: {
+                  id: 'curated-pub-3',
+                  category: 'PUB',
+                  name: 'Mit Bild',
+                  lat: 48.1,
+                  lng: 11.4,
+                  source: 'CURATED',
+                  created_at: '2026-09-01T10:00:00Z',
+                  metadata: { image_url: 'https://example.com/foto.jpg' },
+                },
+                error: null,
+              }),
+          }),
+        }),
+      }),
+    };
+    const service = await buildService({}, supabase);
+    await service.findDetail('curated-pub-3');
+    expect(mockedAxios.get).not.toHaveBeenCalled();
+  });
+
+  it('Wikimedia ohne Treffer + keine DB-Zeile -> ehrlich null', async () => {
+    const service = await buildService({});
+    mockedAxios.get.mockResolvedValueOnce({ data: { query: { pages: [] } } });
+    const detail = await service.findDetail('osm-node-42', 47.55, 11.03, 'RESTAURANT');
+    expect(detail).toBeNull();
+  });
+
   it('SPEED_CAMERA: kein Google-Call (keine Entsprechung)', async () => {
     const service = await buildService({ GOOGLE_PLACES_API_KEY: 'g-key' });
     await service.findDetail('osm-node-99', 47.55, 11.03, 'SPEED_CAMERA');
