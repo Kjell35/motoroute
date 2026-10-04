@@ -218,7 +218,7 @@ class AboutScreen extends ConsumerWidget {
                     'Motorrad-Navigation für kurvige Touren - gebaut für '
                     'kleine Gruppen: gemeinsame Routenplanung, Live-Fahrt '
                     'und Biker-Community.\n\n'
-                    'Aktuelle Phase: private Testversion. Alle Funktionen '
+                    'Aktuelle Version: 1.0 (private Testphase). Alle Funktionen '
                     'sind kostenlos freigeschaltet; ein späteres '
                     'Premium-Abo (10 €/Monat) ist in der Architektur '
                     'vorbereitet, aber nicht aktiv.',
