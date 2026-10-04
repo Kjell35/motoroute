@@ -383,7 +383,133 @@ class _RideCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(ride.description!, style: AppTypography.body),
           ],
+          if (ride.photos.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _RidePhotoStrip(photos: ride.photos),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// Horizontale Foto-Leiste einer Tour: URLs kommen serverseitig gefiltert
+/// aus [PublicRide] (nur http/s). Fehlerhafte Ladevorgänge entfernen die
+/// Kachel sauber aus der Leiste, statt ein defektes Icon anzuzeigen.
+class _RidePhotoStrip extends StatelessWidget {
+  final List<String> photos;
+  const _RidePhotoStrip({required this.photos});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 112,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) => GestureDetector(
+          onTap: () => _openViewer(context, i),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 148,
+              height: 112,
+              child: Image.network(
+                photos[i],
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openViewer(BuildContext context, int initialIndex) {
+    showDialog<void>(
+      context: context,
+      useSafeArea: false,
+      barrierColor: Colors.black,
+      barrierDismissible: true,
+      builder: (_) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: _PhotoViewer(photos: photos, initialIndex: initialIndex),
+      ),
+    );
+  }
+}
+
+/// Vollbild-Betrachter mit PageView + Wischen; Tippen oder die Zurück-
+/// Taste schließt.
+class _PhotoViewer extends StatefulWidget {
+  final List<String> photos;
+  final int initialIndex;
+  const _PhotoViewer({required this.photos, required this.initialIndex});
+
+  @override
+  State<_PhotoViewer> createState() => _PhotoViewerState();
+}
+
+class _PhotoViewerState extends State<_PhotoViewer> {
+  late final PageController _controller;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, widget.photos.length - 1);
+    _controller = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _close() => Navigator.of(context).pop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onTap: _close,
+        child: PageView.builder(
+          controller: _controller,
+          itemCount: widget.photos.length,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (context, i) => InteractiveViewer(
+            maxScale: 4,
+            child: Center(
+              child: Image.network(
+                widget.photos[i],
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.broken_image_outlined,
+                  color: Colors.white38,
+                  size: 48,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              const Spacer(),
+              Text(
+                '${_index + 1} / ${widget.photos.length}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

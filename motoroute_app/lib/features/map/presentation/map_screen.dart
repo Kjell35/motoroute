@@ -107,6 +107,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final sync = ref.read(bikerPoiSyncProvider.notifier);
+      // Reconnect-Watcher: Funkloch raus → Sync läuft nach, sobald wieder
+      // Schnitt + Backend da sind (offline zeigt die Karte SQLite-Bestand).
+      sync.offline.watchConnectivity();
       await sync.restoreCache();
       await sync.sync();
       if (!mounted) return;

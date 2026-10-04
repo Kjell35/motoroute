@@ -85,6 +85,34 @@ void main() {
     expect(h.places, isEmpty);
   });
 
+  test('PublicRide.photos: nur http(s)-Strings werden übernommen', () {
+    final ride = PublicRide.fromJson({
+      'externalId': 't-10',
+      'title': 'Fotos',
+      'startedAt': '2026-09-02T08:00:00.000Z',
+      'photos': [
+        'https://abc.supabase.co/storage/v1/object/public/ride-photos/a.jpg',
+        'http://example.com/b.jpg',
+        'blob:xyz',
+        'data:image/png;base64,AAAA',
+        'ride-photos/relativer-pfad.jpg',
+        42,
+        null,
+        '',
+      ],
+    });
+    expect(ride.photos, [
+      'https://abc.supabase.co/storage/v1/object/public/ride-photos/a.jpg',
+      'http://example.com/b.jpg',
+    ]);
+  });
+
+  test('PublicRide.photos: fehlendes/leeres Feld -> leere Liste', () {
+    expect(PublicRide.fromJson({'externalId': 'x', 'title': 't'}).photos, isEmpty);
+    expect(PublicRide.fromJson({'photos': null}).photos, isEmpty);
+    expect(PublicRide.fromJson({'photos': []}).photos, isEmpty);
+  });
+
   test('MyRideHistory Defaults sind sicher (privat)', () {
     final s = MyRideHistory.fromJson({
       'settings': <String, dynamic>{},

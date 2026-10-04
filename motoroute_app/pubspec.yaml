@@ -4,7 +4,7 @@ description: >
   Routing (kurvig/extra kurvig/schnell). Siehe /docs (Phase 1-3) im
   Repo-Root für Produktkontext.
 publish_to: 'none'
-version: 0.4.12+34
+version: 0.5.0+35
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -36,6 +36,11 @@ dependencies:
   json_annotation: ^4.9.0
   battery_plus: ^7.1.1
   web_socket_channel: ^3.0.3
+
+  # connectivity_plus: Verbindungsproben für den POI-Offline-Sync
+  # (Funkloch-Erkennung, auto-Resync bei Reconnect). Bereits transitive
+  # Abhängigkeit (geolocator-Plugin-Ecosystem); jetzt explizit.
+  connectivity_plus: ^6.1.1
   shared_preferences: ^2.5.5
   intl: any
   flutter_localizations:
@@ -43,6 +48,7 @@ dependencies:
   package_info_plus: ^10.2.1
   xml: ^7.0.1
   sqflite: ^2.4.4
+  path: ^1.9.0 # DB-Pfad-Bau (Tour-DB, POI-Offline-DB), vorher transitiv
   path_provider: ^2.1.6
   share_plus: ^13.3.0
   file_picker: ^13.1.0

@@ -20,6 +20,7 @@ class GarageScreen extends ConsumerStatefulWidget {
 
 class _GarageScreenState extends ConsumerState<GarageScreen> {
   bool _busy = false;
+  bool _autoRetryDone = false;
 
   String _friendly(Object? e) {
     final msg = e.toString();
@@ -84,6 +85,20 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
     // angemeldet) - mit ehrlichem Hinweis und Retry-Knopf.
     final auth = ref.watch(authControllerProvider);
     final signedIn = auth.isAuthenticated;
+    // Selbstheilung: Angemeldet, aber keine Garage-Session? Einmal pro
+    // Screen-Besuch automatisch nachprobieren (Kaltstart-Brücke), statt
+    // den Nutzer einen Knopf finden zu lassen. Loop-sicher durch Flag.
+    if (signedIn && !_busy && !_autoRetryDone) {
+      _autoRetryDone = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        setState(() => _busy = true);
+        await ref.read(garageSessionProvider.notifier).provisionFromAuth();
+        if (!mounted) return;
+        setState(() => _busy = false);
+        ref.invalidate(garageListProvider);
+      });
+    }
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),

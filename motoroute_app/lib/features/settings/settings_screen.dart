@@ -1,12 +1,9 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
-import 'package:motoroute_app/core/network/api_client.dart';
-import 'package:motoroute_app/core/network/error_message.dart';
 import 'package:motoroute_app/core/network/error_reporter.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
@@ -19,10 +16,7 @@ import 'package:motoroute_app/features/settings/theme_mode.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
-import 'package:motoroute_app/features/garage/garage_repository.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
-import 'package:motoroute_app/features/map/data/map_style_check.dart';
-import 'package:motoroute_app/features/marketplace/marketplace_repository.dart';
 import 'package:motoroute_app/features/ride_history/ride_history_settings.dart';
 import 'package:motoroute_app/features/settings/energy_saver.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -35,12 +29,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 ///   3. Karte - Kartenstil (hell/dunkel) + Offline-Regionen
 ///   4. Community (eingeklappt) - Chat-Status/-Name, Online-Status,
 ///      Benachrichtigungen, Fahrhistorie-Privatsphäre
-///   5. Diagnose (AUFGEKLAPPT, auffällig umrandet) - testet Server/
-///      Anmeldung/Chat/Marktplatz/Garage/Karte DIREKT vom Gerät;
-///      macht sichtbar, welcher Bereich hakt, statt "Etwas ist
-///      schiefgelaufen" zu raten
-///   6. Sprache & Erscheinungsbild (eingeklappt)
-///   7. Recht & Info (eingeklappt) - Datenschutz/Impressum/Über/Version
+///   5. Sprache & Erscheinungsbild (eingeklappt)
+///   6. Recht & Info (eingeklappt) - Datenschutz/Impressum/Über/Version
 ///
 /// Bewusst NICHT vorhanden: manuelle Token-/Key-/URL-Eingaben. Chat und
 /// Konto laufen ausschließlich über die App-Anmeldung (Auth-Brücke);
@@ -54,16 +44,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// Einklapp-Status pro Sektion (stabile IDs, nicht die Titel - sonst
-  /// kippt der Zustand beim Sprachwechsel). Sekundäres startet eingeklappt;
-  /// die Diagnose bleibt AUFGEKLAPPT: sie ist der erste Anlauf, wenn etwas
-  /// nicht funktioniert, und darf sich nicht verstecken.
+  /// kippt der Zustand beim Sprachwechsel). Sekundäres startet eingeklappt.
   final Set<String> _collapsed = {'community', 'language', 'legal'};
 
-  bool _runningDiagnostics = false;
-  final Map<String, String> _diagResults = {};
-  bool _loadingAdminErrors = false;
-  List<Map<String, dynamic>>? _adminSummary;
-  String? _adminErrorsError;
   String _appVersion = '…';
 
   @override
@@ -83,8 +66,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final auth = ref.watch(authControllerProvider);
     final unit = ref.watch(distanceUnitProvider);
     final energy = ref.watch(energySaverControllerProvider);
+    final voiceOn = ref.watch(voiceAnnouncementsEnabledProvider);
     final i18n = ref.watch(i18nProvider);
 
+    final user = auth.user;
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
@@ -92,10 +77,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         elevation: 0,
         title: Text(i18n.tabSettings, style: AppTypography.title),
       ),
+      // Calimoto-inspirierter Profil-Header: großer Avatar-Kreis,
+      // Name + E-Mail darunter - gibt der Einstellungs-Seite ein
+      // Persoenliches Gesicht (Vorbild: Profil-Tab des Referenz-Screens).
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           children: [
+            Center(
+              child: Column(
+                children: [
+                  // AuthUser hat bewusst kein avatarUrl (App setzt es
+                  // nie) - der Initialen-/Icon-Fallback reicht hier.
+                  CircleAvatar(
+                    radius: 44,
+                    backgroundColor: AppColors.bgSurfaceRaisedDark,
+                    child: Icon(Icons.person, size: 44, color: AppColors.textSecondaryDark),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    user?.displayName ?? user?.email ?? '',
+                    style: AppTypography.title.copyWith(fontSize: 20),
+                  ),
+                  if (user?.email != null)
+                    Text(user!.email, style: AppTypography.body.copyWith(color: AppColors.textSecondaryDark)),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
             // --------------------------------------------- 1. Navigation
             _buildSection('nav', i18n.navigation, icon: Icons.navigation_outlined, children: [
               ListTile(
@@ -137,6 +147,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     visualDensity: VisualDensity.compact,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
+                ),
+              ),
+              // Sprachansagen: DERSSELBE Provider wie der Lautsprecher-
+              // Toggle am aktiven Nav-Screen - beide Orte bleiben immer
+              // synchron, die Persistierung läuft über initSessionSettings.
+              _buildSwitchTile(
+                Icons.record_voice_over,
+                i18n.tr('settings.voiceAnnouncements'),
+                voiceOn,
+                (value) {
+                  ref.read(voiceAnnouncementsEnabledProvider.notifier).state = value;
+                  unawaited(persistVoiceAnnouncementsEnabled(value));
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.record_voice_over, color: AppColors.textMutedDark, size: 18),
+                title: Text(
+                  i18n.tr('settings.voiceAnnouncements.desc'),
+                  style: AppTypography.caption,
                 ),
               ),
               _buildSwitchTile(
@@ -190,15 +220,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ]),
             const SizedBox(height: AppSpacing.lg),
 
-            // ----------------------------------------------- 5. Diagnose
-            _buildDiagnosticsSection(),
-            const SizedBox(height: AppSpacing.lg),
-
-            // ------------------------------------------------ 6. Sprache
+            // ------------------------------------------------ 5. Sprache
             _buildLanguageSection(),
             const SizedBox(height: AppSpacing.lg),
 
-            // -------------------------------------------- 7. Recht & Info
+            // -------------------------------------------- 6. Recht & Info
             _buildSection('legal', i18n.tr('settings.legal'), icon: Icons.gavel_outlined, children: [
               _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Welche Daten MotoRoute verarbeitet', () {
                 Navigator.of(context).pushNamed('/privacy');
@@ -847,238 +873,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ------------------------------------------------------------------
-  // 5: Diagnose - testet alle Server-Bereiche DIREKT vom Gerät. Damit
-  // sieht der Nutzer (und wir im Support), welcher Bereich wirklich
-  // hakt - statt "Etwas ist schiefgelaufen" ohne Ursache zu raten.
-  // ------------------------------------------------------------------
-  Widget _buildDiagnosticsSection() {
-    final entries = _diagResults.entries.toList();
-    // Eigenständige, auffällige Karte (kein einklappbarer Sektions-Kon-
-    // tainer): Wer hier sucht, hat ein Problem - der Einstieg muss sichtbar sein.
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.accentPrimaryDark.withValues(alpha: 0.35)),
-      ),
-      child: Column(children: [_buildDiagnosticsInner()]),
-    );
-  }
-
-  Widget _buildDiagnosticsInner() {
-    final entries = _diagResults.entries.toList();
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
-        child: Row(
-          children: [
-            const Icon(Icons.troubleshoot_outlined, color: AppColors.accentPrimaryDark, size: 22),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text('Diagnose', style: AppTypography.bodyStrong),
-            ),
-          ],
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
-        child: Text(
-          'Testet Server, Anmeldung, Chat, Marktplatz, Garage und die Karte (Stil, Kacheln, Schrift) direkt vom Gerät aus. '
-          'Nützlich, wenn ein Bereich "Etwas ist schiefgelaufen" zeigt.',
-          style: AppTypography.caption,
-        ),
-      ),
-      for (final e in entries)
-        ListTile(
-          dense: true,
-          leading: Icon(
-            e.value.startsWith('✓') ? Icons.check_circle : Icons.error_outline,
-            color: e.value.startsWith('✓') ? AppColors.statusSuccess : AppColors.statusDanger,
-            size: 20,
-          ),
-          title: Text(e.key, style: AppTypography.body),
-          subtitle: Text(e.value.substring(2), style: AppTypography.caption),
-        ),
-      ListTile(
-        leading: _runningDiagnostics
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.play_arrow, color: AppColors.accentPrimaryDark),
-        title: Text(_runningDiagnostics ? 'Tests laufen…' : 'Tests starten', style: AppTypography.body),
-        onTap: _runningDiagnostics ? null : _runDiagnostics,
-      ),
-      ..._buildAdminErrorsChildren(),
-    ]);
-  }
-
-  /// Admin-Bereich: anonyme Fehlerberichte ALLER Nutzer (aggregiert).
-  /// Fuer normale Nutzer unsichtbar.
-  List<Widget> _buildAdminErrorsChildren() {
-    final isAdmin = ref.watch(authControllerProvider).user?.isAdmin ?? false;
-    if (!isAdmin) return const [];
-    return [
-      const Divider(height: 1, color: AppColors.borderHairlineDark),
-      ListTile(
-        dense: true,
-        leading: _loadingAdminErrors
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.admin_panel_settings_outlined,
-                color: AppColors.accentPrimaryDark, size: 20),
-        title: const Text('Fehlerberichte aller Nutzer (Admin)', style: AppTypography.body),
-        subtitle: const Text('Anonyme Meldungen der letzten Tage - ohne Namen/IDs',
-            style: AppTypography.caption),
-        onTap: _loadingAdminErrors ? null : _loadAdminErrors,
-      ),
-      if (_adminErrorsError != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Text('Laden fehlgeschlagen · $_adminErrorsError',
-              style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
-        ),
-      ...?_adminSummary?.map(
-        (s) => ListTile(
-          dense: true,
-          leading: Badge(
-            label: Text('${s['count'] ?? 0}'),
-            backgroundColor: AppColors.statusDanger,
-          ),
-          title: Text('${s['category'] ?? '?'}', style: AppTypography.body),
-          subtitle: Text(
-              '${s['count'] ?? 0} Meldungen · ${s['affectedUsers'] ?? '?'} betroffene Geräte',
-              style: AppTypography.caption),
-        ),
-      ),
-    ];
-  }
-
-  Future<void> _loadAdminErrors() async {
-    setState(() {
-      _loadingAdminErrors = true;
-      _adminErrorsError = null;
-    });
-    try {
-      final token = ref.read(authControllerProvider.notifier).accessToken;
-      if (token == null || token.isEmpty) throw Exception('Nicht angemeldet');
-      final res = await ApiClient.create()
-          .get<Map<String, dynamic>>(
-        '/v1/telemetry/admin/errors',
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-      )
-          .timeout(const Duration(seconds: 20));
-      final summary = ((res.data?['summary'] as List?) ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .toList(growable: false);
-      if (!mounted) return;
-      setState(() {
-        _adminSummary = summary;
-        _loadingAdminErrors = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _adminErrorsError = technicalCause(e);
-        _loadingAdminErrors = false;
-      });
-    }
-  }
-
-  /// Führt alle Prüfungen SEQUENZIELL aus (klare Reihenfolge, keine
-  /// konkurrierenden setStates). Jede Zeile zeigt ✓/✗ plus Detail.
-  Future<void> _runDiagnostics() async {
-    setState(() {
-      _runningDiagnostics = true;
-      _diagResults.clear();
-    });
-
-    Future<void> report(String name, Future<String> Function() run) async {
-      try {
-        final detail = await run();
-        if (!mounted) return;
-        setState(() => _diagResults[name] = '✓ $detail');
-      } on TimeoutException {
-        if (!mounted) return;
-        setState(() => _diagResults[name] = '✗ Keine Antwort (Timeout)');
-      } on DioException catch (e) {
-        if (!mounted) return;
-        setState(() => _diagResults[name] = '✗ ${friendlyErrorMessage(e, ref.read(i18nProvider))}');
-      } catch (e) {
-        if (!mounted) return;
-        setState(() => _diagResults[name] = '✗ $e');
-      }
-    }
-
-    // 1) Backend-Grundgesundheit (anonym).
-    String? token;
-    await report('Server (API)', () async {
-      final sw = Stopwatch()..start();
-      final res = await ApiClient.create()
-          .get<Map<String, dynamic>>('/v1/health')
-          .timeout(const Duration(seconds: 20));
-      final ok = res.data?['status'] == 'ok';
-      return '${ok ? 'HTTP 200' : 'unerwartete Antwort'} · ${sw.elapsedMilliseconds} ms';
-    });
-
-    // 2) Anmeldung (Token da?).
-    await report('Anmeldung', () async {
-      token = ref.read(authControllerProvider.notifier).accessToken;
-      if (token == null || token!.isEmpty) {
-        return 'Nicht angemeldet - bitte einloggen';
-      }
-      return 'Sitzung aktiv';
-    });
-
-    // 3) Chat: Konversationen laden (gleicher Call wie der Chat-Hub).
-    await report('Chat', () async {
-      if (token == null) return 'übersprungen (nicht angemeldet)';
-      await ref.read(chatRepositoryProvider).conversations(token!).timeout(const Duration(seconds: 20));
-      return 'Konversationen geladen';
-    });
-
-    // 4) Marktplatz: Katalog laden (gleicher Call wie der Markt-Screen).
-    await report('Marktplatz', () async {
-      if (token == null) return 'übersprungen (nicht angemeldet)';
-      final cat = await ref
-          .read(marketplaceRepositoryProvider)
-          .catalog(token: token!)
-          .timeout(const Duration(seconds: 20));
-      return '${cat.categories.length} Kategorien geladen';
-    });
-
-    // 5) Garage: Übersicht laden (gleicher Call wie der Garage-Screen).
-    await report('Garage', () async {
-      final base = await ref.read(garageBaseUrlProvider.future);
-      final session = ref.read(garageSessionProvider).value;
-      if (session == null) return 'Nicht verbunden - Garage verbindet sich automatisch';
-      await ref
-          .read(garageRepositoryProvider)
-          .garage(base, session.token)
-          .timeout(const Duration(seconds: 20));
-      return 'verbunden (${base.replaceAll('https://', '')})';
-    });
-
-    // 6) Karte: Stil -> TileJSON -> Kachel -> Sprite -> Glyphen (dieselben
-    //    Requests wie MapLibre auf dem Gerät). Bei grauer Karte zeigt sich
-    //    hier, welche Stufe hakt.
-    final mapItems = await runMapStyleCheck(choice: ref.read(mapStyleChoiceProvider));
-    if (!mounted) return;
-    setState(() {
-      for (final item in mapItems) {
-        _diagResults['Karte · ${item.name}'] = '${item.ok ? '✓' : '✗'} ${item.detail}';
-      }
-    });
-
-    if (!mounted) return;
-    setState(() => _runningDiagnostics = false);
-  }
-
-  // ------------------------------------------------------------------
   // 6: Sprache & Erscheinungsbild.
   // ------------------------------------------------------------------
   Widget _buildLanguageSection() {
@@ -1154,34 +948,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   /// Sektion mit einklappbarem Header. `id` ist stabil (Sprachwechsel-
   /// fest), `title` wird angezeigt.
+  ///
+  /// Calimoto-Look: fette, großere Sektionstitel in Normal-Schreibung
+  /// AUSSERHALB der Karte ("Weitere Premium-Vorteile"-Stil), nicht die
+  /// kleinen Caps-Labels mit Akzent-Balken.
   Widget _buildSection(String id, String title, {required List<Widget> children, IconData? icon}) {
     final collapsed = _collapsed.contains(id);
     final header = Padding(
-      padding: const EdgeInsets.only(left: AppSpacing.xs),
+      padding: const EdgeInsets.only(left: AppSpacing.xs, bottom: AppSpacing.xs),
       child: Row(
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 16, color: AppColors.textSecondaryDark),
-            const SizedBox(width: AppSpacing.sm),
-          ] else ...[
-            Container(
-              width: 3,
-              height: 14,
-              decoration: BoxDecoration(
-                color: AppColors.accentPrimaryDark,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-          ],
           Expanded(
             child: Text(
-              title.toUpperCase(),
-              style: AppTypography.caption.copyWith(
-                color: AppColors.textSecondaryDark,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
+              title,
+              style: AppTypography.title.copyWith(fontSize: 18),
             ),
           ),
         ],
@@ -1211,20 +991,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         if (!collapsed) ...[
           const SizedBox(height: AppSpacing.xs),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.bgSurfaceDark,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderHairlineDark),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+          // Material-Wrapper: ListTile malt Hintergrund/Ink auf das nächste
+          // Material - ein nackter Container würde die Effekte verdecken
+          // (Flutter-Assert "ListTile background color or ink splashes may
+          // be invisible").
+          Material(
+            color: AppColors.bgSurfaceDark,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.borderHairlineDark),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(children: children),
             ),
-            child: Column(children: children),
           ),
         ],
       ],
@@ -1237,6 +1024,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       title: Text(title, style: AppTypography.body),
       subtitle: subtitle != null ? Text(subtitle, style: AppTypography.caption) : null,
       onTap: onTap,
+      // Chevron auf Tap-Zeilen (calimoto-Stil) - macht klar, dass die
+      // Zeile in einen eigenen Screen fuhrt.
+      trailing: onTap == null
+          ? null
+          : const Icon(Icons.chevron_right, color: AppColors.textSecondaryDark),
       contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
     );
   }

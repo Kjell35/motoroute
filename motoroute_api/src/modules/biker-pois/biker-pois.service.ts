@@ -26,6 +26,8 @@ interface BikerPoiDto {
   id: string;
   name: string;
   category: string;
+  /** Rohwert des Dienstes (z. B. 'gartenlokal') - neben dem App-Mapping. */
+  sourceCategory?: string;
   lat: number;
   lon: number;
   address?: string;
@@ -124,6 +126,10 @@ export class BikerPoisService {
         id: `biker-${r['id']}`, // Namensraum-Trennung zu OSM-POI-UUIDs
         name: String(r['name'] ?? ''),
         category: CATEGORY_MAP[String(r['category'] ?? '')] ?? 'OTHER',
+        // Rohwert unverändert mitgeben: Die App hält die 8 Dienst-
+        // Kategorien lokal getrennt (Offline-DB, Statistik), auch wenn
+        // das App-UI weiter auf 6 Kategorien mappt.
+        sourceCategory: String(r['category'] ?? '') || undefined,
         lat: Number(r['lat']),
         lon: Number(r['lon']),
         address: r['address'] as string | undefined,

@@ -24,6 +24,12 @@ class PublicRide {
   final double elevationGainMeters;
   final String? region;
   final String? description;
+
+  /// Foto-URLs der Tour (Backend-Spalte photos, max. 8). Das Backend
+  /// akzeptiert dort beliebige Strings und validiert sie nicht - damit
+  /// fehlerhafte/manipulierte Werte kein Flackern in der UI verursachen,
+  /// behält der Parser nur http(s)-URLs.
+  final List<String> photos;
   final List<LatLngPoint> track;
   final List<RidePoi> pois;
   final String? startLabel;
@@ -40,6 +46,7 @@ class PublicRide {
     required this.elevationGainMeters,
     this.region,
     this.description,
+    this.photos = const [],
     this.track = const [],
     this.pois = const [],
     this.startLabel,
@@ -60,6 +67,10 @@ class PublicRide {
         elevationGainMeters: (j['elevationGainMeters'] as num?)?.toDouble() ?? 0,
         region: j['region'] as String?,
         description: j['description'] as String?,
+        photos: ((j['photos'] as List?) ?? const [])
+            .map((e) => e?.toString() ?? '')
+            .where((s) => s.startsWith('http://') || s.startsWith('https://'))
+            .toList(growable: false),
         track: ((j['track'] as List?) ?? const [])
             .map((e) => LatLngPoint.fromJson(e as Map<String, dynamic>))
             .toList(growable: false),

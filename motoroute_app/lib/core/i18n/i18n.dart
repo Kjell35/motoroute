@@ -491,6 +491,9 @@ const _catalog = <String, Map<String, String>>{
     // Navigation
     'nav.voiceOn': 'Sprachansagen an',
     'nav.voiceOff': 'Sprachansagen aus',
+    'settings.voiceAnnouncements': 'Sprachansagen',
+    'settings.voiceAnnouncements.desc':
+        'Manöver, Ziel und Umleitungen werden angesagt - live auch am Fahrbildschirm schaltbar.',
     // Tour-Tagebuch
     'tour.saveTitle': 'Tour speichern',
     'tour.saveHint': 'z. B. Alpenrunde mit Vati',
@@ -798,6 +801,9 @@ const _catalog = <String, Map<String, String>>{
     // Navigation
     'nav.voiceOn': 'Voice announcements on',
     'nav.voiceOff': 'Voice announcements off',
+    'settings.voiceAnnouncements': 'Voice announcements',
+    'settings.voiceAnnouncements.desc':
+        'Turns, destination and reroutes are announced - also switchable live on the ride screen.',
     // Tour diary
     'tour.saveTitle': 'Save tour',
     'tour.saveHint': 'e.g. Alpine loop with dad',

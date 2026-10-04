@@ -43,6 +43,8 @@ describe('BikerPoisService (BFF-Proxy)', () => {
     expect(result.pois.map((p) => p.category)).toEqual(['BIKER_MEETUP', 'PUB', 'MOTO_HOTEL']);
     // Namensraum-Trennung zu OSM-POIs
     expect(result.pois[0].id).toBe('biker-p1');
+    // App-Mapping UND Rohwert reisen getrennt (Offline-DB hält 8 Kategorien).
+    expect(result.pois.map((p) => p.sourceCategory)).toEqual(['gartenlokal', 'kneipe', 'pension']);
   });
 
   it('gibt Cursor (serverTime) als neuen since-Stand zurück', async () => {

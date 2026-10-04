@@ -355,14 +355,34 @@ class GarageRepository {
     }
     final baseUrl = garageBaseUrlOverride ??
         (_kGarageEnvUrl.isEmpty ? _kGarageFallbackUrl : _kGarageEnvUrl);
-    // 2) Ticket einloesen.
-    final res = await _post(baseUrl, null, '/api/auth/provision', {'ticket': ticket});
-    final token = (res['accessToken'] ?? res['token']) as String?;
-    if (token == null || token.isEmpty) {
-      throw GarageApiException('Provision ohne Token - Server-Antwort unerwartet');
+    // 2) Ticket einloesen - MIT Kaltstart-Retries: Die Garage-API laeuft
+    //    auf Render Free Tier (30-60 s Kaltstart). Ohne Retry sieht der
+    //    Nutzer beim ersten Tab-Klick einmalig die Verbindungs-Karte und
+    //    muss selbst taetig werden. Mit Backoff (2 s/5 s) kommt er
+    //    "einfach so" in die Garage - die App-Anforderung.
+    Object? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final res = await _post(baseUrl, null, '/api/auth/provision', {'ticket': ticket});
+        final token = (res['accessToken'] ?? res['token']) as String?;
+        if (token == null || token.isEmpty) {
+          throw GarageApiException('Provision ohne Token - Server-Antwort unerwartet');
+        }
+        final role = ((res['user'] as Map?)?['role'] as String?) ?? 'user';
+        return (token, role == 'admin');
+      } on GarageApiException catch (e) {
+        // Server hat geantwortet (z. B. 401/422): Retry hilft nicht -
+        // sofort weiterwerfen.
+        if (e.statusCode != null && e.statusCode! < 500) rethrow;
+        lastError = e;
+      } on DioException catch (e) {
+        lastError = e;
+      }
+      if (attempt < 3) {
+        await Future<void>.delayed(Duration(seconds: attempt == 1 ? 2 : 5));
+      }
     }
-    final role = ((res['user'] as Map?)?['role'] as String?) ?? 'user';
-    return (token, role == 'admin');
+    throw lastError ?? GarageApiException('Garage nicht erreichbar', 503);
   }
 
   // -- Garage ---------------------------------------------------------------

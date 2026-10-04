@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/error_message.dart' show technicalCause;
+import '../../../core/i18n/i18n.dart';
+import '../../../core/network/error_message.dart' show friendlyErrorMessage;
 import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -69,7 +70,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       ErrorReporter.instance.report('chat.search', e);
       if (!mounted) return;
       setState(() {
-        _error = 'Suche fehlgeschlagen · ${technicalCause(e)}';
+        _error = 'Suche fehlgeschlagen · ${friendlyErrorMessage(e, ref.read(i18nProvider))}';
         _searching = false;
       });
     }

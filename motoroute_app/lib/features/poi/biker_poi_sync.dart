@@ -1,13 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/state/app_providers.dart';
+import 'poi_offline_cache.dart';
+import 'poi_offline_sync.dart';
 import 'poi_providers.dart';
 
 extension _PoiCategoryParse on String {
@@ -33,6 +33,12 @@ class BikerPoi extends Poi {
   final bool motorcycleParking;
   final bool meetingPoint;
 
+  /// Rohwert der Dienst-Kategorie (eine der 8 Biker-Kategorien, z. B.
+  /// 'gartenlokal'). Das App-UI mappt weiter auf 6 Kategorien - dieser
+  /// Wert bleibt für die lokale Offline-DB und Dienst-Statistiken
+  /// erhalten. Null bei älteren Caches ohne das Feld.
+  final BikerPoiSourceCategory? sourceCategory;
+
   const BikerPoi({
     required super.id,
     required super.category,
@@ -43,7 +49,13 @@ class BikerPoi extends Poi {
     required this.bikerScore,
     required this.motorcycleParking,
     required this.meetingPoint,
+    this.sourceCategory,
   });
+
+  /// Öffentliche Brücke: BFF-App-Kategorie (z. B. 'PUB') -> PoiCategory.
+  /// Der private Extension-Zugriff ist bibliotheksprivat - der Karten-
+  /// Layer konvertiert SQLite-Zeilen über diesen statischen Weg.
+  static PoiCategory categoryOfWire(String wire) => wire._asPoiCategory;
 
   factory BikerPoi.fromJson(Map<String, dynamic> json) => BikerPoi(
         id: json['id'] as String,
@@ -57,132 +69,116 @@ class BikerPoi extends Poi {
             ((json['amenities'] as Map<String, dynamic>?)?['motorcycle_parking'] ?? false) as bool,
         meetingPoint:
             ((json['amenities'] as Map<String, dynamic>?)?['meeting_point'] ?? false) as bool,
+        sourceCategory: BikerPoiSourceCategory.tryParse(json['sourceCategory'] as String?),
       );
 }
 
 /// Persistenter Delta-Sync gegen /v1/biker-pois/sync.
 ///
 /// Wie es funktioniert:
-/// - Beim Start wird `since` = letzter gespeicherter Cursor geladen
-///   (SharedPreferences). Beim ersten Mal: Epoch → der Dienst liefert
-///   ALLE aktiven POIs der gefilterten Kategorien (max. 2000 pro Call,
-///   danach über hasMore/Cursor nachziehen).
-/// - Jede Antwort aktualisiert den Cursor auf den serverseitigen Stand;
-///   gecachte POIs werden in einer lokalen Box (JSON im SharedPreferences)
-///   gehalten und dem Karten-Layer als MERGE übergeben - OSM-POIs aus dem
-///   BFF bleiben unverändert erhalten, Biker-POIs überlagern sie nicht,
-///   sondern ERGÄNZEN die Karte (verschiedene Namensräume via id-Präfix).
-/// - Offline: gecachte POIs bleiben verfügbar (Abschnitt 37 der Chat-
-///   Vorgabe analog hier), der Sync versucht es beim nächsten Start wieder.
+/// - [OfflineSyncService] (gleicher Ordner) macht die eigentliche Arbeit:
+///   Verbindungsprobe, Delta-Sync mit Pagination, Persistenz in SQLite
+///   (motoroute_pois.db), Cursor in SharedPreferences.
+/// - Dieser Controller ist die State-Brücke zum Karten-Layer: Er restoret
+///   den DB-Bestand beim App-Start, stößt Syncs (Intervall/Push/Reconnect)
+///   an und spiegelt die POIs in den Riverpod-State - NUR bei tatsächlichen
+///   Datenänderungen, damit der Layer nicht bei jedem 10-Minuten-Takt
+///   ohne Grund neu zeichnet.
+/// - OSM-POIs aus dem BFF bleiben unverändert erhalten, Biker-POIs ERGÄN-
+///   zen die Karte (verschiedene Namensräume via id-Präfix `biker-`).
 class BikerPoiSyncController extends StateNotifier<BikerPoiSyncState> {
-  final Dio _dio;
-  static const _cursorKey = 'biker_poi.sync.cursor';
-  static const _cacheKey = 'biker_poi.sync.cache';
+  /// Offline-Sync: Verbindungsprobe, Delta-Sync, SQLite-Persistenz. Der
+  /// Controller wird zur reinen State-Brücke (Karten-Layer) — die
+  /// Datenquelle ist die lokale Datenbank (auch offline).
+  final OfflineSyncService offline;
 
-  BikerPoiSyncController(this._dio) : super(const BikerPoiSyncState());
+  BikerPoiSyncController(
+    Dio dio, {
+    OfflineSyncService? offlineSync,
+    PoiOfflineDatabase? database,
+    ConnectivityProbe? probe,
+  })  : offline = offlineSync ??
+            OfflineSyncService(
+              dio: dio,
+              database: database ?? PoiOfflineDatabase(),
+              probe: probe,
+            ),
+        super(const BikerPoiSyncState());
 
   /// Aktive Kategorien des Biker-Dienstes - wird vom Karten-Layer gelesen,
   /// um die Delta-Filterung konsistent zur UI zu halten.
   Set<PoiCategory> activeCategories = PoiCategoryApi.bikerServiceCategories;
 
+  /// App-Start: Bestand aus SQLite in den State restoren (Offline-
+  /// Verfügbarkeit ohne Wartezeit auf den ersten Sync).
   Future<void> restoreCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cursor = prefs.getString(_cursorKey);
-      final raw = prefs.getString(_cacheKey);
-      if (raw != null) {
-        final list = (jsonDecode(raw) as List<dynamic>)
-            .map((e) => BikerPoi.fromJson(e as Map<String, dynamic>))
-            .toList();
-        // Cache-Größenlimit: 5000 POIs reichen für einen Regionalsync;
-        // bei Überschreitung älteste nach updatedAt verwerfen.
-        final capped = list.length > 5000
-            ? (list..sort((a, b) => a.id.compareTo(b.id))).sublist(0, 5000)
-            : list;
-        state = state.copyWith(pois: capped, cursor: cursor ?? state.cursor);
-      } else {
-        state = state.copyWith(cursor: cursor);
-      }
-    } catch (_) {
-      // Kaputter Cache: neu synchronisieren statt crashen.
-      state = const BikerPoiSyncState();
-    }
+    final rows = await offline.database.getAllBikerPois();
+    state = state.copyWith(
+      pois: rows.map(_bikerPoiOf).toList(growable: false),
+      cursor: await offline.readCursor(),
+    );
   }
 
-  /// Führt einen Delta-Sync durch. [lat]/[lng]/[radiusKm] optional für
-  /// Umkreis-Filterung (Kartenmittelpunkt).
+  BikerPoi _bikerPoiOf(CachedBikerPoi row) => BikerPoi(
+        id: row.id,
+        category: row.appCategory._asPoiCategory,
+        name: row.name,
+        lat: row.lat,
+        lng: row.lng,
+        source: 'BIKER_SERVICE',
+        bikerScore: row.bikerScore,
+        motorcycleParking: row.motorcycleParking,
+        meetingPoint: row.meetingPoint,
+        sourceCategory: row.sourceCategory,
+      );
+
+  /// Führt einen Delta-Sync durch (Probe → Delta → SQLite). [lat]/[lng]/
+  /// [radiusKm] optional für Umkreis-Filterung (Kartenmittelpunkt). Der
+  /// State wird nur aktualisiert, wenn der Sync neue Daten brachte -
+  /// offline (still) und error ändern die POIs nicht.
   Future<void> sync({double? lat, double? lng, double? radiusKm}) async {
     if (state.isSyncing) return;
     state = state.copyWith(isSyncing: true, error: null);
     try {
-      final since = state.cursor ?? '1970-01-01T00:00:00.000Z';
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/v1/biker-pois/sync',
-        queryParameters: {
-          'since': since,
-          if (lat != null && lng != null && radiusKm != null) ...{
-            'lat': lat,
-            'lon': lng,
-            'radiusKm': radiusKm,
-          },
-          'categories': activeCategories.map((c) => c.apiValue).join(','),
-        },
+      final result = await offline.sync(
+        lat: lat,
+        lng: lng,
+        radiusKm: radiusKm,
+        categories: activeCategories.map((c) => c.apiValue).toSet(),
       );
-
-      final upserted = ((response.data?['pois'] as List<dynamic>? ?? []))
-          .map((e) => BikerPoi.fromJson(e as Map<String, dynamic>))
-          .toList();
-      final deletedIds = Set<String>.from(response.data?['deletedIds'] as List<dynamic>? ?? []);
-      final newCursor = response.data?['since'] as String?;
-
-      // Merge: alte rausschmeißen (deleted + aktualisierte), neue rein.
-      final merged = Map<String, BikerPoi>.fromEntries(
-        state.pois.map((p) => MapEntry(p.id, p)),
-      );
-      for (final id in deletedIds) {
-        merged.remove(id);
-      }
-      for (final poi in upserted) {
-        merged[poi.id] = poi;
-      }
-
-      final pois = merged.values.toList(growable: false);
-      state = state.copyWith(pois: pois, cursor: newCursor, isSyncing: false);
-
-      // Cursor + Cache persistieren (Offline-Verfügbarkeit, Abschnitt 37).
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        if (newCursor != null) await prefs.setString(_cursorKey, newCursor);
-        await prefs.setString(
-          _cacheKey,
-          jsonEncode(pois.take(5000).map((p) => {
-                'id': p.id,
-                'name': p.name,
-                'category': p.category.apiValue,
-                'lat': p.lat,
-                'lon': p.lng,
-                'bikerScore': p.bikerScore,
-                'amenities': {
-                  'motorcycle_parking': p.motorcycleParking,
-                  'meeting_point': p.meetingPoint,
-                },
-              }).toList()),
-        );
-      } catch (_) {
-        // Persistenz-Fehler: Sync bleibt trotzdem erfolgreich.
-      }
-    } on DioException catch (e) {
       if (_disposed) return;
-      // 503 = Dienst nicht konfiguriert: kein Fehler, kein Retry-Sturm -
-      // die Karte läuft mit OSM-POIs weiter.
-      final unavailable = e.response?.statusCode == 503;
+      if (result != OfflineSyncResult.ok) {
+        // offline (stiller Offline-Pfad, Karte läuft aus SQLite weiter)
+        // oder error (UI darf warnen): POIs bleiben, wie sie sind.
+        state = state.copyWith(
+          isSyncing: false,
+          error: switch (result) {
+            OfflineSyncResult.offline => null,
+            _ => 'Biker-POIs konnten nicht synchronisiert werden',
+          },
+        );
+        return;
+      }
+      if (!offline.lastSyncChangedData) {
+        // Delta ohne Änderungen: kein State-Update -> der Karten-Layer
+        // zeichnet nicht neu (10-Minuten-Takt mit identischem Stand).
+        state = state.copyWith(isSyncing: false, error: null);
+        return;
+      }
+      final rows = await offline.database.getAllBikerPois();
+      if (_disposed) return;
       state = state.copyWith(
+        pois: rows.map(_bikerPoiOf).toList(growable: false),
+        cursor: await offline.readCursor(),
         isSyncing: false,
-        error: unavailable ? null : 'Biker-POIs konnten nicht synchronisiert werden',
+        error: null,
       );
     } catch (_) {
       if (_disposed) return;
-      state = state.copyWith(isSyncing: false, error: 'Biker-POIs konnten nicht synchronisiert werden');
+      state = state.copyWith(
+        isSyncing: false,
+        error: 'Biker-POIs konnten nicht synchronisiert werden',
+      );
     }
   }
 
@@ -227,6 +223,7 @@ class BikerPoiSyncController extends StateNotifier<BikerPoiSyncState> {
   void dispose() {
     _disposed = true;
     _backlogTimer?.cancel();
+    offline.dispose();
     super.dispose();
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/features/poi/biker_poi_sync.dart';
+import 'package:motoroute_app/features/poi/poi_offline_cache.dart';
 import 'package:motoroute_app/features/poi/poi_providers.dart';
 
 /// Rendert POIs als Kreise auf der Karte und lädt den Layer nach, wenn
@@ -154,12 +155,52 @@ class PoiMapLayer {
             bikerPois: bikerPois,
           );
       await _render(combined);
-    } catch (e) {
-      ref
-          .read(poiLayerControllerProvider.notifier)
-          .reportError('POIs nicht verfügbar');
+    } catch (_) {
+      // Funkloch-Fallback: OSM/BFF nicht erreichbar → kuratierte POIs
+      // aus der lokalen SQLite-DB zeigen (Offline-Verfügbarkeit). Kein
+      // Fehlerzustand - das ist der planmäßige Offline-Modus.
+      try {
+        final offlinePois = await ref
+            .read(bikerPoiSyncProvider.notifier)
+            .offline
+            .database
+            .inBounds(
+              minLat: bounds.southwest.latitude,
+              minLng: bounds.southwest.longitude,
+              maxLat: bounds.northeast.latitude,
+              maxLng: bounds.northeast.longitude,
+              appCategories: categories.map((c) => c.apiValue).toSet(),
+            );
+        final fallback = offlinePois.map(_bikerPoiFromCache).toList();
+        _poisById
+          ..clear()
+          ..addEntries(fallback.map((p) => MapEntry(p.id, p)));
+        ref.read(poiLayerControllerProvider.notifier).adoptMerged(
+              osmPois: const [],
+              bikerPois: fallback,
+            );
+        await _render(fallback);
+      } catch (_) {
+        ref
+            .read(poiLayerControllerProvider.notifier)
+            .reportError('POIs nicht verfügbar');
+      }
     }
   }
+
+  /// SQLite-Zeile → BikerPoi für den Offline-Fallback im Karten-Layer.
+  static BikerPoi _bikerPoiFromCache(CachedBikerPoi row) => BikerPoi(
+        id: row.id,
+        category: BikerPoi.categoryOfWire(row.appCategory),
+        name: row.name,
+        lat: row.lat,
+        lng: row.lng,
+        source: 'BIKER_SERVICE',
+        bikerScore: row.bikerScore,
+        motorcycleParking: row.motorcycleParking,
+        meetingPoint: row.meetingPoint,
+        sourceCategory: row.sourceCategory,
+      );
 
   /// Sofortige Übernahme gepushter Biker-POIs (bikerpoi.batch über die
   /// App-WebSocket): liest den AKTUELLEN Sync-State, merged mit den
