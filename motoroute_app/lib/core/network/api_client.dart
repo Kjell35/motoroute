@@ -91,10 +91,11 @@ class ApiClient {
   ///
   /// Render-Free-Tier: Die Instanz schläft nach ~15 min Leerlauf ein,
   /// der erste Request wartet 30-60 s (bzw. scheitert an Connect-Timeout).
-  /// Der Interceptor wiederholt deshalb VERBINDUNGS-Fehler automatisch
-  /// (bis zu 3 Versuche, mit Backoff 2 s/4 s) - Timeouts beim Aufwecken
-  /// werden so unsichtbar gefressen, statt "Verbindung prüfen" zu zeigen.
-  /// 4xx/5xx werden NICHT wiederholt (echte Serverantworten).
+  /// Der Interceptor wiederholt deshalb VERBINDUNGS-Fehler UND
+  /// 502/503/504 (Render-Deploy-Fenster) automatisch (bis zu 4 Versuche,
+  /// mit Backoff 2 s/4 s/6 s) - Timeouts beim Aufwecken werden so
+  /// unsichtbar gefressen, statt "Verbindung prüfen" zu zeigen.
+  /// Andere 4xx/5xx werden NICHT wiederholt (echte Serverantworten).
   static Dio create() {
     final dio = Dio(
       BaseOptions(
@@ -178,17 +179,19 @@ class _TokenRefreshInterceptor extends Interceptor {
   }
 }
 
-/// Wiederholt VERBINDUNGS-Fehler (Kaltstart des Render-Free-Tiers).
-/// Bewusst nur Netzwerk-Layer-Fehler: connectionTimeout/connectionError/
+/// Wiederholt VERBINDUNGS-Fehler (Kaltstart des Render-Free-Tiers) und
+/// 502/503/504 (Render-Deploy-Fenster: waehrend des Deploys antwortet
+/// der Proxy mit Gateway-Fehlern, bevor die neue Version startet).
+/// Verbindungs-Layer-Fehler: connectionTimeout/connectionError/
 /// receiveTimeout. Ein 404/500 ist eine echte Antwort und wird nicht
-/// wiederholt. Maximal 3 Versuche mit wachsendem Abstand (2 s, 4 s) -
-/// ein 60-s-Kaltstart passt damit in Versuch 1+2 (25 s Timeout + Pause
-/// + 25 s) oder Versuch 3.
+/// wiederholt. Maximal 4 Versuche mit wachsendem Abstand (2 s, 4 s,
+/// 6 s) - ein 60-s-Kaltstart passt damit in Versuch 1+2 (25 s Timeout
+/// + Pause + 25 s) oder Versuch 3+4.
 class _ColdStartRetryInterceptor extends Interceptor {
   _ColdStartRetryInterceptor(this._dio);
   final Dio _dio;
 
-  static const _maxAttempts = 3;
+  static const _maxAttempts = 4;
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
@@ -196,8 +199,13 @@ class _ColdStartRetryInterceptor extends Interceptor {
         err.type == DioExceptionType.connectionError ||
         err.type == DioExceptionType.receiveTimeout;
 
+    // 502/503/504: Der Deploy/Neustart ist im Gange - genauso wie ein
+    // Kaltstart behandeln (kurz warten, erneut versuchen).
+    final status = err.response?.statusCode;
+    final isDeployWindow = status == 502 || status == 503 || status == 504;
+
     final attempts = (err.requestOptions.extra['__retryCount'] as int?) ?? 0;
-    if (!isConnectionIssue || attempts >= _maxAttempts - 1) {
+    if ((!isConnectionIssue && !isDeployWindow) || attempts >= _maxAttempts - 1) {
       handler.next(err);
       return;
     }

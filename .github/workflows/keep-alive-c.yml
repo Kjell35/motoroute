@@ -1,0 +1,45 @@
+# Keep-Alive c: Dritter Warmup-Ping mit weiter versetztem Cron
+# (3-59/5 statt 0-59/5 bzw. 1-59/5 von keep-alive/keep-alive-b).
+#
+# Hintergrund siehe keep-alive-b.yml: GitHub drosselt Scheduled-Workflows
+# massiv (real oft nur alle 3-9 h statt 5 min). Mehr Workflows mit
+# eigenen concurrency groups = mehr Chancen pro Zeitschlitz, den
+# Render-Free-Tier wachzuhalten.
+
+name: keep-alive-c
+
+on:
+  schedule:
+    - cron: '3-59/5 * * * *'
+  workflow_dispatch: {} # manueller Testlauf möglich
+
+concurrency:
+  group: keep-alive-c
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Backend aufwecken
+        run: |
+          code=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 90 \
+            https://motoroute-api-8fi9.onrender.com/v1/health || echo "000")
+          echo "Health: HTTP $code"
+          cat /tmp/health.json || true
+          if [ "$code" != "200" ]; then
+            echo "::warning::Backend antwortete nicht mit 200 (HTTP $code)"
+          fi
+
+      - name: Garage-API aufwecken
+        run: |
+          code=$(curl -s -o /tmp/garage-health.json -w "%{http_code}" --max-time 90 \
+            https://garage-api-4a7o.onrender.com/api/health || echo "000")
+          echo "Garage-Health: HTTP $code"
+          cat /tmp/garage-health.json || true
+          if [ "$code" != "200" ]; then
+            echo "::warning::Garage-API antwortete nicht mit 200 (HTTP $code)"
+          fi

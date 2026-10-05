@@ -792,10 +792,14 @@ export class MarketplaceService {
   async adminListPending(user: AuthenticatedUser): Promise<{ listings: Record<string, unknown>[] }> {
     this.ensureConfigured();
     await this.requireAdmin(user);
+    // Freigabe-Warteschlange: nur manual_review/pending. Endgültig
+    // 'rejected' Listings bewusst NICHT - sie werden nie veröffentlicht
+    // (Listen-Filter status=active + review_status=approved) und brauchen
+    // keine Admin-Entscheidung; der Verkäufer kann sie resubmiten.
     const { data, error } = await this.adminClient!
       .from('marketplace_listings')
       .select(LISTING_SELECT_WITH_IMAGES)
-      .in('review_status', ['manual_review', 'rejected', 'pending'])
+      .in('review_status', ['manual_review', 'pending'])
       .order('reviewed_at', { ascending: true, nullsFirst: true })
       .limit(100);
     if (error) mapSupabaseError('adminListPending', error);

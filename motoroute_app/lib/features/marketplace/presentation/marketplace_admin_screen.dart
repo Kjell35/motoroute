@@ -133,7 +133,7 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
                           ),
                           ButtonSegment(
                             value: 'queue',
-                            label: Text('KI-Prüfstau'),
+                            label: Text('Freigaben prüfen'),
                             icon: Icon(Icons.auto_awesome_outlined, size: 18),
                           ),
                         ],
@@ -190,13 +190,15 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
     );
   }
 
-  /// KI-Prüfstau: automatisch erzeugte Faelle (unsicher/abgelehnt) - KEINE
-  /// Nutzer-Meldungen, daher bewusst im separaten Tab.
+  /// Freigaben prüfen: automatisch erzeugte Faelle (unsicher/ausstehend)
+  /// - KEINE Nutzer-Meldungen, daher bewusst im separaten Tab. Endgültig
+  /// abgelehnte Angebote kommen nie hier an (Backend filtert sie raus:
+  /// sie werden nie veröffentlicht und brauchen keine Admin-Entscheidung).
   Widget _buildReviewQueueList(ColorScheme scheme) {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        const Text('Automatisch von der KI markiert',
+        const Text('Warten auf Freigabe - bis dahin nicht öffentlich',
             style: TextStyle(fontWeight: FontWeight.w700)),
         if (_pending.isEmpty)
           const Padding(

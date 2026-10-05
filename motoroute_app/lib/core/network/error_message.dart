@@ -11,11 +11,13 @@ String technicalCause(Object error) {
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
-        return 'Verbindung fehlgeschlagen (Timeout beim Aufbau)';
+        // Render-Free-Tier: Der haeufigste Grund fuer einen Verbindungs-
+        // Timeout ist der Kaltstart - der Server wacht gerade auf.
+        return 'Server wacht gerade auf (Kaltstart) - Timeout beim Aufbau';
       case DioExceptionType.receiveTimeout:
-        return 'Verbindung zu langsam (Timeout bei der Antwort)';
+        return 'Server wacht gerade auf (Kaltstart) - Timeout bei der Antwort';
       case DioExceptionType.connectionError:
-        return 'Verbindung fehlgeschlagen (Server nicht erreichbar)';
+        return 'Server wacht gerade auf (Kaltstart) - Server nicht erreichbar';
       case DioExceptionType.badCertificate:
         return 'Verbindung unsicher (Zertifikat abgelehnt)';
       case DioExceptionType.cancel:
@@ -36,6 +38,11 @@ String technicalCause(Object error) {
       403 => 'HTTP 403 - kein Zugriff für dieses Konto',
       404 => 'HTTP 404 - Endpunkt nicht gefunden',
       429 => 'HTTP 429 - zu viele Anfragen, kurz warten',
+      // Render-Deploy-Fenster: Der Proxy antwortet mit Gateway-Fehlern,
+      // waehrend die neue Version startet - kein echter Serverfehler.
+      502 => 'Server startet gerade neu (HTTP 502) - gleich erneut versuchen',
+      503 => 'Server startet gerade neu (HTTP 503) - gleich erneut versuchen',
+      504 => 'Server startet gerade neu (HTTP 504) - gleich erneut versuchen',
       null => 'Keine Antwort vom Server',
       _ => 'HTTP $status - Serverfehler$serverHint',
     };
