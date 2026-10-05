@@ -4,9 +4,10 @@ import axios from 'axios';
 import { GeminiReviewService } from './gemini-review.service';
 
 /**
- * Die kombinierte KI-Pruefung (Text-Klassifikator + Gemini-Vision) ist
- * der Kern der Marktplatz-Anforderung (Punkt 5/7/8/9): Nur eindeutig
- * fahrzeugbezogene Angebote werden automatisch veroeffentlicht.
+ * Die kombinierte KI-Pruefung (Text-Klassifikator + Gemini-Text + Gemini-
+ * Vision) ist der Kern der Marktplatz-Anforderung (Punkt 5/7/8/9): Nur
+ * eindeutig fahrzeugbezogene Angebote werden automatisch veroeffentlicht,
+ * Kategorie-Widersprueche landen in der manuellen Pruefung.
  */
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -21,18 +22,52 @@ function mockImageDownload(): void {
   } as never);
 }
 
-/** Gemini antwortet mit dem gegebenen relation-JSON. */
+/** Gemini antwortet mit dem gegebenen relation-JSON (Bildpruefung). */
 function mockGemini(relation: string, label = 'Objekt'): void {
   mockedAxios.post.mockResolvedValue({
     data: { candidates: [{ content: { parts: [{ text: JSON.stringify({ label, relation }) }] } }] },
   } as never);
 }
 
-async function service(): Promise<GeminiReviewService> {
+const TEXT_PROMPT_PREFIX =
+  'You moderate text listings for a marketplace that ONLY allows parts and ' +
+  'accessories for motorcycles, cars and bicycles. Judge ONLY the text';
+
+/** Gemini-TEXTPRUEFUNG antwortet mit dem gegebenen Urteil (Bild = passend). */
+function mockGeminiText(review: {
+  vehicle_related: string;
+  category_match?: string;
+  item?: string;
+}): void {
+  mockedAxios.post.mockImplementation(async (_url: string, body: unknown) => {
+    const promptText = (body as { contents: { parts: { text: string }[] }[] }).contents[0].parts[0]
+      .text as string;
+    const isTextReview = promptText.startsWith(TEXT_PROMPT_PREFIX);
+    return {
+      data: {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify(
+                    isTextReview ? review : { label: 'Objekt', relation: 'motorcycle_part' },
+                  ),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    } as never;
+  });
+}
+
+async function service(configOverride?: { get: () => string | null }): Promise<GeminiReviewService> {
   const moduleRef = await Test.createTestingModule({
     providers: [
       GeminiReviewService,
-      { provide: ConfigService, useValue: { get: () => 'test-gemini-api-key-1234567890' } },
+      { provide: ConfigService, useValue: configOverride ?? { get: () => 'test-gemini-api-key-1234567890' } },
     ],
   }).compile();
   return moduleRef.get(GeminiReviewService);
@@ -131,5 +166,69 @@ describe('GeminiReviewService - kombinierte KI-Pruefung', () => {
 
     // Text = UNCERTAIN, Bild = error -> niemals APPROVE.
     expect(result.decision).toBe('MANUAL_REVIEW');
+  });
+
+  it('Gemini-Text-KI blockt ein fremdes Produkt, das der Regel-Klassifikator verpasst', async () => {
+    mockImageDownload();
+    mockGeminiText({ vehicle_related: 'no', item: 'Kuehlschrank' });
+    const svc = await service();
+
+    const result = await svc.review({
+      title: 'Top Angebot fuer Sammler',
+      description: 'seltenes Stueck, nur an Selbstabholer, NP 400 EUR',
+      imageUrls: [IMG_BRAKE],
+    });
+
+    expect(result.decision).toBe('REJECT');
+    expect(result.reason).toContain('kein Fahrzeugteil');
+    expect(result.textAiReview?.vehicleRelated).toBe('no');
+  });
+
+  it('Kategorie-Mismatch: Titel sagt Bremsbelag, Kategorie sagt Auspuff -> MANUAL_REVIEW', async () => {
+    mockImageDownload();
+    mockGeminiText({ vehicle_related: 'yes', category_match: 'no', item: 'Bremsbelagsatz' });
+    const svc = await service();
+
+    const result = await svc.review({
+      title: 'Bremsbelagsatz vorne',
+      description: 'Neuteile, passend fuer viele Modelle',
+      category: 'motorradteile',
+      subcategory: 'auspuff',
+      imageUrls: [IMG_BRAKE],
+    });
+
+    expect(result.decision).toBe('MANUAL_REVIEW');
+    expect(result.reason).toContain('Kategorie');
+  });
+
+  it('Kategorie-Match: Titel + Auspuff-Kategorie passen -> APPROVE bleibt bestehen', async () => {
+    mockImageDownload();
+    mockGeminiText({ vehicle_related: 'yes', category_match: 'yes' });
+    const svc = await service();
+
+    const result = await svc.review({
+      title: 'BMW R1250 Auspuffanlage',
+      description: 'Original BMW Motorrad Endtopf',
+      category: 'motorradteile',
+      subcategory: 'auspuff',
+      imageUrls: [IMG_BRAKE],
+    });
+
+    expect(result.decision).toBe('APPROVE');
+    expect(result.textAiReview?.categoryMatch).toBe('yes');
+  });
+
+  it('Gemini ohne Key: textAiReview ist null, Regel-Text entscheidet weiter', async () => {
+    mockImageDownload();
+    mockGemini('motorcycle_part', 'Auspuff');
+    const svc = await service({ get: () => null });
+
+    const result = await svc.review({
+      title: 'BMW R1250 Auspuff',
+      imageUrls: [IMG_BRAKE],
+    });
+
+    expect(result.textAiReview).toBeNull();
+    expect(result.decision).toBe('APPROVE');
   });
 });

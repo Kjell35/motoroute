@@ -5,6 +5,7 @@ import { AuthProvider, SupabaseAuthService } from '../../guards';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
+import { ChatModerationService } from './moderation.service';
 
 /**
  * Chat-Modul (Architekturregel Abschnitt 39): fasst alle Chat-Komponenten
@@ -18,7 +19,7 @@ import { ChatGateway } from './chat.gateway';
 @Module({
   imports: [SupabaseModule, EventEmitterModule.forRoot()],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway, AuthProvider, SupabaseAuthService],
+  providers: [ChatService, ChatGateway, ChatModerationService, AuthProvider, SupabaseAuthService],
   // ChatGateway muss exportiert sein: BikerPoisGateway (POI-Push) und die
   // Gruppenrouten-Realtime nutzen dieselbe WS-Verbindung. ChatService
   // wird vom Marktplatz injiziert (Verkäufer-Kontakt = privater Chat).

@@ -254,14 +254,20 @@ export class ChatController {
 
   // ------------------------------------------------------ Admin: Meldungen
 
-  /** Admin: Nutzer-/Nachrichten-Meldungen einsehen (users.role = 'admin'). */
+  /**
+   * Admin: Meldungen einsehen (users.role = 'admin').
+   * source=user (Default): nur echte Nutzer-Meldungen. source=ai: nur
+   * automatisch von der KI erkannte Verstosse. source=all: beides.
+   */
   @Get('admin/reports')
   adminListReports(
     @Req() req: AuthenticatedRequest,
     @Query('status') status?: string,
+    @Query('source') source?: string,
   ): Promise<unknown> {
     const s = status === 'reviewing' || status === 'resolved' || status === 'dismissed' ? status : 'open';
-    return this.chat.adminListReports(req.user!, s);
+    const src = source === 'ai' || source === 'all' ? source : 'user';
+    return this.chat.adminListReports(req.user!, s, src);
   }
 
   /** Admin: Meldung bearbeiten (Status setzen). */

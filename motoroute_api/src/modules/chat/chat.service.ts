@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -14,6 +15,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuthenticatedUser, SupabaseAuthService } from '../../guards';
 import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ChatModerationService } from './moderation.service';
 
 /**
  * Konversations-ID des öffentlichen Chats (Singleton aus schema.sql).
@@ -140,6 +142,8 @@ export class ChatService {
     config: ConfigService,
     private readonly events: EventEmitter2,
     private readonly authService: SupabaseAuthService,
+    // Optional injiziert: alte Tests ohne Provider laufen unverändert.
+    @Optional() private readonly moderation: ChatModerationService | null = null,
   ) {
     this.adminClient = adminClient;
     this.supabaseUrl = config.get<string>('SUPABASE_URL') ?? '';
@@ -517,6 +521,19 @@ export class ChatService {
     // Realtime-Kanal für andere Instanzen / direkte Supabase-Clients.
     this.events.emit(ChatEvent.NEW_MESSAGE, { conversationId, message: data });
     await this.broadcast('message', conversationId, data);
+
+    // Automatische KI-Moderation (post-hoc, non-blocking, fehlertolerant):
+    // unangemessene Nachrichten werden versteckt + als KI-Meldung erfasst.
+    if (this.moderation) {
+      void this.moderation
+        .reviewMessage({
+          messageId: (data as { id: string }).id,
+          senderId: user.id,
+          conversationId,
+          content,
+        })
+        .catch((err) => this.logger.warn(`KI-Moderation Fehler: ${err}`));
+    }
     return data;
   }
 
@@ -869,20 +886,38 @@ export class ChatService {
     }
   }
 
-  /** Offene Nutzer-/Nachrichten-Meldungen fuer den Admin-Bereich. */
-  async adminListReports(user: AuthenticatedUser, status = 'open'): Promise<{ reports: Record<string, unknown>[] }> {
+  /**
+   * Offene Meldungen fuer den Admin-Bereich.
+   *
+   * source='user' (Default): ausschliesslich Meldungen, die von Nutzern
+   * erstellt wurden (reporter != reported). KI-Meldungen (reporter ==
+   * reported, automatisch erkannt) werden bewusst AUSGEBLENDET - der
+   * Admin-Bildschirm soll echte Nutzer-Meldungen nicht mit automatischen
+   * Treffern vermischen. source='ai' liefert nur KI-Meldungen,
+   * 'all' beide.
+   */
+  async adminListReports(
+    user: AuthenticatedUser,
+    status = 'open',
+    source: 'user' | 'ai' | 'all' = 'user',
+  ): Promise<{ reports: Record<string, unknown>[] }> {
     this.ensureConfigured();
     await this.requireChatAdmin(user);
-    const { data, error } = await this.adminClient!
+    let query = this.adminClient!
       .from('reports')
       .select(
         'id, reporter_id, reported_user_id, message_id, reason, details, status, created_at, reported:users!reports_reported_user_id_fkey(id, username, display_name, email)',
       )
-      .eq('status', status)
-      .order('created_at', { ascending: false })
-      .limit(100);
+      .eq('status', status);
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(200);
     if (error) mapSupabaseError('adminListReports', error);
-    return { reports: (data ?? []) as Record<string, unknown>[] };
+    let reports = (data ?? []) as Record<string, unknown>[];
+    if (source === 'user') {
+      reports = reports.filter((r) => r['reporter_id'] !== r['reported_user_id']);
+    } else if (source === 'ai') {
+      reports = reports.filter((r) => r['reporter_id'] === r['reported_user_id']);
+    }
+    return { reports: reports.slice(0, 100) };
   }
 
   /** Meldung bearbeiten: status setzen (reviewing/resolved/dismissed). */

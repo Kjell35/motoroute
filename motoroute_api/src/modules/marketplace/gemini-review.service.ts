@@ -21,6 +21,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { classifyText, TextInput, TextReview } from './classifier/text-classifier';
+import { MARKETPLACE_CATEGORIES } from './marketplace.taxonomy';
 
 export type ReviewDecision = 'APPROVE' | 'REJECT' | 'MANUAL_REVIEW';
 export type ReviewMediaVerdict = 'matches' | 'mismatch' | 'uncertain' | 'no_images' | 'error';
@@ -34,8 +35,23 @@ export interface ReviewResult {
   decision: ReviewDecision;
   reason: string;
   textReview: TextReview;
+  /** KI-Urteil ueber den Text selbst (null = nicht verfuegbar/Fehler). */
+  textAiReview: TextAiReview | null;
   /** Bildpruefung pro Bild: was das Modell erkannt hat. */
   imageResults: { url: string; verdict: ReviewMediaVerdict; label?: string }[];
+}
+
+/**
+ * Ergebnis der Gemini-TEXTPRUEFUNG: passt der Text zum Marktplatz - und
+ * passt der beschriebene Gegenstand zur gewaehlten (Unter-)Kategorie?
+ * Der Regel-Klassifikator erkennt nur Fremd-Wortschatz; Gemini versteht
+ * auch Zusammenhaenge ("Originales Teil, selten benutzt" + Kategorie
+ * Auspuff -> plausibel; Titel "Kuehlschrank" + Kategorie Bremsen -> falsch).
+ */
+export interface TextAiReview {
+  vehicleRelated: 'yes' | 'no' | 'unclear';
+  categoryMatch: 'yes' | 'no' | 'unclear' | 'not_evaluated';
+  item?: string;
 }
 
 /** Gemini-Modell mit Vision-Support, stabil ueber die v1beta-REST-API. */
@@ -53,6 +69,26 @@ const PROMPT_SYSTEM = [
   'vehicle accessory (e.g. toaster, TV, phone, furniture, clothing, toys).',
   'It is "unclear" only if the photo is unusable (too dark, no object).',
 ].join('\n');
+
+/** Striktes Format fuer die reine TEXTPRUEFUNG (Titel/Beschreibung). */
+const PROMPT_TEXT = 'You moderate text listings for a marketplace that ONLY allows parts and ' +
+  'accessories for motorcycles, cars and bicycles. Judge ONLY the text ' +
+  '(title, description, brand/model), no photos are attached. ' +
+  '1) Does the text describe a vehicle part or vehicle accessory? ' +
+  '2) If a category is given: does the described item plausibly belong to it? ' +
+  'A wrong category is a mismatch even when the item itself is a vehicle part. ' +
+  'Answer with JSON only: {"vehicle_related": "yes" | "no" | "unclear", ' +
+  '"category_match": "yes" | "no" | "unclear", "item": "<short object name>"}. ' +
+  'Use "no" only when you are confident (e.g. household items, electronics, ' +
+  'clothing, toys); otherwise use "unclear".';
+
+/** Aufloesung der Kategorie-Keys in lesbare Labels fuer den Prompt. */
+function categoryLabels(category?: string, subcategory?: string): { category?: string; subcategory?: string } {
+  const def = MARKETPLACE_CATEGORIES.find((c) => c.key === category);
+  if (!def) return {};
+  const sub = def.subcategories.find((s) => s.key === subcategory);
+  return { category: def.labelDe, subcategory: sub?.labelDe };
+}
 
 @Injectable()
 export class GeminiReviewService {
@@ -75,12 +111,68 @@ export class GeminiReviewService {
   async review(input: ReviewInput): Promise<ReviewResult> {
     const textReview = classifyText(input);
 
-    // Bildpruefung parallel je Bild; Fehler = verdict 'error'.
-    const imageResults = await Promise.all(
-      input.imageUrls.slice(0, 8).map(async (url) => this.inspectImage(url)),
-    );
+    // Text-KI und Bildpruefung laufen parallel; Fehler = null bzw. 'error'.
+    const [textAiReview, imageResults] = await Promise.all([
+      this.inspectText(input),
+      Promise.all(input.imageUrls.slice(0, 8).map(async (url) => this.inspectImage(url))),
+    ]);
 
-    return this.decide(input, textReview, imageResults);
+    return this.decide(input, textReview, textAiReview, imageResults);
+  }
+
+  /**
+   * Gemini-TEXTPRUEFUNG: versteht der Text zusammenhaengend, was angeboten
+   * wird - und passt das zur gewaehlten Kategorie? Liefert null bei
+   * fehlender Konfiguration oder Fehler (degradiert auf Regelwerk).
+   */
+  private async inspectText(input: TextInput): Promise<TextAiReview | null> {
+    if (!this.apiKey) return null;
+    const labels = categoryLabels(input.category, input.subcategory);
+    const evaluateCategory = !!(labels.category && labels.subcategory);
+
+    const userText = [
+      `Title: ${input.title}`,
+      input.description ? `Description: ${input.description}` : null,
+      input.brand ? `Brand: ${input.brand}` : null,
+      input.model ? `Model: ${input.model}` : null,
+      labels.category ? `Category: ${labels.category}` : null,
+      labels.subcategory ? `Subcategory: ${labels.subcategory}` : null,
+      evaluateCategory ? '' : 'Category: (none given - judge category_match as "unclear")',
+    ]
+      .filter((line): line is string => line !== null)
+      .join('\n');
+
+    try {
+      const gemini = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+        {
+          contents: [{ parts: [{ text: `${PROMPT_TEXT}\n\n${userText}` }] }],
+          generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+        },
+        { timeout: GEMINI_TIMEOUT_MS },
+      );
+
+      const text: string | undefined = gemini.data?.candidates?.[0]?.content?.parts
+        ?.map((p: { text?: string }) => p.text ?? '')
+        .join('');
+      if (!text) return null;
+
+      const parsed = JSON.parse(text.trim()) as {
+        vehicle_related?: string;
+        category_match?: string;
+        item?: string;
+      };
+      const vehicleRelated = ['yes', 'no', 'unclear'].includes(parsed.vehicle_related ?? '')
+        ? (parsed.vehicle_related as TextAiReview['vehicleRelated'])
+        : 'unclear';
+      const categoryMatch = evaluateCategory && ['yes', 'no', 'unclear'].includes(parsed.category_match ?? '')
+        ? (parsed.category_match as TextAiReview['categoryMatch'])
+        : 'not_evaluated';
+      return { vehicleRelated, categoryMatch, item: parsed.item };
+    } catch (err) {
+      this.logger.warn(`Gemini-Textpruefung fehlgeschlagen: ${axios.isAxiosError(err) ? err.message : err}`);
+      return null;
+    }
   }
 
   private async inspectImage(
@@ -149,6 +241,7 @@ export class GeminiReviewService {
   private decide(
     input: ReviewInput,
     text: TextReview,
+    textAi: TextAiReview | null,
     images: ReviewResult['imageResults'],
   ): ReviewResult {
     const mismatches = images.filter((i) => i.verdict === 'mismatch');
@@ -162,6 +255,20 @@ export class GeminiReviewService {
         reason:
           'Der Artikel ist laut Beschreibung kein Fahrzeugteil und kein Fahrzeugzubehör (Motorrad, Auto, Fahrrad).',
         textReview: text,
+        textAiReview: textAi,
+        imageResults: images,
+      };
+    }
+
+    // 1b) Gemini erkennt im TEXT ein fremdes Produkt (auch wenn der
+    //     Regel-Klassifikator es verpasst hat) -> ablehnen.
+    if (textAi?.vehicleRelated === 'no') {
+      const item = textAi.item ?? 'unbekannter Gegenstand';
+      return {
+        decision: 'REJECT',
+        reason: `Der Artikel ist kein Fahrzeugteil und kein Fahrzeugzubehör (erkannt: ${item}).`,
+        textReview: text,
+        textAiReview: textAi,
         imageResults: images,
       };
     }
@@ -174,6 +281,20 @@ export class GeminiReviewService {
         decision: 'REJECT',
         reason: `Das hochgeladene Foto zeigt kein Fahrzeugteil (erkannt: ${label}).`,
         textReview: text,
+        textAiReview: textAi,
+        imageResults: images,
+      };
+    }
+
+    // 2b) Kategorie-Konsistenz: Titel/Beschreibung beschreiben NICHT das,
+    //     was die gewaehlte (Unter-)Kategorie verspricht -> nicht automatisch
+    //     veroeffentlichen, sondern dem Admin zeigen (korrigierbar).
+    if (textAi?.categoryMatch === 'no') {
+      return {
+        decision: 'MANUAL_REVIEW',
+        reason: 'Titel/Beschreibung passen nicht zur gewählten Kategorie - bitte manuell prüfen.',
+        textReview: text,
+        textAiReview: textAi,
         imageResults: images,
       };
     }
@@ -188,6 +309,7 @@ export class GeminiReviewService {
             ? 'Text und Fotos passen zu Fahrzeugteilen.'
             : 'Text passt eindeutig zu Fahrzeugteilen.',
         textReview: text,
+        textAiReview: textAi,
         imageResults: images,
       };
     }
@@ -201,6 +323,7 @@ export class GeminiReviewService {
       decision: 'MANUAL_REVIEW',
       reason,
       textReview: text,
+      textAiReview: textAi,
       imageResults: images,
     };
   }
