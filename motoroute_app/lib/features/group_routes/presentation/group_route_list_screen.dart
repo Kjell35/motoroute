@@ -63,7 +63,7 @@ class _GroupRouteListScreenState extends ConsumerState<GroupRouteListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
-      appBar: AppBar(backgroundColor: AppColors.bgBaseDark, title: const Text('🏍️ Route planen')),
+      appBar: AppBar(backgroundColor: AppColors.bgBaseDark, title: const Text('Route planen')),
       floatingActionButton: _isOwner
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.accentPrimaryDark,

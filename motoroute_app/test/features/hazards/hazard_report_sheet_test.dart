@@ -41,7 +41,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('🚧 Rollsplitt'), findsOneWidget);
-    expect(find.text('⛔ Sperrung'), findsOneWidget);
+    expect(find.text('Sperrung'), findsOneWidget);
     expect(find.text('🚜 Baustelle'), findsOneWidget);
     expect(find.text('🛢️ Ölspur'), findsOneWidget);
   });
@@ -57,11 +57,11 @@ void main() {
 
     await tester.tap(find.text('🚧 Rollsplitt'));
     await tester.pump();
-    await tester.tap(find.text('⛔ Sperrung'));
+    await tester.tap(find.text('Sperrung'));
     await tester.pump();
 
     expect(
-      find.widgetWithText(ElevatedButton, '⛔ Sperrung MELDEN'),
+      find.widgetWithText(ElevatedButton, 'Sperrung MELDEN'),
       findsOneWidget,
     );
   });

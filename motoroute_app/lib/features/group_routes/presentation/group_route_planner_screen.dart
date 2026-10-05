@@ -273,11 +273,11 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
           Wrap(
             spacing: 8,
             children: [
-              _metaChip('🏍️ ${route.vehicleType}'),
-              _metaChip('🌀 ${route.routingStyle}'),
-              if (route.avoidHighways) _metaChip('🚫 Autobahn'),
-              if (route.avoidFerries) _metaChip('🚫 Fähren'),
-              if (route.avoidTolls) _metaChip('🚫 Maut'),
+              _metaChip(route.vehicleType),
+              _metaChip(route.routingStyle),
+              if (route.avoidHighways) _metaChip('ohne Autobahn'),
+              if (route.avoidFerries) _metaChip('ohne Fähren'),
+              if (route.avoidTolls) _metaChip('ohne Maut'),
             ],
           ),
         ],

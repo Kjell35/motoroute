@@ -23,6 +23,11 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
   String? _error;
   bool _isAdmin = true;
 
+  /// Start-Ansicht: Nutzer-Meldungen (der Wunsch: Admin sieht Meldungen
+  /// von Nutzern im Fokus). Der KI-Prüfstau liegt bewusst in einem eigenen
+  /// Tab und wird nicht mit echten Meldungen vermischt.
+  String _tab = 'reports';
+
   @override
   void initState() {
     super.initState();
@@ -101,7 +106,7 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: scheme.surface,
-      appBar: AppBar(title: const Text('🛡️ Marktplatz-Admin'), backgroundColor: scheme.surface),
+      appBar: AppBar(title: const Text('Marktplatz-Admin'), backgroundColor: scheme.surface),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : !_isAdmin
@@ -115,92 +120,132 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
                     ),
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.all(12),
-                    children: [
-                      const Text('🕵️ Prüfstau (KI unsicher / abgelehnt)',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      if (_pending.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('Nichts zu tun - alles geprüft ✅'),
-                        ),
-                      ..._pending.map((listing) => Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            color: scheme.surfaceContainerHigh,
-                            elevation: 0,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(listing.title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                  Text(
-                                    '${listing.priceLabel} · ${listing.category.emoji} ${listing.subcategory}',
-                                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                                  ),
-                                  if (listing.reviewReason != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(listing.reviewReason!,
-                                          style: const TextStyle(fontSize: 12)),
-                                    ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 6,
-                                    children: [
-                                      FilledButton.tonal(
-                                        onPressed: () => _moderate(listing, approve: true),
-                                        child: const Text('✅ Freigeben'),
-                                      ),
-                                      FilledButton.tonal(
-                                        onPressed: () => _moderate(listing, approve: false),
-                                        child: const Text('🚫 Ablehnen'),
-                                      ),
-                                      FilledButton.tonal(
-                                        onPressed: () => _block(listing),
-                                        child: const Text('⛔ Sperren'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )),
-                      const SizedBox(height: 16),
-                      const Text('🚩 Gemeldete Angebote',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      if (_reports.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('Keine offenen Meldungen'),
-                        ),
-                      ..._reports.map((report) => Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            color: scheme.surfaceContainerHigh,
-                            elevation: 0,
-                            child: ListTile(
-                              title: Text(report.listingTitle),
-                              subtitle: Text('${report.reason}${report.details.isNotEmpty ? '\n${report.details}' : ''}'),
-                              isThreeLine: report.details.isNotEmpty,
-                              trailing: TextButton(
-                                onPressed: () async {
-                                  final token = ref.read(marketplaceTokenProvider);
-                                  if (token == null) return;
-                                  await ref
-                                      .read(marketplaceRepositoryProvider)
-                                      .adminResolveReport(token: token, reportId: report.id);
-                                  _load();
-                                },
-                                child: const Text('Erledigt'),
-                              ),
-                            ),
-                          )),
-                    ],
-                  ),
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'reports',
+                            label: Text('Nutzer-Meldungen'),
+                            icon: Icon(Icons.flag_outlined, size: 18),
+                          ),
+                          ButtonSegment(
+                            value: 'queue',
+                            label: Text('KI-Prüfstau'),
+                            icon: Icon(Icons.auto_awesome_outlined, size: 18),
+                          ),
+                        ],
+                        selected: {_tab},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (s) => setState(() => _tab = s.first),
+                      ),
+                    ),
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: _load,
+                        child: _tab == 'reports' ? _buildReportsList(scheme) : _buildReviewQueueList(scheme),
+                      ),
+                    ),
+                  ],
                 ),
+    );
+  }
+
+  /// Nutzer-Meldungen: ausschliesslich von Mitgliedern erstellte Reports.
+  Widget _buildReportsList(ColorScheme scheme) {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        const Text('Gemeldete Angebote von Mitgliedern',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        if (_reports.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('Keine offenen Meldungen'),
+          ),
+        ..._reports.map((report) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              color: scheme.surfaceContainerHigh,
+              elevation: 0,
+              child: ListTile(
+                title: Text(report.listingTitle),
+                subtitle: Text('${report.reason}${report.details.isNotEmpty ? '\n${report.details}' : ''}'),
+                isThreeLine: report.details.isNotEmpty,
+                trailing: TextButton(
+                  onPressed: () async {
+                    final token = ref.read(marketplaceTokenProvider);
+                    if (token == null) return;
+                    await ref
+                        .read(marketplaceRepositoryProvider)
+                        .adminResolveReport(token: token, reportId: report.id);
+                    _load();
+                  },
+                  child: const Text('Erledigt'),
+                ),
+              ),
+            )),
+      ],
+    );
+  }
+
+  /// KI-Prüfstau: automatisch erzeugte Faelle (unsicher/abgelehnt) - KEINE
+  /// Nutzer-Meldungen, daher bewusst im separaten Tab.
+  Widget _buildReviewQueueList(ColorScheme scheme) {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        const Text('Automatisch von der KI markiert',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        if (_pending.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('Nichts zu tun - alles geprüft'),
+          ),
+        ..._pending.map((listing) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              color: scheme.surfaceContainerHigh,
+              elevation: 0,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(listing.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(
+                      '${listing.priceLabel} · ${listing.category.emoji} ${listing.subcategory}',
+                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    ),
+                    if (listing.reviewReason != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(listing.reviewReason!,
+                            style: const TextStyle(fontSize: 12)),
+                      ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        FilledButton.tonal(
+                          onPressed: () => _moderate(listing, approve: true),
+                          child: const Text('Freigeben'),
+                        ),
+                        FilledButton.tonal(
+                          onPressed: () => _moderate(listing, approve: false),
+                          child: const Text('Ablehnen'),
+                        ),
+                        FilledButton.tonal(
+                          onPressed: () => _block(listing),
+                          child: const Text('Sperren'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            )),
+      ],
     );
   }
 }

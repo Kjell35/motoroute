@@ -20,8 +20,8 @@ GroupRouteStatus groupRouteStatusFrom(String? raw) => switch (raw) {
 extension GroupRouteStatusX on GroupRouteStatus {
   String get label => switch (this) {
         GroupRouteStatus.planning => '📝 Planung',
-        GroupRouteStatus.finalized => '✅ Fertig',
-        GroupRouteStatus.riding => '🏍️ Unterwegs',
+        GroupRouteStatus.finalized => 'Fertig',
+        GroupRouteStatus.riding => 'Unterwegs',
         GroupRouteStatus.completed => '✔️ Abgeschlossen',
         GroupRouteStatus.locked => '🔒 Gesperrt',
       };
@@ -74,11 +74,11 @@ extension StopCategoryX on StopCategory {
   String get label => switch (this) {
         StopCategory.fuel => '⛽ Tankstelle',
         StopCategory.motoHotel => '🏨 Motorradhotel',
-        StopCategory.bikerMeetup => '🏍️ Biker-Treff',
+        StopCategory.bikerMeetup => 'Biker-Treff',
         StopCategory.campsite => '⛺ Campingplatz',
         StopCategory.iceCream => '🍦 Eisdiele',
         StopCategory.viewpoint => '📸 Aussichtspunkt',
-        StopCategory.other => '📍 Stopp',
+        StopCategory.other => 'Stopp',
       };
 }
 

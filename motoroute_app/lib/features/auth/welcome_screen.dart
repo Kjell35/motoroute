@@ -72,7 +72,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Willkommen, ${user?.name ?? 'Rider'}! 🏍️',
+          'Willkommen, ${user?.name ?? 'Rider'}!',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         backgroundColor: AppColors.accentPrimaryDark,

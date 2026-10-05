@@ -666,7 +666,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         width: double.infinity,
         color: AppColors.bgSurfaceRaisedDark,
         child: const Center(
-          child: Text('📍', style: TextStyle(fontSize: 44)),
+          child: Icon(Icons.place_outlined, size: 44, color: AppColors.textSecondaryDark),
         ),
       );
 

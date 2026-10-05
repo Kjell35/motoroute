@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -26,6 +29,9 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
   String? _error;
   bool _loading = true;
   bool _checkingIn = false;
+  /// Naechstes noch gesperrtes Ziel (Titel, km Luftlinie) - fuer die
+  /// Orientierungskarte und den "nichts in der Naehe"-Hinweis.
+  (String, double)? _nextTarget;
 
   @override
   void initState() {
@@ -54,6 +60,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
         _shelf = shelf;
         _loading = false;
       });
+      unawaited(_computeNextTarget());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -61,6 +68,50 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// Letzte bekannte Position (kein Aktiv-GPS) -> naechstes gesperrtes
+  /// Badge berechnen. Fehler degradieren still - die Karte bleibt aus.
+  Future<void> _computeNextTarget() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      final pos = await Geolocator.getLastKnownPosition();
+      if (pos == null) return;
+      final nearest = _nearestLocked(pos.latitude, pos.longitude);
+      if (mounted && nearest != null) setState(() => _nextTarget = nearest);
+    } catch (_) {
+      // bewusst still
+    }
+  }
+
+  /// Naechstes noch gesperrtes Badge + Luftlinien-Distanz in km (Haversine).
+  (String, double)? _nearestLocked(double lat, double lon) {
+    String? title;
+    var bestKm = double.infinity;
+    for (final b in _shelf?.badges ?? const <BadgeItem>[]) {
+      if (b.unlocked) continue;
+      final km = _distanceKm(lat, lon, b.lat, b.lon);
+      if (km < bestKm) {
+        bestKm = km;
+        title = b.title;
+      }
+    }
+    return title == null ? null : (title, bestKm);
+  }
+
+  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371.0;
+    double rad(double d) => d * math.pi / 180.0;
+    final dLat = rad(lat2 - lat1);
+    final dLon = rad(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(rad(lat1)) * math.cos(rad(lat2)) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    return 2 * r * math.asin(math.sqrt(a));
   }
 
   /// GPS-Check-in: Position holen (Berechtigungen im Screen behandelt)
@@ -112,7 +163,13 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
           'count': '${result.totalUnlocked}',
         }));
       } else {
-        _toast(i18n.tr('badges.nothingNearby'));
+        // Nichts erreicht - aber Orientierung geben: naechstes Ziel + Distanz.
+        final next = _nextTarget ?? _nearestLocked(pos.latitude, pos.longitude);
+        if (next != null) {
+          _toast(i18n.tr('badges.nothingNearbyNext', {'title': next.$1, 'km': next.$2.toStringAsFixed(1)}));
+        } else {
+          _toast(i18n.tr('badges.nothingNearby'));
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -171,7 +228,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('🏍️'),
+            child: Text(i18n.tr('badges.celebrate')),
           ),
         ],
       ),
@@ -349,7 +406,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Text('🏆', style: TextStyle(fontSize: 30)),
+                            const Icon(Icons.emoji_events, size: 30, color: AppColors.accentPrimaryDark),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -380,6 +437,39 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      // Orientierung: naechstes noch gesperrtes Ziel (wenn
+                      // eine letzte Position vorliegt).
+                      if (_nextTarget != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: raised,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.explore_outlined, color: AppColors.accentPrimaryDark),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      i18n.tr('badges.nextTarget'),
+                                      style: AppTypography.caption.copyWith(color: textSecondary),
+                                    ),
+                                    Text(
+                                      '${_nextTarget!.$1} · ${_nextTarget!.$2.toStringAsFixed(0)} km',
+                                      style: AppTypography.bodyStrong.copyWith(color: textPrimary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       // Grid: freigeschaltet = farbig + Datum, gesperrt = grau + Schloss.
                       LayoutBuilder(
                         builder: (context, constraints) {

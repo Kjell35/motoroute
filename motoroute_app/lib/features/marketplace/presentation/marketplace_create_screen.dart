@@ -47,6 +47,10 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
   @override
   void initState() {
     super.initState();
+    // Auto-Vorschlag live: Sobald Titel/Beschreibung eine Unterkategorie
+    // nennen, hebt die Gruppierungs-UI den Treffer umrandet hervor.
+    _title.addListener(_onTextChanged);
+    _description.addListener(_onTextChanged);
     final edit = widget.editListing;
     if (edit != null) {
       _title.text = edit.title;
@@ -78,6 +82,8 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
 
   @override
   void dispose() {
+    _title.removeListener(_onTextChanged);
+    _description.removeListener(_onTextChanged);
     _title.dispose();
     _description.dispose();
     _price.dispose();
@@ -86,6 +92,10 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
     _year.dispose();
     _location.dispose();
     super.dispose();
+  }
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _pickPhotos() async {
@@ -104,6 +114,44 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
     final fromServer = _catalog?.categories.where((c) => c.key == key).expand((c) => c.subcategories).toList();
     if (fromServer != null && fromServer.isNotEmpty) return fromServer;
     return fallbackCatalog.where((c) => c.key == key).expand((c) => c.subcategories).toList();
+  }
+
+  /// Thematische Gruppierung der Unterkategorien: Statt ~30 Chips in einem
+  /// flachen Wrap bekommt der Nutzer kompakte Abschnitte (Motor & Abgas,
+  /// Bremsen, Elektrik ...). Nur das UI-Layering gruppier - die Keys bleiben
+  /// exakt die Server-Taxonomie.
+  List<_SubcatGroup> get _groupedSubcategories {
+    final subs = _subcategories;
+    if (subs.isEmpty) return const [];
+    final bicycle = _category == MpCategory.fahrradteile;
+    final groupKeys = bicycle ? _bicycleGroupKeys : _vehicleGroupKeys;
+    final byKey = {for (final s in subs) s.key: s};
+    final groups = <_SubcatGroup>[];
+    final assigned = <String>{};
+    for (final entry in groupKeys.entries) {
+      final items = entry.value.map((k) => byKey[k]).whereType<MpSubcategoryDef>().toList();
+      if (items.isEmpty) continue;
+      groups.add(_SubcatGroup(entry.key, items));
+      assigned.addAll(items.map((s) => s.key));
+    }
+    // Defensiv: Kategorien vom Server, die in keiner Gruppe landen, zeigen
+    // wir unter "Weitere" - nichts geht verloren.
+    final rest = subs.where((s) => !assigned.contains(s.key)).toList();
+    if (rest.isNotEmpty) groups.add(_SubcatGroup('Weitere', rest));
+    return groups;
+  }
+
+  /// Automatischer Vorschlag: laengstes passendes Unterkategorie-Label im
+  /// Titel/Beschreibung ("Auspuffanlage" -> Auspuff). Nur UI-Hinweis,
+  /// der Nutzer waehlt weiterhin selbst.
+  String? get _suggestedSubcategory {
+    final text = '${_title.text} ${_description.text}'.toLowerCase().trim();
+    if (text.length < 4) return null;
+    final candidates = _subcategories
+        .where((s) => s.labelDe.toLowerCase().length >= 4 && text.contains(s.labelDe.toLowerCase()))
+        .toList()
+      ..sort((a, b) => b.labelDe.length.compareTo(a.labelDe.length));
+    return candidates.isEmpty ? null : candidates.first.key;
   }
 
   Future<void> _submit() async {
@@ -207,7 +255,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: ChoiceChip(
-                            label: Text('${c.emoji}\n${_categoryLabel(c, i18n)}',
+                            label: Text('${c.emoji} ${_categoryLabel(c, i18n)}',
                                 textAlign: TextAlign.center),
                             selected: _category == c,
                             selectedColor: AppColors.accentPrimaryDark,
@@ -227,21 +275,11 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
             ),
             const SizedBox(height: 16),
 
-            // 2) Unterkategorie
+            // 2) Unterkategorie - thematisch gruppiert statt ~30 flachen
+            // Chips; automatisch vorgeschlagene Treffer sind umrandet.
             Text(i18n.mpStepSubcategory, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: _subcategories
-                  .map((s) => ChoiceChip(
-                        label: Text(s.labelDe, style: const TextStyle(fontSize: 12)),
-                        selected: _subcategory == s.key,
-                        selectedColor: AppColors.accentPrimaryDark,
-                        onSelected: (sel) => setState(() => _subcategory = sel ? s.key : null),
-                      ))
-                  .toList(),
-            ),
+            ..._buildGroupedSubcategoryTiles(scheme),
             const SizedBox(height: 16),
 
             // 3) Fotos
@@ -414,7 +452,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(children: [
-                const Text('🤖', style: TextStyle(fontSize: 22)),
+                Icon(Icons.fact_check_outlined, size: 22, color: scheme.onSurfaceVariant),
                 const SizedBox(width: 10),
                 Expanded(child: Text(i18n.mpAiCheckNote, style: const TextStyle(fontSize: 12))),
               ]),
@@ -441,8 +479,161 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
 
   String _categoryLabel(MpCategory c, I18n i18n) =>
       switch (c) { MpCategory.motorradteile => 'Motorrad', MpCategory.autoteile => 'Auto', MpCategory.fahrradteile => 'Fahrrad' };
+
+  // -- Unterkategorien: gruppierte Abschnitte -------------------------------
+
+  /// Baut die gruppierten Abschnitte. Immer maximal 3 sichtbare Chips pro
+  /// Gruppe, Rest hinter "mehr ..." - alles bleibt wahlbar.
+  List<Widget> _buildGroupedSubcategoryTiles(ColorScheme scheme) {
+    final groups = _groupedSubcategories;
+    if (groups.isEmpty) return [Text('–', style: TextStyle(color: scheme.onSurfaceVariant))];
+    return [
+      for (final g in groups) _SubcatGroupTile(
+          group: g,
+          scheme: scheme,
+          selectedKey: _subcategory,
+          suggestedKey: _suggestedSubcategory,
+          onSelect: (key) => setState(() => _subcategory = key),
+        ),
+    ];
+  }
 }
 
+/// Eine thematische Gruppe von Unterkategorien (z. B. "Bremsen").
+class _SubcatGroup {
+  final String title;
+  final List<MpSubcategoryDef> items;
+  const _SubcatGroup(this.title, this.items);
+}
+
+/// Zeigt eine Gruppe als kompakte Karte: Titel + bis zu 3 Chips, Rest
+/// aufklappbar. Auto-Vorschlag bekommt einen Akzent-Rand.
+class _SubcatGroupTile extends StatefulWidget {
+  final _SubcatGroup group;
+  final ColorScheme scheme;
+  final String? selectedKey;
+  final String? suggestedKey;
+  final ValueChanged<String?> onSelect;
+
+  const _SubcatGroupTile({
+    required this.group,
+    required this.scheme,
+    required this.selectedKey,
+    required this.suggestedKey,
+    required this.onSelect,
+  });
+
+  @override
+  State<_SubcatGroupTile> createState() => _SubcatGroupTileState();
+}
+
+class _SubcatGroupTileState extends State<_SubcatGroupTile> {
+  static const _visibleWithoutExpansion = 3;
+  bool _userToggled = false;
+
+  // Auswahl in einer zugeklappten Gruppe: Gruppe startet offen, damit die
+  // Auswahl sichtbar bleibt (wird ueberschrieben, sobald der Nutzer klickt).
+  bool get _expanded {
+    if (_userToggled) return _userExpanded;
+    return widget.group.items.any((s) => s.key == widget.selectedKey);
+  }
+
+  bool _userExpanded = false;
+
+  bool get _needsExpansion => widget.group.items.length > _visibleWithoutExpansion;
+
+  List<MpSubcategoryDef> get _visible => !_needsExpansion || _expanded
+      ? widget.group.items
+      : widget.group.items.take(_visibleWithoutExpansion).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = widget.scheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Text(widget.group.title,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+              if (_needsExpansion)
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => setState(() {
+                    _userExpanded = !_expanded;
+                    _userToggled = true;
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(_expanded ? 'weniger' : 'mehr',
+                          style: TextStyle(fontSize: 12, color: scheme.primary)),
+                      Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                          size: 16, color: scheme.primary),
+                    ]),
+                  ),
+                ),
+            ]),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: _visible.map((s) {
+                final selected = widget.selectedKey == s.key;
+                final suggested = !selected && widget.suggestedKey == s.key;
+                return ChoiceChip(
+                  label: Text(s.labelDe, style: const TextStyle(fontSize: 12)),
+                  selected: selected,
+                  selectedColor: AppColors.accentPrimaryDark,
+                  labelStyle: TextStyle(color: selected ? AppColors.textPrimaryDark : scheme.onSurface),
+                  backgroundColor: scheme.surfaceContainerHighest,
+                  side: suggested
+                      ? BorderSide(color: scheme.primary, width: 1.4)
+                      : BorderSide(color: scheme.outlineVariant),
+                  onSelected: (sel) => widget.onSelect(sel ? s.key : null),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Gruppierung Motorrad/Auto: Keys der Server-Taxonomie.
+const Map<String, List<String>> _vehicleGroupKeys = {
+  'Motor & Abgas': ['motor', 'motorenteile', 'zylinder', 'kolben', 'kupplung', 'auspuff', 'kruemmer', 'schalldaempfer'],
+  'Fahrwerk & Bremsen': ['fahrwerk', 'stossdaempfer', 'gabel', 'bremsen', 'bremsscheiben', 'bremsbelaege', 'bremssaettel', 'bremsleitungen'],
+  'Elektrik & Elektronik': ['elektrik', 'batterie', 'licht', 'steuergeraete', 'kabel', 'elektronik'],
+  'Räder & Reifen': ['raeder', 'felgen', 'reifen', 'radteile'],
+  'Karosserie & Verkleidung': ['verkleidung', 'kotfluegel', 'karosserieteile', 'karosserie', 'tueren', 'seitenteile', 'innenraum'],
+  'Zubehör & Gepäck': ['zubehoer', 'gepaeck', 'halterungen', 'schutzteile'],
+  'Sonstiges': ['sonstiges'],
+};
+
+/// Gruppierung Fahrrad.
+const Map<String, List<String>> _bicycleGroupKeys = {
+  'Antrieb & Schaltung': ['antrieb', 'schaltung', 'pedale', 'ebike_motor', 'akku'],
+  'Bremsen': ['bremsen', 'bremsscheiben', 'bremsbelaege'],
+  'Räder & Reifen': ['raeder', 'felgen', 'reifen'],
+  'Rahmen & Gabel': ['rahmen', 'gabel', 'federung', 'lenker', 'sattel'],
+  'Licht & Elektrik': ['beleuchtung'],
+  'Zubehör & Gepäck': ['zubehoer', 'gepaeck'],
+  'Sonstiges': ['sonstiges'],
+};
 
 /// Zeigt die SERVERSEITIGE KI-Entscheidung (approved / rejected /
 /// manual_review) mit Grund (Punkt 5/6/9) an.
@@ -455,11 +646,11 @@ class _ReviewResultView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (icon, title, color) = switch (listing.reviewStatus) {
-      MpReviewStatus.approved => ('✅', 'Veröffentlicht!', AppColors.statusSuccess),
-      MpReviewStatus.rejected => ('🚫', 'Nicht veröffentlicht', AppColors.statusDanger),
-      MpReviewStatus.manualReview => ('🕵️', 'Manuelle Prüfung', AppColors.accentPrimaryDark),
-      MpReviewStatus.pending => ('⏳', 'Prüfung läuft', AppColors.accentPrimaryDark),
+    final (icon, iconColor, title, color) = switch (listing.reviewStatus) {
+      MpReviewStatus.approved => (Icons.check_circle_outline, null, 'Veröffentlicht!', AppColors.statusSuccess),
+      MpReviewStatus.rejected => (Icons.block_outlined, null, 'Nicht veröffentlicht', AppColors.statusDanger),
+      MpReviewStatus.manualReview => (Icons.pending_outlined, null, 'Manuelle Prüfung', AppColors.accentPrimaryDark),
+      MpReviewStatus.pending => (Icons.hourglass_top_outlined, null, 'Prüfung läuft', AppColors.accentPrimaryDark),
     };
 
     return Scaffold(
@@ -471,7 +662,7 @@ class _ReviewResultView extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(icon, style: const TextStyle(fontSize: 64)),
+              Icon(icon, size: 64, color: color),
               const SizedBox(height: 16),
               Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),

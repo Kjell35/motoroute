@@ -23,7 +23,7 @@ enum HazardType {
   /// Deutsche UI-Labels + Kartenfarbe (rot = blockierend, orange = Warnung).
   String get label => switch (this) {
         HazardType.rollsplitt => '🚧 Rollsplitt',
-        HazardType.sperrung => '⛔ Sperrung',
+        HazardType.sperrung => 'Sperrung',
         HazardType.baustelle => '🚜 Baustelle',
         HazardType.oelspur => '🛢️ Ölspur',
       };

@@ -35,7 +35,7 @@ void main() {
       expect(stopCategoryFrom('ice_cream'), StopCategory.iceCream);
       expect(stopCategoryFrom('viewpoint'), StopCategory.viewpoint);
       expect(stopCategoryFrom('campsite'), StopCategory.campsite);
-      expect(stopCategoryFrom('other').label, '📍 Stopp');
+      expect(stopCategoryFrom('other').label, 'Stopp');
     });
   });
 
