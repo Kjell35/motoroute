@@ -358,10 +358,10 @@ class GarageRepository {
     // 2) Ticket einloesen - MIT Kaltstart-Retries: Die Garage-API laeuft
     //    auf Render Free Tier (30-60 s Kaltstart). Ohne Retry sieht der
     //    Nutzer beim ersten Tab-Klick einmalig die Verbindungs-Karte und
-    //    muss selbst taetig werden. Mit Backoff (2 s/5 s) kommt er
+    //    muss selbst taetig werden. Mit Backoff (2/5/10/15 s) kommt er
     //    "einfach so" in die Garage - die App-Anforderung.
     Object? lastError;
-    for (var attempt = 1; attempt <= 3; attempt++) {
+    for (var attempt = 1; attempt <= 5; attempt++) {
       try {
         final res = await _post(baseUrl, null, '/api/auth/provision', {'ticket': ticket});
         final token = (res['accessToken'] ?? res['token']) as String?;
@@ -378,8 +378,13 @@ class GarageRepository {
       } on DioException catch (e) {
         lastError = e;
       }
-      if (attempt < 3) {
-        await Future<void>.delayed(Duration(seconds: attempt == 1 ? 2 : 5));
+      if (attempt < 5) {
+        await Future<void>.delayed(Duration(seconds: switch (attempt) {
+          1 => 2,
+          2 => 5,
+          3 => 10,
+          _ => 15,
+        }));
       }
     }
     throw lastError ?? GarageApiException('Garage nicht erreichbar', 503);
@@ -681,6 +686,16 @@ class GarageSession {
 class GarageSessionController extends StateNotifier<AsyncValue<GarageSession?>> {
   GarageSessionController(this._ref) : super(const AsyncValue.loading()) {
     _restore();
+    // Rennen schließen (Garage ohne Klick): Der Token wird von der
+    // Auth->Chat-Brücke gespiegelt und kann NACH diesem Controller
+    // ankommen (Splash-Restore ist asynchron). Sobald er da ist und
+    // keine Session existiert, verbinden wir automatisch - der Nutzer
+    // sieht nie eine "Verbinden"-Karte wegen eines Rennens.
+    _ref.listen<String?>(chatSessionTokenProvider, (_, token) {
+      if (token != null && token.isNotEmpty && state.value == null) {
+        provisionFromAuth();
+      }
+    });
   }
 
   final Ref _ref;

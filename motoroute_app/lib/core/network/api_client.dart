@@ -108,10 +108,19 @@ class ApiClient {
     return dio;
   }
 
-  /// Basis-URL zur WebSocket-URL umformen (http->ws, https->wss).
-  static String asWebSocketUrl(String baseUrl) => baseUrl
-      .replaceFirst('http://', 'ws://')
-      .replaceFirst('https://', 'wss://');
+  /// Basis-URL zur WebSocket-URL umformen (http->ws, https->wss) und den
+  /// Pfad des Chat-Gateways anhängen (Realtime-Fix): Das NestJS-Gateway
+  /// lauscht auf /v1/chat/ws - ein Upgrade an der Root-URL wird vom
+  /// Server nie beantwortet (Proxy: 502) und der Chat säße ohne
+  /// Live-Nachrichten im REST-Polling.
+  static String asWebSocketUrl(String baseUrl) {
+    final ws = baseUrl
+        .replaceFirst('http://', 'ws://')
+        .replaceFirst('https://', 'wss://');
+    final withoutTrailingSlash =
+        ws.endsWith('/') ? ws.substring(0, ws.length - 1) : ws;
+    return '$withoutTrailingSlash/v1/chat/ws';
+  }
 }
 
 /// Zentraler 401-Handler: Bei einer 401 fuehrt EIN Refresher den

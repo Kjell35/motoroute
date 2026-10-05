@@ -132,7 +132,7 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
                 ),
                 child: Column(
                   children: [
-                    Text('🏍️ $name',
+                    Text(name ?? '',
                         style: const TextStyle(
                             color: AppColors.textPrimaryDark,
                             fontSize: 20,

@@ -58,7 +58,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('💬 ${i18n.chatTab}', style: AppTypography.title),
+        title: Text(i18n.chatTab, style: AppTypography.title),
         actions: [
           // Admin: Meldungen prüfen - nur sichtbar mit Admin-Konto
           // (App-Anforderung: Admin-Konto = überall Admin).
@@ -405,7 +405,7 @@ class _NotSignedIn extends StatelessWidget {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: const Text('💬 Chat'),
+        title: const Text('Chat'),
       ),
       body: Center(
         child: Padding(
@@ -514,10 +514,14 @@ class _AdminReportsSheetState extends State<_AdminReportsSheet> {
       controller: widget.scrollCtrl,
       padding: const EdgeInsets.all(16),
       children: [
-        const Text(
-          '🛡️ Nutzer-Meldungen',
-          style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 18),
-        ),
+        Row(children: [
+          Icon(Icons.flag_outlined, size: 20, color: AppColors.textPrimaryDark),
+          const SizedBox(width: 8),
+          Text(
+            'Nutzer-Meldungen',
+            style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 18),
+          ),
+        ]),
         const SizedBox(height: 12),
         if (_busy) const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
         else if (_error != null)

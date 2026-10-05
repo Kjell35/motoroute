@@ -6,6 +6,7 @@ import * as dotenv from 'dotenv';
 dotenv.config({ override: true });
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -22,6 +23,15 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // WICHTIG (Chat-Realtime-Fix): Ohne diese Zeile laesst NestJS den
+  // Default-Socket.IO-Adapter laufen (platform-socket.io ist installiert).
+  // Der Chat-Gateway + Flutter-Client sprechen aber das rohe WS-Protokoll
+  // ({"event": ..., "data": ...} Frames) - der Socket.IO-Adapter beantwortet
+  // die Upgrade-Requests nie, der Render-Proxy antwortet 502 und der Chat
+  // faellt ueberall auf (langsames) REST-Polling zurueck. Der WsAdapter
+  // bindet das Gateway (/v1/chat/ws) an denselben HTTP-Server.
+  app.useWebSocketAdapter(new WsAdapter(app));
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);

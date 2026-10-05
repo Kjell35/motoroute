@@ -66,6 +66,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   String? _replyToId;
   String? _otherTypingUserId; // Abschnitt 19
   Timer? _typingStopTimer;
+  Timer? _fallbackPollTimer;
+  bool _polling = false;
 
   ChatRepository get _repo => ref.read(chatRepositoryProvider);
   String? get _token => ref.read(chatSessionTokenProvider);
@@ -78,6 +80,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     _wireRealtime();
     // Lesen markieren (Abschnitt 17) nach kurzem Verweilen.
     Timer(const Duration(seconds: 2), _markRead);
+    // REST-Fallback: Solange der WebSocket nicht verbunden ist (Funkloch,
+    // Render-Kaltstart), holt ein Poller neue Nachrichten - der Chat
+    // funktioniert dann verzögert, aber zuverlässig (Vater-tauglich).
+    _fallbackPollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      final realtime = ref.read(chatRealtimeProvider);
+      if (!realtime.isConnected) _pollNewMessages();
+    });
   }
 
   @override
@@ -87,7 +96,32 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     _inputController.dispose();
     _composerFocus.dispose();
     _typingStopTimer?.cancel();
+    _fallbackPollTimer?.cancel();
     super.dispose();
+  }
+
+  /// Fallback-Poll (nur wenn WS aus): letzte 30 Nachrichten ziehen und
+  /// Unbekannte ergänzen - derselbe Dedupe-Pfad wie beim WS-Empfang.
+  Future<void> _pollNewMessages() async {
+    final token = _token;
+    if (token == null || _polling) return;
+    _polling = true;
+    try {
+      final page = await _repo.messages(token, widget.conversationId, limit: 30);
+      if (!mounted) return;
+      final knownIds = _messages.map((m) => m.id).toSet();
+      final fresh = page.messages.where((m) => !knownIds.contains(m.id)).toList();
+      if (fresh.isNotEmpty) {
+        final merged = [..._messages, ...fresh]
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        setState(() => _messages = merged);
+        _jumpToBottom();
+      }
+    } catch (_) {
+      // Offline: nächster Versuch im nächsten Intervall.
+    } finally {
+      _polling = false;
+    }
   }
 
   Future<void> _loadInitial() async {
@@ -554,7 +588,7 @@ class _RouteCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('🏍️ ${name.toUpperCase()}',
+          Text(name.toUpperCase(),
               style: const TextStyle(
                   color: AppColors.accentPrimaryDark, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
           const SizedBox(height: 6),

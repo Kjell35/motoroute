@@ -20,7 +20,8 @@ class GarageScreen extends ConsumerStatefulWidget {
 
 class _GarageScreenState extends ConsumerState<GarageScreen> {
   bool _busy = false;
-  bool _autoRetryDone = false;
+  int _autoRetries = 0;
+  static const _maxAutoRetries = 6;
 
   String _friendly(Object? e) {
     final msg = e.toString();
@@ -51,7 +52,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
         elevation: 0,
-        title: Text('🏍️ ${i18n.gTitle}', style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(i18n.gTitle, style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           session.value != null
               ? IconButton(
@@ -85,11 +86,12 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
     // angemeldet) - mit ehrlichem Hinweis und Retry-Knopf.
     final auth = ref.watch(authControllerProvider);
     final signedIn = auth.isAuthenticated;
-    // Selbstheilung: Angemeldet, aber keine Garage-Session? Einmal pro
-    // Screen-Besuch automatisch nachprobieren (Kaltstart-Brücke), statt
-    // den Nutzer einen Knopf finden zu lassen. Loop-sicher durch Flag.
-    if (signedIn && !_busy && !_autoRetryDone) {
-      _autoRetryDone = true;
+    // Selbstheilung: Angemeldet, aber keine Garage-Session? Wir probieren
+    // es wiederholt im Hintergrund (Render-Kaltstart dauert bis zu 60 s) -
+    // der Nutzer sieht eine Ladeanzeige statt eines Knopfes. Loop-sicher:
+    // max. Versuche + nur wenn gerade kein Versuch läuft.
+    if (signedIn && !_busy && _autoRetries < _maxAutoRetries) {
+      _autoRetries += 1;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         setState(() => _busy = true);
@@ -113,7 +115,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('🏍️🚗', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
+                  const Icon(Icons.garage_outlined, size: 44, color: AppColors.accentPrimaryDark),
                   const SizedBox(height: 12),
                   Text(
                     signedIn ? i18n.gConnectTitle : i18n.gConnectNeedLogin,
@@ -135,7 +137,10 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: _busy ? null : () async {
-                        setState(() => _busy = true);
+                        setState(() {
+                          _busy = true;
+                          _autoRetries = 0; // Knopfdruck eröffnet neues Auto-Retry-Budget.
+                        });
                         await ref.read(garageSessionProvider.notifier).provisionFromAuth();
                         if (mounted) setState(() => _busy = false);
                         ref.invalidate(garageListProvider);
@@ -184,7 +189,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
               padding: const EdgeInsets.all(24),
               children: [
                 const SizedBox(height: 60),
-                const Text('🏍️🚗', textAlign: TextAlign.center, style: TextStyle(fontSize: 44)),
+                const Icon(Icons.garage_outlined, size: 48, color: AppColors.textSecondaryDark),
                 const SizedBox(height: 14),
                 Text(
                   i18n.gEmpty,
@@ -215,7 +220,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
               ),
               if (motos.isNotEmpty) ...[
                 const SizedBox(height: 18),
-                _sectionHeader('🏍️ ${i18n.gMyMotos} (${motos.length})'),
+                _sectionHeader('${i18n.gMyMotos} (${motos.length})'),
                 ...motos.map((v) => _VehicleCard(
                       vehicle: v,
                       i18n: i18n,
@@ -226,7 +231,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
               ],
               if (cars.isNotEmpty) ...[
                 const SizedBox(height: 18),
-                _sectionHeader('🚗 ${i18n.gMyCars} (${cars.length})'),
+                _sectionHeader('${i18n.gMyCars} (${cars.length})'),
                 ...cars.map((v) => _VehicleCard(
                       vehicle: v,
                       i18n: i18n,
@@ -510,8 +515,8 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             const SizedBox(height: 14),
             SegmentedButton<GarageCategory>(
               segments: [
-                ButtonSegment(value: GarageCategory.motorcycle, label: Text('🏍️ ${i18n.gMoto}')),
-                ButtonSegment(value: GarageCategory.car, label: Text('🚗 ${i18n.gCar}')),
+                ButtonSegment(value: GarageCategory.motorcycle, label: Text(i18n.gMoto)),
+                ButtonSegment(value: GarageCategory.car, label: Text(i18n.gCar)),
               ],
               selected: {_category},
               onSelectionChanged: (s) => _pickCategory(s.first),
