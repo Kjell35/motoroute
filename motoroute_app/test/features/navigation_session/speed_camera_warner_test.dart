@@ -84,4 +84,67 @@ void main() {
     await notifier.onPosition(48.1, 11.5);
     expect(container.read(speedCameraWarnerProvider).activeWarning, isNull);
   });
+
+  test('Countdown-Banner: Annäherung ab 1 km sichtbar, Distanz live aktualisiert', () async {
+    when(() => repo.fetchInBoundingBox(
+          minLng: any(named: 'minLng'),
+          minLat: any(named: 'minLat'),
+          maxLng: any(named: 'maxLng'),
+          maxLat: any(named: 'maxLat'),
+          categories: any(named: 'categories'),
+        )).thenAnswer((_) async => const []);
+
+    final notifier = container.read(speedCameraWarnerProvider.notifier);
+    // Kamera ~450 m suedlich (0.004° lat ≈ 444 m).
+    notifier.state = notifier.state.copyWith(
+      cameras: const [(lat: 48.096, lng: 11.5)],
+    );
+
+    // Erster Fix ~450 m entfernt: Anzeige da, KEIN Alarm (< 120 m nicht
+    // erreicht), warnedIndices leer.
+    await notifier.onPosition(48.1, 11.5, speedMps: 25);
+    var s = container.read(speedCameraWarnerProvider);
+    expect(s.approachingCamera, isNotNull);
+    expect(s.approachingCamera!.distanceMeters, greaterThan(400));
+    expect(s.approachingCamera!.distanceMeters, lessThan(500));
+    expect(s.activeWarning, isNull);
+
+    // Naeherer Fix (~170 m): Distanz im State gesunken (live).
+    await notifier.onPosition(48.0985, 11.5, speedMps: 25);
+    s = container.read(speedCameraWarnerProvider);
+    expect(s.approachingCamera!.distanceMeters, lessThan(450));
+
+    // Alarm-Schwelle: ~110 m -> activeWarning (+ Vibration).
+    await notifier.onPosition(48.097, 11.5, speedMps: 25);
+    s = container.read(speedCameraWarnerProvider);
+    expect(s.activeWarning, isNotNull);
+    expect(s.approachingCamera, isNotNull);
+
+    // Vorbeigefahren: beides geräumt.
+    await notifier.onPosition(48.2, 11.6, speedMps: 25);
+    s = container.read(speedCameraWarnerProvider);
+    expect(s.activeWarning, isNull);
+    expect(s.approachingCamera, isNull);
+  });
+
+  test('Kamera außerhalb des Anfahrts-Fensters (> 1 km) erzeugt keine Anzeige', () async {
+    when(() => repo.fetchInBoundingBox(
+          minLng: any(named: 'minLng'),
+          minLat: any(named: 'minLat'),
+          maxLng: any(named: 'maxLng'),
+          maxLat: any(named: 'maxLat'),
+          categories: any(named: 'categories'),
+        )).thenAnswer((_) async => const []);
+
+    final notifier = container.read(speedCameraWarnerProvider.notifier);
+    // Kamera ~1.7 km entfernt.
+    notifier.state = notifier.state.copyWith(
+      cameras: const [(lat: 48.085, lng: 11.5)],
+    );
+
+    await notifier.onPosition(48.1, 11.5, speedMps: 25);
+    final s = container.read(speedCameraWarnerProvider);
+    expect(s.approachingCamera, isNull);
+    expect(s.activeWarning, isNull);
+  });
 }

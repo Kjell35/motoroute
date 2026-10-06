@@ -478,19 +478,27 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
     );
   }
 
-  /// Blitzer-Fahrtwarnung: schmaler roter Banner über der Karte, mit
-  /// Entfernungsangabe. Verschwindet automatisch nach dem Passieren
-  /// (Controller räumt auf). Kein Modal - der Fahrer braucht die Straße.
+  /// Blitzer-Fahrtwarnung mit ZWEI Stufen (Konkurrenz-Paritaet:
+  /// "Speed Camera 450 m"-Countdown): ab 1 km zeigt ein amber Banner die
+  /// naechste Kamera LIVE an (jeder GPS-Fix aktualisiert die Distanz),
+  /// ab 120 m folgt der rote Alarm-Banner (+ Vibration). Kein Modal -
+  /// der Fahrer braucht die Strasse.
   Widget _buildSpeedCameraBanner() {
-    final warning = ref.watch(speedCameraWarnerProvider).activeWarning;
+    final camState = ref.watch(speedCameraWarnerProvider);
+    final warning = camState.activeWarning ?? camState.approachingCamera;
     if (warning == null) return const SizedBox.shrink();
+    final isAlarm = camState.activeWarning != null;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
-      color: AppColors.statusDanger,
+      color: isAlarm ? AppColors.statusDanger : AppColors.statusWarning,
       child: Row(
         children: [
-          const Icon(Icons.speed, color: Colors.white, size: 18),
+          Icon(
+            isAlarm ? Icons.camera_alt : Icons.photo_camera_outlined,
+            color: Colors.white,
+            size: 18,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Text(
             speedCameraBannerText(warning),

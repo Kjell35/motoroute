@@ -45,6 +45,11 @@ class SpeedCameraState {
   /// Aktive Warnung oder null.
   final SpeedCameraWarning? activeWarning;
 
+  /// Naechste Kamera im Anfahrts-Fenster (<= 1000 m) - wird bei JEDEM
+  /// GPS-Fix aktualisiert und treibt den Countdown-Banner ("Blitzer in
+  /// 450 m", live abnehmend). Kein Alarm, nur Situationsanzeige.
+  final SpeedCameraWarning? approachingCamera;
+
   /// IDs bereits alarmierter Kameras (kein Re-Alarm im Vorbeifahren) -
   /// indexbasiert (Position in der Liste, stabil genug für die Fahrt).
   final Set<int> warnedIndices;
@@ -52,6 +57,7 @@ class SpeedCameraState {
   const SpeedCameraState({
     this.cameras = const [],
     this.activeWarning,
+    this.approachingCamera,
     this.warnedIndices = const {},
   });
 
@@ -60,12 +66,16 @@ class SpeedCameraState {
   SpeedCameraState copyWith({
     List<({double lat, double lng})>? cameras,
     SpeedCameraWarning? activeWarning,
+    SpeedCameraWarning? approachingCamera,
     Set<int>? warnedIndices,
     bool clearWarning = false,
+    bool clearApproaching = false,
   }) =>
       SpeedCameraState(
         cameras: cameras ?? this.cameras,
         activeWarning: clearWarning ? null : (activeWarning ?? this.activeWarning),
+        approachingCamera:
+            clearApproaching ? null : (approachingCamera ?? this.approachingCamera),
         warnedIndices: warnedIndices ?? this.warnedIndices,
       );
 }
@@ -77,6 +87,11 @@ class SpeedCameraWarnerController extends StateNotifier<SpeedCameraState> {
   /// 100 km/h. Bei langsamer Fahrt (Stau im Ort) reicht 80 m.
   static const double warnDistanceMeters = 120;
   static const double warnDistanceSlowMeters = 80;
+
+  /// Anfahrts-Fenster fuer den Countdown-Banner: ab 1 km zeigt der
+  /// Banner die naechste Kamera live an (Konkurrenz-Paritaet: "Speed
+  /// Camera 450 m"). Alarm (+Vibration) bleibt die 120-m-Schwelle.
+  static const double approachDistanceMeters = 1000;
 
   /// Nach Verlassen der Warndistanz gilt die Kamera als " passiert".
   static const double passedDistanceMeters = 250;
@@ -138,13 +153,26 @@ class SpeedCameraWarnerController extends StateNotifier<SpeedCameraState> {
     }
     if (bestIdx < 0) return;
 
-    // Kamera weit weg: offene Warnung aufräumen - BEVOR der Cooldown
-    // greift, sonst bliebe der Banner stehen (Cleanup ist kein Alarm).
-    if (best > passedDistanceMeters) {
-      if (state.activeWarning != null) {
-        state = state.copyWith(clearWarning: true);
-      }
-      return;
+    // Aufräumen OHNE Early-Return: Der Alarm-Banner verschwindet nach
+    // dem Passieren (> 250 m), der Countdown-Banner außerhalb des
+    // Anfahrts-Fensters (> 1 km). Ein Early-Return hier würde den
+    // Countdown bei 250-1000 m Abstand komplett abschneiden.
+    if (state.activeWarning != null && best > passedDistanceMeters) {
+      state = state.copyWith(clearWarning: true);
+    }
+
+    // Countdown-Banner: naechste Kamera im Anfahrts-Fenster live
+    // nachfuehren (jeder GPS-Fix aktualisiert die Distanz).
+    if (best <= approachDistanceMeters) {
+      state = state.copyWith(
+        approachingCamera: SpeedCameraWarning(
+          distanceMeters: best,
+          lat: state.cameras[bestIdx].lat,
+          lng: state.cameras[bestIdx].lng,
+        ),
+      );
+    } else if (state.approachingCamera != null) {
+      state = state.copyWith(clearApproaching: true);
     }
 
     // Cooldown sperrt nur NEUE Alarme, nicht das Aufräumen oben.
@@ -197,9 +225,13 @@ final speedCameraWarnerProvider =
   (ref) => SpeedCameraWarnerController(ref),
 );
 
-/// Warntext für den Navigation-Banner ("Blitzer in 90 m").
+/// Warntext für den Countdown-Banner ("Blitzer in 450 m" / "... 1,2 km").
 String speedCameraBannerText(SpeedCameraWarning w) {
   final meters = w.distanceMeters.round();
   if (meters >= 1000) return 'Blitzer in ${(meters / 1000).toStringAsFixed(1)} km';
   return 'Blitzer in $meters m';
 }
+
+/// Warntext für den Alarm-Banner (kuerzer, dringlicher).
+String speedCameraAlarmText(SpeedCameraWarning w) =>
+    speedCameraBannerText(w);
