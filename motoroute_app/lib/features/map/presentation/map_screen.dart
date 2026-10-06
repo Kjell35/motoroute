@@ -863,6 +863,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
+          // Rundtour-Planer: geschlossene Schleife ab aktuellem Standort
+          // mit Ziel-Laenge (Konkurrenz-Feature-Paritaet).
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(context).pushNamed('/roundtrip');
+            },
+            child: Container(
+              width: AppSpacing.touchTargetPlanning,
+              height: AppSpacing.touchTargetPlanning,
+              decoration: BoxDecoration(
+                color: AppColors.bgSurfaceRaisedDark,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.borderHairlineDark),
+              ),
+              child: const Icon(Icons.route, color: AppColors.accentPrimaryDark),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
           // "Wegpunkt per Kartentap setzen"-Button (Phase 3 Screen 9)
           GestureDetector(
             onTap: () {

@@ -6,6 +6,6 @@ import { RoutingService } from './routing.service';
 @Module({
   controllers: [RoutingController],
   providers: [RoutingService, GraphHopperClient],
-  exports: [RoutingService],
+  exports: [RoutingService, GraphHopperClient],
 })
 export class RoutingModule {}

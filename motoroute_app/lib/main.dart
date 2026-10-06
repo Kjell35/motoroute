@@ -14,6 +14,7 @@ import 'package:motoroute_app/features/settings/legal_screens.dart';
 import 'package:motoroute_app/features/settings/theme_mode.dart';
 import 'package:motoroute_app/features/poi/poi_selection_screen.dart';
 import 'package:motoroute_app/features/routing/presentation/start_point_selection_screen.dart';
+import 'package:motoroute_app/features/routing/presentation/roundtrip_planner_screen.dart';
 import 'package:motoroute_app/features/routing/route_overview_screen.dart';
 import 'package:motoroute_app/features/routing/route_style_selection.dart';
 import 'package:motoroute_app/features/search/search_screen.dart';
@@ -151,6 +152,7 @@ class _MotoRouteAppBody extends ConsumerWidget {
           );
         },
         '/route-overview': (context) => const RouteOverviewScreen(),
+        '/roundtrip': (context) => const RoundTripPlannerScreen(),
         '/navigation': (context) => const ActiveNavigationScreen(),
         '/waypoints': (context) => const WaypointManagementScreen(),
         '/pois': (context) => const PoiSelectionScreen(),

@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
+import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/error/failure.dart';
 import '../domain/route_entities.dart';
 import '../domain/routing_repository.dart';
@@ -33,6 +34,53 @@ class RoutingRepositoryImpl implements RoutingRepository {
     // bewusst hinter diesem Repository verborgen, damit sich das später
     // ändern kann, ohne dass Presentation-Code angefasst werden muss.
     return _request('/v1/routes/reroute', waypoints: waypoints, preference: preference);
+  }
+
+  @override
+  Future<Either<Failure, NavigationRoute>> createRoundTrip({
+    required Waypoint start,
+    required double targetDistanceKm,
+    required RouteStyle style,
+    required VehicleType vehicleType,
+    String? direction,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/v1/roundtrips',
+        data: {
+          'startLat': start.lat,
+          'startLng': start.lng,
+          'targetDistanceKm': targetDistanceKm,
+          'style': style.apiValue,
+          'vehicleType': vehicleType.apiValue,
+          if (direction != null) 'direction': direction,
+        },
+      );
+
+      // Das Backend liefert dieselbe Route-Entity wie /v1/routes -
+      // inkl. der 5 Wegpunkte (Start + 3 Ring-Punkte + Start). Die
+      // Praeferenz kommt aus der Anfrage zurueck, wir spiegeln sie
+      // trotzdem bewusst clientseitig (Konsistenz mit createRoute).
+      final preference = RoutePreference(style: style, vehicleType: vehicleType);
+      final waypoints = [start];
+      final route = NavigationRoute.fromJson(
+        response.data as Map<String, dynamic>,
+        requestedPreference: preference,
+        requestedWaypoints: waypoints,
+      );
+      return Right(route);
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout) {
+        return const Left(NetworkFailure());
+      }
+      final serverMessage = e.response?.data is Map
+          ? (e.response?.data['message']?.toString())
+          : null;
+      return Left(RoutingFailure(serverMessage ?? 'Rundtour konnte nicht erstellt werden'));
+    } catch (_) {
+      return const Left(UnexpectedFailure());
+    }
   }
 
   Future<Either<Failure, NavigationRoute>> _request(
