@@ -1,0 +1,83 @@
+name: Android Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests (Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub get
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: apps/mobile
+        run: flutter analyze
+
+      - name: Tests
+        working-directory: apps/mobile
+        run: flutter test
+
+  build-apk:
+    name: Release-APK (installierbar)
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub get
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Build APK (release, debug-signed)
+        working-directory: apps/mobile
+        env:
+          MOTOROUTE_API_BASE_URL: ${{ vars.MOTOROUTE_API_BASE_URL || 'https://motoroute.example' }}
+        run: flutter build apk --release \
+          --dart-define=MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL
+
+      - name: Upload Artifact (7 Tage abrufbar)
+        uses: actions/upload-artifact@v4
+        with:
+          name: motoroute-apk
+          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Release bei Tag-Push (v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          generate_release_notes: true

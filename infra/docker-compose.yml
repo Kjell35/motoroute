@@ -1,0 +1,64 @@
+# MotoRoute M0-Stack (Zero-Budget, lokal) – siehe docs/01-tech-stack.md §7.
+# Start:  docker compose -f infra/docker-compose.yml up -d
+#
+# Aktiv jetzt:    backend (FastAPI), postgres+postgis
+# Aktiv ab M2/M3: photon (Geocoding), valhalla (Routing) – Profile unten einschalten.
+
+name: motoroute
+
+services:
+  backend:
+    build: ../apps/backend
+    ports:
+      - "8000:8000"
+    environment:
+      MOTOROUTE_VALHALLA_URL: http://valhalla:8002
+      MOTOROUTE_PHOTON_URL: http://photon:2322
+      MOTOROUTE_TOMTOM_API_KEY: ${MOTOROUTE_TOMTOM_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [motoroute]
+    restart: unless-stopped
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: motoroute
+      POSTGRES_USER: motoroute
+      POSTGRES_PASSWORD: motoroute-dev  # NUR lokale Entwicklung (docs/10-dev-process.md)
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U motoroute -d motoroute"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [motoroute]
+    restart: unless-stopped
+
+  # M2: lokales Geocoding. Für einen ersten Start Daten einmalig indexieren;
+  # in Produktion wird der Index als persistentes Volume geführt.
+  photon:
+    image: ghcr.io/rtuszik/photon-docker:latest
+    environment:
+      PHOTON_COUNTRY: europe/germany
+    ports: ["2322:2322"]
+    networks: [motoroute]
+
+  # Ab M3 (Kern-Meilenstein): Routing mit motorcycle costing
+  # valhalla:
+  #   image: ghcr.io/gis-ops/valhalla-gis:latest
+  #   command: ["ash", "/custom_files/valhalla_build_tiles_script.sh"]
+  #   volumes:
+  #     - ./valhalla/custom_files:/custom_files
+  #   ports: ["8002:8002"]
+  #   networks: [motoroute]
+
+volumes:
+  pgdata:
+
+networks:
+  motoroute:

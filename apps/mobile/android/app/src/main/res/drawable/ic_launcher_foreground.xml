@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Route-Schwung im Motiv des App-Logos (siehe lib/design/components/mr_logo.dart) -->
+    <path
+        android:pathData="M32,76 C24,62 42,54 52,58 C64,63 58,44 66,38 C72,33 78,34 82,28"
+        android:strokeColor="#12151A"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M32,76 C24,62 42,54 52,58 C64,63 58,44 66,38 C72,33 78,34 82,28"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:fillColor="#12151A"
+        android:pathData="M82,28 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+</vector>

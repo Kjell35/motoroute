@@ -1,0 +1,96 @@
+{
+  "version": 8,
+  "name": "Midnight Asphalt",
+  "sources": {
+    "openmaptiles": {
+      "type": "vector",
+      "url": "https://tiles.openfreemap.org/planet"
+    }
+  },
+  "sprite": "https://tiles.openfreemap.org/styles/liberty/sprite",
+  "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  "layers": [
+    { "id": "background", "type": "background", "paint": { "background-color": "#0E1116" } },
+    {
+      "id": "landcover",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "filter": ["==", ["get", "class"], "wood"],
+      "paint": { "fill-color": "#12181C", "fill-opacity": 0.8 }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "water",
+      "paint": { "fill-color": "#0D1420" }
+    },
+    {
+      "id": "road_minor",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "filter": ["in", ["get", "class"], ["literal", ["minor", "service", "track"]]],
+      "minzoom": 10,
+      "paint": { "line-color": "#1C232D", "line-width": 1.2 }
+    },
+    {
+      "id": "road_major",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "filter": ["in", ["get", "class"], ["literal", ["primary", "secondary", "tertiary", "trunk"]]],
+      "paint": {
+        "line-color": "#2A323D",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.4, 14, 4.5]
+      }
+    },
+    {
+      "id": "road_motorway",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "filter": ["==", ["get", "class"], "motorway"],
+      "paint": {
+        "line-color": "#3A4452",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.6, 14, 6]
+      }
+    },
+    {
+      "id": "road_labels",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "transportation_name",
+      "minzoom": 12,
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "text-letter-spacing": 0.08
+      },
+      "paint": {
+        "text-color": "#9AA6B2",
+        "text-halo-color": "#0E1116",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "place_labels",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans SemiBold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 4, 11, 12, 16],
+        "text-letter-spacing": 0.05
+      },
+      "paint": {
+        "text-color": "#F2F5F7",
+        "text-halo-color": "#0E1116",
+        "text-halo-width": 1.4
+      }
+    }
+  ]
+}

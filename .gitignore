@@ -1,0 +1,41 @@
+# macOS / Windows / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Flutter / Dart
+**/build/
+**/.dart_tool/
+**/.flutter-plugins*
+**/GeneratedPluginRegistrant.*
+**/pubspec.lock
+
+# Android
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+**/android/app/.cxx/
+*.keystore
+*.jks
+
+# Python
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+apps/backend/.env
+
+# Env / Secrets (nie committen – docs/10-dev-process.md §2)
+.env
+.env.*
+!.env.example
+
+# Valhalla/Photon Daten (groß, nur lokal/CI)
+infra/valhalla/custom_files/
+infra/photon/data/
+
+# Lokale Tool-/Agenten-Ordner (nicht Teil des Produkts)
+.artifacts/
+.freebuff/
