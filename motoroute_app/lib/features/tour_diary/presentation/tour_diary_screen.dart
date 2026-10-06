@@ -44,6 +44,15 @@ class _TourDiaryScreenState extends ConsumerState<TourDiaryScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(i18n.toursTab, style: AppTypography.title),
+        actions: [
+          // Statistik-Dashboard über alle Touren (Top-Speed, Höhenmeter,
+          // Monatschart) - Konkurrenz-Feature-Parität.
+          IconButton(
+            icon: const Icon(Icons.query_stats, color: AppColors.accentPrimaryDark),
+            tooltip: i18n.tr('stats.title'),
+            onPressed: () => Navigator.of(context).pushNamed('/ride-stats'),
+          ),
+        ],
       ),
       body: SafeArea(
         child: state.isLoading
