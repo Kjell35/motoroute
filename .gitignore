@@ -36,6 +36,9 @@ apps/backend/.env
 infra/valhalla/custom_files/
 infra/photon/data/
 
+# Lokale Runtime-Logs des Backends/Tools
+apps/.backend.log
+
 # Lokale Tool-/Agenten-Ordner (nicht Teil des Produkts)
 .artifacts/
 .freebuff/
