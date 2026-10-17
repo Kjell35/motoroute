@@ -67,8 +67,25 @@ jobs:
         working-directory: apps/mobile
         env:
           MOTOROUTE_API_BASE_URL: ${{ vars.MOTOROUTE_API_BASE_URL || 'https://motoroute.example' }}
-        run: flutter build apk --release \
-          --dart-define=MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL
+        run: |
+          set -o pipefail
+          set -x
+          flutter build apk --release \
+            --dart-define="MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL" 2>&1 \
+            | tee build-release.log
+
+      # Diagnostik: Log-Tail in die Job-Summary — der ist öffentlich auf der
+      # Run-Seite lesbar, ohne Admin-Token (Job-Logs-Download braucht Admin).
+      - name: Build-Log (Tail) in Summary
+        if: failure()
+        working-directory: apps/mobile
+        run: |
+          {
+            echo '### Release-APK Build-Fehler – letzte 200 Zeilen'
+            echo '```'
+            tail -n 200 build-release.log 2>/dev/null || echo '(kein Log vorhanden)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Artifact (7 Tage abrufbar)
         uses: actions/upload-artifact@v4
