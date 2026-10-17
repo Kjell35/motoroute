@@ -152,8 +152,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
     await ref.read(recentPlacesProvider.notifier).push(place);
     if (!mounted) return;
-    // Wieder auf der Karte landen; dort zeigen die Wegpunkt-CTAs den Entwurf.
-    context.go('/');
+    // Wieder zurück in die Tab-Shell (Karte-Tab); dort zeigen die
+    // Wegpunkt-CTAs den Entwurf.
+    context.go('/home');
   }
 
   @override
