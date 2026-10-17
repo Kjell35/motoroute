@@ -35,7 +35,7 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   static const double _followZoom = 15.5;
 
-  MaplibreMapController? _controller;
+  MapLibreMapController? _controller;
   bool _styleLoaded = false;
   bool _pointerDown = false;
   double _panAccumulatedPx = 0;
@@ -71,7 +71,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             },
             onPointerUp: (_) => _onPointerReleased(context),
             onPointerCancel: (_) => _onPointerReleased(context),
-            child: MaplibreMap(
+            child: MapLibreMap(
             styleString: 'assets/map-style/midnight-asphalt.json',
             initialCameraPosition: const CameraPosition(
               target: LatLng(48.1375, 11.5755),
@@ -83,7 +83,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             compassEnabled: false,
             trackCameraPosition: true,
             onMapLongClick: (_, LatLng coordinates) => _addMapPin(coordinates),
-            onMapCreated: (MaplibreMapController c) => _controller = c,
+            onMapCreated: (MapLibreMapController c) => _controller = c,
             onStyleLoadedCallback: () => setState(() => _styleLoaded = true),
           ),
           ),
@@ -186,7 +186,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ref.read(cameraModeProvider) != CameraMode.follow) {
       return;
     }
-    final MaplibreMapController? c = _controller;
+    final MapLibreMapController? c = _controller;
     if (c == null) return;
     final DateTime now = DateTime.now();
     if (_lastMapDataLoad == null ||
