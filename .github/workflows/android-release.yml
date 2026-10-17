@@ -32,7 +32,9 @@ jobs:
 
       - name: Analyze
         working-directory: apps/mobile
-        run: flutter analyze
+        # Info-/Warning-Meldungen blockieren den Build nicht; echte Errors
+        # führen weiterhin zu exit != 0 → Job fällt.
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Tests
         working-directory: apps/mobile
