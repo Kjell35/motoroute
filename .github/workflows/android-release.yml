@@ -98,9 +98,28 @@ jobs:
           path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
+      # Release-Seite wie bisher: Titel „MotoRoute X.Y.Z", Asset
+      # „MotoRoute-vX.Y.Z.apk” (Konvention der Releases bis v1.0.3).
+      - name: APK auf Releases-Namen kopieren
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cp apps/mobile/build/app/outputs/flutter-apk/app-release.apk "MotoRoute-${{ github.ref_name }}.apk"
+          # Titel-Konvention der alten Releases: „MotoRoute 1.0.4" (ohne v).
+          echo "VERSION_NO_V=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # Einmaliges Aufräumen: Das erste v1.0.4-Release hieß generisch
+      # (app-release.apk) — der Restbestand wird entfernt, falls vorhanden.
+      - name: Alt-Asset app-release.apk löschen (falls vorhanden)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: apps/mobile
+        run: gh release delete-asset "${{ github.ref_name }}" app-release.apk --yes || true
+
       - name: Release bei Tag-Push (v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          name: MotoRoute ${{ env.VERSION_NO_V }}
+          files: MotoRoute-${{ github.ref_name }}.apk
           generate_release_notes: true
