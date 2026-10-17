@@ -1,0 +1,1117 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:motoroute_app/core/constants/route_enums.dart';
+import 'package:motoroute_app/core/i18n/i18n.dart';
+import 'package:motoroute_app/core/state/app_providers.dart';
+import 'package:motoroute_app/features/routing/routing_flow.dart';
+import 'package:motoroute_app/core/theme/app_colors.dart';
+import 'package:motoroute_app/core/theme/app_spacing.dart';
+import 'package:motoroute_app/core/theme/app_typography.dart';
+import 'package:motoroute_app/features/chat/chat_providers.dart';
+import 'package:motoroute_app/features/chat/data/chat_realtime.dart';
+import 'package:motoroute_app/features/hazards/hazard_repository.dart';
+import 'package:motoroute_app/features/hazards/presentation/hazard_report_sheet.dart';
+import 'package:motoroute_app/features/map/data/location_repository.dart';
+import 'package:motoroute_app/features/map/data/map_style.dart';
+import 'package:motoroute_app/features/poi/biker_poi_sync.dart';
+import 'package:motoroute_app/features/poi/poi_map_layer.dart';
+import 'package:motoroute_app/features/poi/poi_providers.dart';
+import 'package:motoroute_app/features/routing/domain/route_entities.dart';
+import 'package:motoroute_app/features/search/search_providers.dart';
+import 'package:motoroute_app/features/traffic/traffic_providers.dart';
+
+/// Screen 3+4 aus Phase 3, Teil C: Startseite und Kartenseite sind
+/// bewusst DERSELBE Screen. Diese Version zeigt POI-Kreise (je nach
+/// aktiven Kategorien, nachgeladen bei Kartenausschnitt-Wechsel),
+/// unterstützt das Setzen von Wegpunkten per Kartentap (Modus über
+/// Button aktivierbar) und öffnet bei POI-Antippen ein Detail-Popup.
+class MapScreen extends ConsumerStatefulWidget {
+  const MapScreen({super.key});
+
+  @override
+  ConsumerState<MapScreen> createState() => _MapScreenState();
+}
+
+class _MapScreenState extends ConsumerState<MapScreen> {
+  MaplibreMapController? _mapController;
+  late final PoiMapLayer _poiLayer;
+  bool _hasLocationPermission = false;
+  String? _styleString;
+  final List<Circle> _incidentCircles = [];
+  final List<Circle> _hazardCircles = [];
+
+  /// Kartentap-Modus: aktivierte Route "Auf Karte antippen" (Phase 3,
+  /// Screen 9: expliziter Modus-Umschalter, kein versehentlicher Tap).
+  bool _tapMode = false;
+
+  Timer? _bikerPoiSyncTimer;
+  StreamSubscription<List<({String id, String action})>>? _bikerPoiPushSub;
+  ProviderSubscription<BikerPoiSyncState>? _bikerPoiStateSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _poiLayer = PoiMapLayer(() => _mapController);
+    _requestLocationPermission();
+    _loadStyle();
+    _startBikerPoiSync();
+    // Hell/Dunkel-Umschaltung aus den Einstellungen: Karte lädt den
+    // anderen Vektor-Stil sofort nach (ohne Screen-Neustart).
+    ref.listenManual<MapStyleChoice>(mapStyleChoiceProvider, (prev, next) {
+      if (prev != next) _loadStyle();
+    });
+    // POI-Kategorie-Toggles SOFORT anwenden: Vorher zeichnete der Layer
+    // nur bei der nächsten Kartenbewegung neu - ein frisch abgewählter
+    // POI blieb bis dahin sichtbar (Audit-Fund "Filter wirkt nicht").
+    ref.listenManual<Set<PoiCategory>>(activePoiCategoriesProvider, (prev, next) {
+      if (!mounted || identical(prev, next)) return;
+      if (_poiLayer.hasLastBounds) {
+        _poiLayer.refreshIgnoringThrottle(ref);
+      } else {
+        _poiLayer.clearNow();
+      }
+    });
+  }
+
+  /// Biker-POI-Live-Anbindung: 1) WS-Push (bikerpoi.batch über die
+  /// App-WebSocket) löst sofort einen Delta-Sync aus, 2) nach jedem
+  /// Sync - ob durch Push, Intervall oder App-Start - zeichnet der
+  /// Karten-Layer NEU, OHNE auf eine Kamerabewegung zu warten. Der
+  /// 10-Minuten-Timer bleibt als Fallback, falls die WS gerade tot ist.
+  void _startBikerPoiSync() {
+    // WS-Verbindung frühzeitig sicherstellen (Singleton, idempotent
+    // über isConnected): ohne Chat-Login gibt es auch keinen Push -
+    // der kuratierte Sync ist ohnehin ein angemeldet-Feature.
+    final token = ref.read(chatSessionTokenProvider);
+    final realtime = ref.read(chatRealtimeProvider);
+    if (token != null && !realtime.isConnected) realtime.connect(token);
+
+    _bikerPoiPushSub = realtime.bikerPoiChanges.listen((changes) {
+      if (!mounted) return;
+      ref
+          .read(bikerPoiSyncProvider.notifier)
+          .applyPush(changes.map((c) => c.id).toSet());
+    });
+
+    // Render nach jedem Sync-State-Wechsel mit neuen POIs (Identitäts-
+    // vergleich: isSyncing/error-Wechsel zeichnen nicht neu).
+    _bikerPoiStateSub = ref.listenManual<BikerPoiSyncState>(bikerPoiSyncProvider, (prev, next) {
+      if (!mounted || identical(prev?.pois, next.pois)) return;
+      _poiLayer.applyBikerPois(ref);
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final sync = ref.read(bikerPoiSyncProvider.notifier);
+      // Reconnect-Watcher: Funkloch raus → Sync läuft nach, sobald wieder
+      // Schnitt + Backend da sind (offline zeigt die Karte SQLite-Bestand).
+      sync.offline.watchConnectivity();
+      await sync.restoreCache();
+      await sync.sync();
+      if (!mounted) return;
+      _bikerPoiSyncTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+        if (mounted) sync.sync();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _bikerPoiSyncTimer?.cancel();
+    _bikerPoiPushSub?.cancel();
+    _bikerPoiStateSub?.close();
+    _poiLayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadStyle() async {
+    final choice = ref.read(mapStyleChoiceProvider);
+    final style = await loadMapStyle(choice);
+    if (mounted) setState(() => _styleString = style);
+  }
+
+  Future<void> _requestLocationPermission() async {
+    final granted = await LocationRepository().ensurePermission();
+    if (mounted) setState(() => _hasLocationPermission = granted);
+  }
+
+  Future<void> _centerOnPosition() async {
+    try {
+      final position = await LocationRepository().getCurrentPosition();
+      await _mapController?.animateCamera(
+        CameraUpdate.newLatLng(LatLng(position.latitude, position.longitude)),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Standort nicht verfügbar')),
+        );
+      }
+    }
+  }
+
+  /// Vorfälle (Stau/Sperrung) im aktuellen Kartenausschnitt als Kreise
+  /// anzeigen - rot = blockierend/hoch, orange = Warnhinweis.
+  Future<void> _drawIncidents(WidgetRef ref) async {
+    final controller = _mapController;
+    if (controller == null) return;
+    try {
+      final bounds = await controller.getVisibleRegion();
+      await ref.read(trafficControllerProvider.notifier).loadViewport(
+            minLng: bounds.southwest.longitude,
+            minLat: bounds.southwest.latitude,
+            maxLng: bounds.northeast.longitude,
+            maxLat: bounds.northeast.latitude,
+          );
+    } catch (_) {
+      return;
+    }
+
+    for (final c in _incidentCircles) {
+      try {
+        await controller.removeCircle(c);
+      } catch (_) {}
+    }
+    _incidentCircles.clear();
+
+    for (final incident in ref.read(trafficControllerProvider).incidents.take(50)) {
+      if (incident.geometry.isEmpty) continue;
+      final point = incident.geometry.first;
+      try {
+        _incidentCircles.add(await controller.addCircle(
+          CircleOptions(
+            geometry: LatLng(point[1], point[0]),
+            circleRadius: incident.isBlocking ? 9 : 6,
+            circleColor: incident.isBlocking ? '#E5484D' : '#F5A623',
+            circleStrokeWidth: 2,
+            circleStrokeColor: '#0B0E11',
+            circleOpacity: 0.85,
+          ),
+        ));
+      } catch (_) {}
+    }
+  }
+
+  /// Gefahrenmeldungen im Viewport als pulsierend-rote Kreise zeichnen
+  /// (Radius nach Bestätigungen skaliert: mehr Upvotes = größer).
+  Future<void> _drawHazards(WidgetRef ref) async {
+    final controller = _mapController;
+    if (controller == null) return;
+
+    // Radar-Laden um Kartenmitte (serverseitig gefiltert auf aktiv +
+    // 24-h-Ablauf); Throttle im Controller verhindert Request-Stürme.
+    try {
+      final bounds = await controller.getVisibleRegion();
+      final centerLat = (bounds.northeast.latitude + bounds.southwest.latitude) / 2;
+      final centerLng = (bounds.northeast.longitude + bounds.southwest.longitude) / 2;
+      await ref
+          .read(hazardRadarProvider.notifier)
+          .loadViewport(centerLat: centerLat, centerLng: centerLng);
+    } catch (_) {
+      return;
+    }
+
+    for (final c in _hazardCircles) {
+      try {
+        await controller.removeCircle(c);
+      } catch (_) {}
+    }
+    _hazardCircles.clear();
+
+    for (final hazard in ref.read(hazardRadarProvider).reports.take(80)) {
+      try {
+        _hazardCircles.add(await controller.addCircle(
+          CircleOptions(
+            geometry: LatLng(hazard.lat, hazard.lng),
+            circleRadius: 8 + (hazard.upvotes.clamp(1, 10)).toDouble(),
+            circleColor: hazard.type == HazardType.sperrung
+                ? '#E5484D'
+                : '#F5A623',
+            circleStrokeWidth: 2,
+            circleStrokeColor: '#0B0E11',
+            circleOpacity: 0.9,
+          ),
+          {'hazardId': hazard.id},
+        ));
+      } catch (_) {}
+    }
+  }
+
+  /// Kartentap: zuerst Gefahr, dann POI, sonst (im Tap-Modus) Wegpunkt.
+  Future<void> _onMapTap(LatLng tapped) async {
+    final hazard = _nearestHazard(tapped);
+    if (hazard != null) {
+      _showHazardDetails(hazard);
+      return;
+    }
+    final poi = _poiLayer.handleMapTap(tapped);
+    if (poi != null) {
+      _showPoiDetails(poi);
+      return;
+    }
+
+    if (!_tapMode) return;
+
+    final position = await LocationRepository().getCurrentPosition();
+    final waypoints = [...ref.read(waypointListProvider)];
+    if (waypoints.isEmpty) {
+      waypoints.add(Waypoint(
+        lat: position.latitude,
+        lng: position.longitude,
+        label: 'Start',
+      ));
+    }
+
+    // Ortsname asynchron aufloesen (TomTom Reverse-Geocoding im BFF):
+    // Der Wegpunkt erscheint sofort mit Fallback-Label, der Name wird
+    // nachgereicht - fuehlt sich sofort an, heisst aber Klartext.
+    final isTargetReplacement = waypoints.length >= 2;
+    final fallbackLabel =
+        '${tapped.latitude.toStringAsFixed(4)}, ${tapped.longitude.toStringAsFixed(4)}';
+    ref.read(searchRepositoryProvider).reverse(lat: tapped.latitude, lng: tapped.longitude).then((result) {
+      if (!mounted) return;
+      final list = [...ref.read(waypointListProvider)];
+      if (list.isEmpty) return;
+      final updated = Waypoint(
+        lat: tapped.latitude,
+        lng: tapped.longitude,
+        label: result?.label ?? fallbackLabel,
+      );
+      if (isTargetReplacement && list.length >= 2) {
+        list[list.length - 1] = updated;
+      } else {
+        list.add(updated);
+      }
+      ref.read(waypointListProvider.notifier).state = list;
+    });
+
+    // Ziel wird ersetzt, wenn es schon existiert; sonst neuer Wegpunkt.
+    if (isTargetReplacement) {
+      waypoints[waypoints.length - 1] = Waypoint(
+        lat: tapped.latitude,
+        lng: tapped.longitude,
+        label: fallbackLabel,
+      );
+    } else {
+      waypoints.add(Waypoint(
+        lat: tapped.latitude,
+        lng: tapped.longitude,
+        label: fallbackLabel,
+      ));
+    }
+    ref.read(waypointListProvider.notifier).state = waypoints;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Wegpunkt gesetzt - Ort wird aufgeloest …'),
+          action: SnackBarAction(
+            label: 'Verwalten',
+            onPressed: () => Navigator.of(context).pushNamed('/waypoints'),
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Nächstgelegene Gefahr im Touch-Toleranzradius (28 m, etwas großzü-
+  /// giger als die 24 m der POIs, da Gefahren klein/schlank sind).
+  HazardReport? _nearestHazard(LatLng tapped) {
+    HazardReport? best;
+    double bestDist = double.infinity;
+    for (final h in ref.read(hazardRadarProvider).reports) {
+      final dLat = (tapped.latitude - h.lat) * 111320;
+      final dLng = (tapped.longitude - h.lng) * 111320 * 0.7;
+      final d = dLat * dLat + dLng * dLng;
+      if (d < bestDist) {
+        bestDist = d;
+        best = h;
+      }
+    }
+    return best != null && bestDist <= 28 * 28 ? best : null;
+  }
+
+  /// Gefahren-Popup: Typ, Alter, Bestätigungen, Alter-Ablauf, Upvote-
+  /// Button ("Gefahr ist noch da").
+  void _showHazardDetails(HazardReport hazard) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgSurfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(hazard.type.label, style: AppTypography.title),
+                  const Spacer(),
+                  // Bestätigungen: große Zahl = viele Biker haben sie
+                  // bestätigt = glaubwürdig.
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSurfaceRaisedDark,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '👍 ${hazard.upvotes}',
+                      style: const TextStyle(
+                          color: AppColors.textPrimaryDark,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+              if (hazard.description.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(hazard.description, style: AppTypography.caption),
+              ],
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'vor ${_hazardAge(hazard.createdAt)} gemeldet · gültig noch ${_hazardRemaining(hazard.expiresAt)}',
+                style: AppTypography.caption,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              SizedBox(
+                width: double.infinity,
+                height: AppSpacing.touchTargetPlanning,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.of(sheetContext).pop();
+                    final res =
+                        await ref.read(hazardRadarProvider.notifier).upvote(hazard.id);
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(res.expired
+                            ? 'Meldung ist abgelaufen - die Gefahr ist vermutlich weg'
+                            : res.alreadyVoted
+                                ? 'Du hast diese Gefahr bereits bestätigt'
+                                : 'Danke! Meldung um 6 Stunden verlängert'),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.statusDanger,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.thumb_up),
+                  label: const Text('Gefahr bestätigen (+6 h gültig)'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _hazardAge(DateTime timestamp) {
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inMinutes < 1) return 'weniger als 1 Min.';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} Min.';
+    if (diff.inHours < 24) return '${diff.inHours} Std.';
+    return '${diff.inDays} Tagen';
+  }
+
+  /// Restlaufzeit (umgekehrte Differenz - "gültig noch", nicht "seit").
+  static String _hazardRemaining(DateTime expiresAt) {
+    final diff = expiresAt.difference(DateTime.now());
+    if (diff.isNegative) return 'abgelaufen';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} Min.';
+    if (diff.inHours < 24) return '${diff.inHours} Std.';
+    return '${diff.inDays} Tagen';
+  }
+
+  Future<void> _showPoiDetails(Poi poi) async {
+    final bikerPoi = poi is BikerPoi ? poi : null;
+
+    // Detail nachladen (Metadaten: website, image, published-at/by).
+    // Koordinaten + Kategorie gehen mit, damit das Backend Live-OSM-POIs
+    // ohne DB-Zeile über Google anreichern kann. Fehler/404 sind okay -
+    // das Sheet zeigt dann die Basis-Daten.
+    PoiDetail? detail;
+    try {
+      detail = await ref.read(poiRepositoryProvider).fetchDetail(
+            poi.id,
+            lat: poi.lat,
+            lng: poi.lng,
+            category: poi.category,
+            name: poi.name,
+          );
+    } catch (_) {}
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bgSurfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.55,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          builder: (sheetContext, scrollController) => SingleChildScrollView(
+            controller: scrollController,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Bild oben (kuratierte POIs) oder Kategorie-Platzhalter.
+                if ((detail?.imageUrl != null))
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    child: Image.network(
+                      detail!.imageUrl!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _poiImagePlaceholder(),
+                    ),
+                  )
+                else
+                  _poiImagePlaceholder(),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(_iconFor(poi.category),
+                              color: AppColors.accentSecondary, size: 24),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              poi.name.isNotEmpty ? poi.name : (detail?.name ?? 'POI'),
+                              style: AppTypography.title,
+                            ),
+                          ),
+                          if (bikerPoi != null || detail?.bikerScore != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '🏍️ ${bikerPoi?.bikerScore ?? detail?.bikerScore}',
+                                style: const TextStyle(
+                                    color: AppColors.accentPrimaryDark,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      // Beschreibung + Website (aus dem Backend-Detail).
+                      if (detail?.description != null && detail!.description!.isNotEmpty)
+                        Text(detail.description!, style: AppTypography.caption)
+                      else
+                        Text(
+                          '${poi.category.label} · Quelle: ${bikerPoi != null ? 'Biker-Service (kuratiert)' : poi.source}',
+                          style: AppTypography.caption,
+                        ),
+                      if (detail?.website != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: InkWell(
+                            onTap: () async {
+                              final uri = Uri.tryParse(detail!.website!);
+                              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            },
+                            child: Text(
+                              detail!.website!,
+                              style: const TextStyle(
+                                color: AppColors.accentSecondary,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                      ),
+                      if (bikerPoi != null && (bikerPoi.motorcycleParking || bikerPoi.meetingPoint))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Wrap(
+                            spacing: 6,
+                            children: [
+                              if (bikerPoi.motorcycleParking)
+                                _amenityChip('🏍️ Motorradparkplatz'),
+                              if (bikerPoi.meetingPoint) _amenityChip('👥 Treffpunkt'),
+                            ],
+                          ),
+                        ),
+                      Text(
+                        '${poi.lat.toStringAsFixed(5)}, ${poi.lng.toStringAsFixed(5)}',
+                        style: AppTypography.caption,
+                      ),
+                      // Wikipedia-Quelle der Beschreibung (CC BY-SA macht
+                      // die Namensangabe zur Pflicht - ehrlich gekennzeichnet).
+                      if (detail?.descriptionSource == 'wikipedia')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Beschreibung: Wikipedia (CC BY-SA)',
+                            style: AppTypography.caption,
+                          ),
+                        ),
+                      // Google-DeepLink ("In Google Maps öffnen") - nur
+                      // wenn der Backend-Match einen Link mitbringt.
+                      if (detail?.googleMapsUri != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: InkWell(
+                            onTap: () async {
+                              final uri = Uri.tryParse(detail!.googleMapsUri!);
+                              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            },
+                            child: const Text(
+                              'In Google Maps öffnen',
+                              style: TextStyle(
+                                color: AppColors.accentSecondary,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Pflicht-Attribution des Google-Fotos (ToS).
+                      if (detail?.photoAttribution != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Foto: ${detail!.photoAttribution}',
+                            style: AppTypography.caption,
+                          ),
+                        ),
+                      const SizedBox(height: AppSpacing.md),
+                      // Veröffentlichung (unten): wann und von wem -
+                      // ehrlich je nach Quelle (OSM / Kuratierung / Community).
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgSurfaceRaisedDark,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _poiPublishedLine(poi, detail),
+                          style: AppTypography.caption,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      SizedBox(
+                        width: double.infinity,
+                        height: AppSpacing.touchTargetPlanning,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _startRoutingFrom(poi);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentPrimaryDark,
+                            foregroundColor: AppColors.textPrimaryLight,
+                          ),
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('Als Ziel setzen'),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(
+                        width: double.infinity,
+                        height: AppSpacing.touchTargetPlanning,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _addBikerPoiAsWaypoint(poi);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.accentSecondary),
+                          ),
+                          icon: const Icon(Icons.add_road, color: AppColors.accentSecondary),
+                          label: const Text('Als Stopp in die Route',
+                              style: TextStyle(color: AppColors.accentSecondary)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _poiImagePlaceholder() => Container(
+        height: 180,
+        width: double.infinity,
+        color: AppColors.bgSurfaceRaisedDark,
+        child: const Center(
+          child: Icon(Icons.place_outlined, size: 44, color: AppColors.textSecondaryDark),
+        ),
+      );
+
+  String _poiPublishedLine(Poi poi, PoiDetail? detail) {
+    final publishedBy = detail?.publishedBy ??
+        (poi.source == 'BIKER_SERVICE'
+            ? 'Biker-POI-Kuratierung'
+            : poi.source == 'OSM'
+                ? 'OpenStreetMap'
+                : poi.source);
+    final publishedAt = detail?.publishedAt;
+    if (publishedAt == null) return 'Veröffentlicht von $publishedBy';
+    final dt = DateTime.tryParse(publishedAt);
+    final when = dt == null
+        ? ''
+        : ' am ${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
+    return 'Veröffentlicht von $publishedBy$when';
+  }
+
+  /// POI als Ziel: Der Nutzer wählt den Startpunkt (GPS oder Adresse)
+  /// im Auswahl-Screen - kein stiller GPS-Zwang mehr.
+  Future<void> _startRoutingFrom(Poi poi) async {
+    final destination = Waypoint(
+      lat: poi.lat,
+      lng: poi.lng,
+      label: poi.name,
+    );
+    ref.read(waypointListProvider.notifier).state = [destination];
+    if (mounted) {
+      Navigator.of(context).pushNamed(
+        '/route-start',
+        arguments: {'destination': destination},
+      );
+    }
+  }
+
+  /// Biker-POI als Stopp in die aktuelle Planung einreihen (vor dem Ziel).
+  void _addBikerPoiAsWaypoint(Poi poi) {
+    final current = ref.read(waypointListProvider);
+    if (current.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Setze zuerst Start und Ziel - dann füge Stopps hinzu')),
+      );
+      return;
+    }
+    final stop = Waypoint(lat: poi.lat, lng: poi.lng, label: poi.name);
+    ref.read(waypointListProvider.notifier).state = [
+      ...current.sublist(0, current.length - 1),
+      stop,
+      current.last,
+    ];
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('"${poi.name}" als Stopp eingereiht')),
+    );
+  }
+
+  Widget _amenityChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurfaceRaisedDark,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(label, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 11)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final vehicleType = ref.watch(vehicleTypeProvider);
+
+    return Scaffold(
+      backgroundColor: AppColors.bgBaseDark,
+      body: _styleString == null
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                MaplibreMap(
+                  // Fallback: leerer Stil - maplibre_gl verlangt einen
+                  // nicht-leeren String. Routing bleibt trotzdem nutzbar.
+                  styleString: isPlaceholderStyle(_styleString!)
+                      ? emptyMapStyle
+                      : _styleString!,
+                  initialCameraPosition: const CameraPosition(
+                    target: LatLng(48.1351, 11.5820), // München als Startpunkt
+                    zoom: 12,
+                  ),
+                  // Cockpit-Steuerung: Kompass dreht mit (tap = nach Norden
+                  // zurück), Kameraposition wird getrackt.
+                  compassEnabled: true,
+                  compassViewPosition: CompassViewPosition.topRight,
+                  trackCameraPosition: true,
+                  myLocationEnabled: _hasLocationPermission,
+                  myLocationTrackingMode: MyLocationTrackingMode.tracking,
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                    _drawIncidents(ref);
+                    _drawHazards(ref);
+                  },
+                  onMapClick: (point, latLng) => _onMapTap(latLng),
+                  onCameraIdle: () {
+                    _poiLayer.onCameraIdle(ref);
+                    _drawIncidents(ref);
+                    _drawHazards(ref);
+                  },
+                ),
+                // Quellen-Hinweis (Pflicht bei OSM/CARTO-Daten) + ehrlicher
+                // Fallback-Hinweis, falls Tiles nicht laden (Offline).
+                Positioned(
+                  left: AppSpacing.sm,
+                  bottom: AppSpacing.xs,
+                  child: Text(
+                    isPlaceholderStyle(_styleString!)
+                        ? ref.watch(i18nProvider).mapOfflineNote
+                        : ref.watch(i18nProvider).attribution,
+                    style: const TextStyle(
+                      color: AppColors.textMutedDark,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+                _buildTopBar(context, vehicleType),
+                _buildSideButtons(context),
+                if (_tapMode) _buildTapModeBanner(context),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildTopBar(BuildContext context, VehicleType vehicleType) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pushNamed('/search'),
+                child: Container(
+                  height: AppSpacing.touchTargetPlanning,
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSurfaceDark,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderHairlineDark),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.search, color: AppColors.textSecondaryDark),
+                      SizedBox(width: AppSpacing.sm),
+                      Text('Ziel suchen',
+                          style: TextStyle(color: AppColors.textSecondaryDark)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            _VehicleSwitcher(current: vehicleType),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSideButtons(BuildContext context) {
+    return Positioned(
+      right: AppSpacing.lg,
+      bottom: AppSpacing.xxxl,
+      child: Column(
+        children: [
+          // POI-Layer-Button
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(context).pushNamed('/pois');
+            },
+            child: _buildIconBox(Icons.layers, circular: true),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Community-Radar: Gefahrenstelle melden (2 Klicks von unterwegs).
+          GestureDetector(
+            onTap: () => showHazardReportSheet(context),
+            child: Container(
+              width: AppSpacing.touchTargetPlanning,
+              height: AppSpacing.touchTargetPlanning,
+              decoration: BoxDecoration(
+                color: AppColors.bgSurfaceRaisedDark,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.borderHairlineDark),
+              ),
+              child: const Icon(Icons.warning_amber_rounded,
+                  color: AppColors.statusDanger),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Rundtour-Planer: geschlossene Schleife ab aktuellem Standort
+          // mit Ziel-Laenge (Konkurrenz-Feature-Paritaet).
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(context).pushNamed('/roundtrip');
+            },
+            child: Container(
+              width: AppSpacing.touchTargetPlanning,
+              height: AppSpacing.touchTargetPlanning,
+              decoration: BoxDecoration(
+                color: AppColors.bgSurfaceRaisedDark,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.borderHairlineDark),
+              ),
+              child: const Icon(Icons.route, color: AppColors.accentPrimaryDark),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // "Wegpunkt per Kartentap setzen"-Button (Phase 3 Screen 9)
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _tapMode = !_tapMode);
+            },
+            child: Container(
+              width: AppSpacing.touchTargetPlanning,
+              height: AppSpacing.touchTargetPlanning,
+              decoration: BoxDecoration(
+                color: _tapMode
+                    ? AppColors.accentPrimaryDark
+                    : AppColors.bgSurfaceRaisedDark,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _tapMode
+                      ? AppColors.accentPrimaryDark
+                      : AppColors.borderHairlineDark,
+                ),
+              ),
+              child: Icon(
+                Icons.add_location_alt_outlined,
+                color: _tapMode
+                    ? AppColors.textPrimaryDark
+                    : AppColors.accentPrimaryDark,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          GestureDetector(
+            onTap: _centerOnPosition,
+            child: Container(
+              width: AppSpacing.touchTargetPlanning,
+              height: AppSpacing.touchTargetPlanning,
+              decoration: BoxDecoration(
+                color: AppColors.bgSurfaceRaisedDark,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.borderHairlineDark),
+              ),
+              child: const Icon(Icons.my_location,
+                  color: AppColors.accentPrimaryDark),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTapModeBanner(BuildContext context) {
+    return Positioned(
+      top: AppSpacing.xxxl + AppSpacing.touchTargetPlanning + AppSpacing.lg,
+      left: AppSpacing.lg,
+      right: AppSpacing.lg,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.accentPrimaryDark.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.touch_app, color: AppColors.textPrimaryDark, size: 18),
+            const SizedBox(width: AppSpacing.sm),
+            const Expanded(
+              child: Text(
+                'Karte antippen, um einen Wegpunkt zu setzen',
+                style: TextStyle(color: AppColors.textPrimaryDark),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _tapMode = false),
+              child: const Icon(Icons.close, color: AppColors.textPrimaryDark, size: 18),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIconBox(IconData icon, {bool circular = false}) {
+    return Container(
+      width: AppSpacing.touchTargetPlanning,
+      height: AppSpacing.touchTargetPlanning,
+      decoration: BoxDecoration(
+        color: AppColors.bgSurfaceDark,
+        shape: circular ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circular ? null : BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderHairlineDark),
+      ),
+      child: Icon(icon, color: AppColors.textPrimaryDark),
+    );
+  }
+
+  IconData _iconFor(PoiCategory category) => switch (category) {
+        PoiCategory.fuel => Icons.local_gas_station,
+        PoiCategory.motoHotel => Icons.hotel,
+        PoiCategory.bikerMeetup => Icons.local_bar,
+        PoiCategory.campsite => Icons.forest,
+        PoiCategory.iceCream => Icons.icecream,
+        PoiCategory.speedCamera => Icons.camera_alt,
+        PoiCategory.restaurant => Icons.restaurant,
+        PoiCategory.pub => Icons.sports_bar,
+        PoiCategory.snack => Icons.fastfood,
+      };
+}
+
+/// Fahrzeugtyp-Segment-Control - schreibt in den globalen
+/// vehicleTypeProvider, aus dem der Routing-Flow liest.
+class _VehicleSwitcher extends ConsumerWidget {
+  final VehicleType current;
+
+  const _VehicleSwitcher({required this.current});
+
+  /// Neuberechnung der aktiven Route mit dem NEUEN Fahrzeugprofil.
+  /// Gleiche Wegpunkte; der Style fällt auf den nächsten unterstützten
+  /// des Fahrzeugs zurück (Motorrad-"Extra kurvig" -> Auto "Schnell &
+  /// kurvig"). Die neue Route ersetzt die aktive sofort.
+  Future<void> _recalculateForVehicle(
+    BuildContext context,
+    WidgetRef ref,
+    VehicleType type,
+  ) async {
+    final active = ref.read(activeRouteProvider);
+    if (active == null) return;
+
+    final fallbackStyle = switch (type) {
+      VehicleType.motorcycle => RouteStyle.fastAndCurvy,
+      VehicleType.car => RouteStyle.fast,
+      VehicleType.bicycle => RouteStyle.fast,
+    };
+    final style = switch (type) {
+      VehicleType.motorcycle => active.preference.style,
+      // Auto/Fahrrad unterstützen nicht alle Motorrad-Styles.
+      VehicleType.car => switch (active.preference.style) {
+          RouteStyle.fast => RouteStyle.fast,
+          RouteStyle.curvy => RouteStyle.curvy,
+          RouteStyle.fastAndCurvy => RouteStyle.fastAndCurvy,
+          _ => fallbackStyle,
+        },
+      VehicleType.bicycle => switch (active.preference.style) {
+          RouteStyle.fast => RouteStyle.fast,
+          RouteStyle.curvy => RouteStyle.curvy,
+          _ => RouteStyle.fast,
+        },
+    };
+
+    final controller = ref.read(routingFlowProvider.notifier);
+    final newRoute = await controller.calculate(
+      waypoints: active.waypoints,
+      preference: RoutePreference(
+        style: style,
+        vehicleType: type,
+        avoid: active.preference.avoid,
+      ),
+    );
+    if (newRoute != null) {
+      ref.read(activeRouteProvider.notifier).state = newRoute;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Route für ${switch (type) {
+                VehicleType.motorcycle => 'Motorrad',
+                VehicleType.car => 'Auto',
+                VehicleType.bicycle => 'Fahrrad',
+              }} neu berechnet (${(newRoute.distanceMeters / 1000).toStringAsFixed(1)} km)',
+            ),
+          ),
+        );
+      }
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Neuberechnung fehlgeschlagen - alte Route bleibt')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      height: AppSpacing.touchTargetPlanning,
+      decoration: BoxDecoration(
+        color: AppColors.bgSurfaceDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderHairlineDark),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final type in VehicleType.values)
+            GestureDetector(
+              onTap: () async {
+                HapticFeedback.selectionClick();
+                if (type == current) return;
+                ref.read(vehicleTypeProvider.notifier).state = type;
+                await persistVehicleType(type);
+                // Fahrzeugwechsel = NEUE BERECHNUNG: eine aktive Route
+                // wird mit dem neuen Fahrzeugprofil neu berechnet (gleiche
+                // Wegpunkte; Style fällt auf den nächsten unterstützten
+                // zurück, z. B. "Extra kurvig" beim Auto -> "Schnell &
+                // kurvig"). Nur die UI umzuschalten wäre Kosmetik.
+                final active = ref.read(activeRouteProvider);
+                if (active != null && context.mounted) {
+                  await _recalculateForVehicle(context, ref, type);
+                }
+              },
+              child: Container(
+                width: AppSpacing.touchTargetPlanning,
+                height: AppSpacing.touchTargetPlanning,
+                decoration: BoxDecoration(
+                  color: type == current
+                      ? AppColors.accentPrimaryDark.withValues(alpha: 0.2)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  switch (type) {
+                    VehicleType.motorcycle => Icons.two_wheeler,
+                    VehicleType.car => Icons.directions_car,
+                    VehicleType.bicycle => Icons.pedal_bike,
+                  },
+                  color: type == current
+                      ? AppColors.accentPrimaryDark
+                      : AppColors.textSecondaryDark,
+                  size: 22,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
