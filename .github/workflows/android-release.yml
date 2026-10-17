@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 # Tag-Release braucht Schreibrecht auf Contents (v-Release erstellen/anhängen).
 permissions:
   contents: write
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
 
 jobs:
   test:
