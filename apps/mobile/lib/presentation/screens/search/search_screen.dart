@@ -184,16 +184,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         padding: EdgeInsets.all(14),
                         child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator()),
                       )
-                    : (_query.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            tooltip: 'Eingabe löschen',
-                            onPressed: () {
-                              _query.clear();
-                              _onChanged('');
-                            },
-                          )
-                        : null),
+                    : null,
                 filled: true,
                 fillColor: MrColors.raised,
                 border: OutlineInputBorder(
@@ -226,7 +217,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ),
                       title: Text(place.label),
                       subtitle: place.detail == null ? null : Text(place.detail!),
-                      trailing: const Icon(Icons.chevron_right),
                       onTap: () => _choosePlace(place),
                     );
                   },
@@ -267,7 +257,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 ),
                 title: Text(place.label),
                 subtitle: place.detail == null ? null : Text(place.detail!),
-                trailing: const Icon(Icons.chevron_right),
                 onTap: () => _choosePlace(place),
               );
             },
