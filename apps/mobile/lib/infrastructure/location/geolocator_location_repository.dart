@@ -9,8 +9,10 @@ import '../../domain/value_objects/app_location.dart';
 class GeolocatorLocationRepository implements LocationRepository {
   GeolocatorLocationRepository({this.distanceFilterMeters = 5});
 
+
   /// Update-Filter: 5 m verhindert 1-Hz-Bursts im Stand (Energie, docs/08 §2).
-  final double distanceFilterMeters;
+  /// geolocator erwartet int (Meter-Schritte).
+  final int distanceFilterMeters;
 
   Stream<AppLocation>? _cached;
 

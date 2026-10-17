@@ -21,4 +21,12 @@ class Place {
         latitude: (json['lat'] as num).toDouble(),
         longitude: (json['lon'] as num).toDouble(),
       );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'label': label,
+        'detail': detail,
+        'lat': latitude,
+        'lon': longitude,
+      };
 }

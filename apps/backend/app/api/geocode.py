@@ -6,7 +6,7 @@ Photon-URL kommt aus der Environment (docs/10-dev-process.md §2).
 
 from typing import Any
 
-import httpx
+import httpx2
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
@@ -29,12 +29,13 @@ class PhotonClient:
 
     def __init__(self, base_url: str) -> None:
         self._base_url = base_url.rstrip("/")
-        self._client = httpx.AsyncClient(timeout=5.0)
+        self._client = httpx2.AsyncClient(timeout=5.0)
 
     async def fetch(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         response = await self._client.get(f"{self._base_url}{path}", params=params)
         response.raise_for_status()
-        return response.json()
+        payload: dict[str, Any] = response.json()
+        return payload
 
 
 photon_client = PhotonClient(get_settings().photon_url)

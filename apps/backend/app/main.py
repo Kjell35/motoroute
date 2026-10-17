@@ -3,10 +3,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .core.config import get_settings
 from .api.geocode import router as geocode_router
-from .api.routing import router as routing_router
+from .api.pairing import router as pairing_router
+from .api.pairing import web_router as pairing_web_router
 from .api.pois import router as pois_router
+from .api.routing import router as routing_router
+from .core.config import get_settings
 
 settings = get_settings()
 
@@ -31,6 +33,9 @@ app.add_middleware(
 app.include_router(geocode_router)
 app.include_router(routing_router)
 app.include_router(pois_router)
+app.include_router(pairing_router)
+# Browser-Seite "Route am Computer planen" im Root (kurze sharebare URL)
+app.include_router(pairing_web_router)
 
 
 @app.get("/health")

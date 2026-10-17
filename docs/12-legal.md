@@ -30,7 +30,30 @@
 
 ## 3. Mittlere Risiken
 
-- **Markenrecht „MotoRoute“:** DPMA/EUIPO-Recherche vor Launch; Kollisionen im Navi-Bereich möglich. Code-seitig ist der Name zentral konfigurierbar.
+- **Markenrecht „MotoRoute“:** Recherche durchgeführt 2026-10-10 (Ergebnis unten, §3.1). Code-seitig ist der Name zentral konfigurierbar (Display-Name in `apps/mobile/android/.../AndroidManifest.xml` + `apps/mobile/lib/app.dart`), Wechsel bis vor M6-Release kostengünstig möglich.
+
+### 3.1 Markenrecherche-Status „MotoRoute“ (Stand 2026-10-10)
+
+| Register/Quelle | Befund | Belastbarkeit |
+|---|---|---|
+| DPMAregister (DE) | Keine verifizierbare Wortmarke „MotoRoute“ (Aktenzeichen/Status) | Kein Nulltreffer-Garant: dynamische Suchoberfläche, keine agentengestützte Volltext-/Phonem-Suche; älterer EU-/IR-Marken beachten |
+| EUIPO eSearch+/TMview (EU) | Keine verifizierbare EUTM-Eintragung | dito |
+| WIPO Global Brand DB / J-PlatPat (JP) | Keine verifizierbare Eintragung; J-PlatPat nicht auslesbar | Vor-Launch erneut direkt prüfen |
+| Apple App Store (JP) | Bekannte **App-Benutzung** des Namens: „MotoRoute: Motorcycle Rides“ (Entwickler Edward Felthuis, © 2026 TechVance) | App-Nutzung ≠ Markenanmeldung, aber belegt geschäftliche Benutzung unter der Marke |
+
+**Risikobewertung:** Weder als sicher frei noch als konfliktfrei einzustufen. Der Name ist für eine Motorrad-Routing-App zudem beschreibungsnah („Moto“+„Route“) — die Eintragbarkeit (Unterscheidungskraft) ist separat zu prüfen.
+
+### 3.2 Vor-Launch-Marken-Checkliste (abzuarbeiten vor Meilenstein M6/Release)
+
+- [ ] **R1 – Direkt-Recherche DE:** DPMAregister (register.dpma.de): „MotoRoute“, „Moto Route“, „MOTOROUTE“ exakt + phonetisch ähnliche Varianten in Klassen 9/42/39 dokumentieren.
+- [ ] **R2 – Direkt-Recherche EU:** EUIPO eSearch+ und TMview: gleiche Varianten + Verwechslungsgefahr-Prüfung gegen Navi-/Software-Marken.
+- [ ] **R3 – Direkt-Recherche JP:** J-PlatPat (japanisches Amt): relevant wegen der bekannten App-Benutzung „MotoRoute: Motorcycle Rides“ (TechVance); bei geplantem EU-Launch nicht zwingend, aber Kollisionsrisiko dokumentieren.
+- [ ] **R4 – Österreich + Schweiz:** Patentamt AT / IGE CH durchsuchen — **EU-Marke umfasst die Schweiz nicht**, DACH bleibt unvollständig ohne diese Prüfung.
+- [ ] **R5 – App-Stores:** Abfragen auf apple.com/apps + Google Play nach gleich-/ähnlich benannten Navi-/Motorrad-Apps (Reputations- und Confusion-Risiko, nicht nur markenrechtlich).
+- [ ] **R6 – Nicht eingetragene Rechte:** Nutzungsspur gleich-/ähnlich benannter Branchen-Apps + Unternehmenskennzeichen prüfen (Web, LinkedIn, Domain-Registrierungen).
+- [ ] **R7 – Eintragbarkeits-Prüfung:** Unterscheidungskraft für Klassen 9/42/39 (beschreibungsnaher Charakter), i.d.R. mit Fachanwalt für IT-Recht oder Markenberatungsstelle.
+- [ ] **R8 – Entscheidung dokumentieren:** Ergebnis („Name frei / mit Risiko / Wechsel nötig“) hier in §3.1 ergänzen; bei Namenswechsel Backup-Namen und Display-Name-Konfiguration umsetzen (Code-Seite vorbereitet, kein Engineering-Blocker).
+
 - **Impressum/Provider-Kennzeichnung (TMG/DDG):** Standard, ab Beta.
 - **Alters-/Fahrzeug-Bezug:** keine besonderen Anforderungen; App-Store-Rating unkritisch.
 - **Geoblocking Umweltzonen (später):** Datenaktualität ist der eigentliche Risikoträger (Rechtslage ändert sich jährlich) – deshalb Phase 2+.
@@ -40,6 +63,6 @@
 1. [ ] Fachanwalt: AGB + Datenschutz + Haftungsausschluss (DACH-konform)
 2. [ ] AVV mit Hoster, TomTom (falls aktiv), Sentry-Instanz
 3. [ ] ODbL-Attribution + OSS-Lizenzscreen in App
-4. [ ] Markenrecherche „MotoRoute“ (DPMA + EUIPO + übliche App-Stores)
+4. [ ] Marken-Checkliste §3.2 (R1–R8) abgearbeitet und Ergebnis in §3.1 dokumentiert
 5. [ ] Play Data-Safety-Formular ausgefüllt (muss mit `07-privacy-security.md` übereinstimmen)
 6. [ ] Incident-Response-Plan dokumentiert: wer deaktiviert den Traffic-Provider bei Ausfall oder Lizenzproblemen innerhalb 24 h

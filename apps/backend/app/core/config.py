@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     client_token: str | None = None
     rate_limit_per_minute: int = 60
 
+    # Öffentlich erreichbare Basis-URL (Pairing-Link "Route am Computer planen").
+    # Leerer Default -> Link zeigt auf localhost (Dev).  Prod setzt den Wert in .env
+    public_base_url: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

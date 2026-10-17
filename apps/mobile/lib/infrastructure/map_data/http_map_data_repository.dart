@@ -40,7 +40,7 @@ class HttpMapDataRepository implements MapDataRepository {
   }
 
   Future<Object> _get(String path, Map<String, List<String>> query) async {
-    final Uri uri = Uri.parse('${Env.apiBaseUrl}$path').replace(queryParametersAll: query);
+    final Uri uri = Uri.parse('${Env.apiBaseUrl}$path').replace(queryParameters: query);
     try {
       final response = await _client.get(uri).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) throw const MapDataException('Kartendaten sind nicht erreichbar.');

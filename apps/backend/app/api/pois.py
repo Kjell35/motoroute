@@ -4,10 +4,10 @@ Die Daten sind quelloffen, aber nicht garantiert vollständig oder in Echtzeit.
 Die Antwort benennt die Quelle deshalb explizit.
 """
 
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import Annotated, Any
 
-import httpx
+import httpx2
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -15,7 +15,7 @@ from ..core.config import get_settings
 from ..core.security import require_client_token
 
 
-class PoiCategory(str, Enum):
+class PoiCategory(StrEnum):
     fuel = "fuel"
     moto_hotel = "moto_hotel"
     biker_meet = "biker_meet"
@@ -62,11 +62,12 @@ def _bbox(value: str) -> tuple[float, float, float, float]:
 
 async def _overpass(query: str) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx2.AsyncClient(timeout=15.0) as client:
             response = await client.post(get_settings().overpass_url, data={"data": query})
             response.raise_for_status()
-            return response.json()
-    except httpx.HTTPError as error:
+            payload: dict[str, Any] = response.json()
+            return payload
+    except httpx2.HTTPError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -78,12 +79,13 @@ async def _overpass(query: str) -> dict[str, Any]:
 
 @router.get("/pois", response_model=list[PoiOut])
 async def pois(
-    bbox: str = Query(description="west,south,east,north"),
-    categories: list[PoiCategory] = Query(default=list(PoiCategory)),
+    bbox: Annotated[str, Query(description="west,south,east,north")],
+    categories: Annotated[list[PoiCategory], Query()] | None = None,
 ) -> list[PoiOut]:
+    active_categories = categories if categories is not None else list(PoiCategory)
     west, south, east, north = _bbox(bbox)
     bounds = f"({south},{west},{north},{east})"
-    clauses = "".join(f"nwr{_TAGS[category]}{bounds};" for category in categories)
+    clauses = "".join(f"nwr{_TAGS[category]}{bounds};" for category in active_categories)
     data = await _overpass(f"[out:json][timeout:12];({clauses});out center tags;")
     result: list[PoiOut] = []
     for element in data.get("elements", []):
@@ -95,7 +97,7 @@ async def pois(
         category = next(
             (item for item, selector in _TAGS.items() if _matches(tags, selector)), None
         )
-        if category in categories:
+        if category in active_categories:
             result.append(PoiOut(
                 id=f"osm:{element['type']}:{element['id']}", category=category,
                 name=tags.get("name", _fallback_name(category)), lat=float(lat), lon=float(lon),
@@ -135,7 +137,7 @@ async def _tomtom_traffic(west: float, south: float, east: float, north: float) 
         "properties{id,iconCategory,magnitudeOfDelay,events{description}}}}"
     )
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx2.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 settings.tomtom_traffic_url,
                 params={
@@ -148,7 +150,7 @@ async def _tomtom_traffic(west: float, south: float, east: float, north: float) 
             )
             response.raise_for_status()
         payload: dict[str, Any] = response.json()
-    except httpx.HTTPError as error:
+    except httpx2.HTTPError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -166,7 +168,7 @@ async def _tomtom_traffic(west: float, south: float, east: float, north: float) 
         point = coordinates[0] if isinstance(coordinates[0], list) else coordinates
         if len(point) < 2:
             continue
-        event = next(iter(properties.get("events", [])), {})
+        event: dict[str, Any] = next(iter(properties.get("events", [])), {})
         incidents.append({
             "id": str(properties.get("id", len(incidents))),
             "type": properties.get("iconCategory", incident.get("type", "incident")),

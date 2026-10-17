@@ -7,6 +7,7 @@ import 'presentation/screens/map/map_screen.dart';
 import 'presentation/screens/search/search_screen.dart';
 import 'presentation/screens/route/route_planner_screen.dart';
 import 'presentation/screens/map_data/map_data_screen.dart';
+import 'presentation/screens/route/route_scan_screen.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 
 /// Root-Widget mit Router (M0-Umfang: Splash → Map).
@@ -20,6 +21,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
       GoRoute(path: '/route', builder: (_, __) => const RoutePlannerScreen()),
       GoRoute(path: '/map-data', builder: (_, __) => const MapDataScreen()),
+      GoRoute(path: '/scan', builder: (_, __) => const RouteScanScreen()),
     ],
   );
 });
