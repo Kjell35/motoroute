@@ -27,7 +27,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late final AnimationController _controller;
   late final Animation<double> _fade;
   late final Animation<double> _scale;
-  Future<void>? _restoreFuture;
   bool _navigated = false;
 
   @override
@@ -38,15 +37,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       duration: const Duration(milliseconds: 650),
     );
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
-    _scale = Tween<double>(begin: 0.86, end: 1.0)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+    _scale = Tween<double>(begin: 0.86, end: 1.0).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
     _controller.forward();
 
     // Restore parallel zur Animation starten.
-    _restoreFuture = ref.read(authControllerProvider.notifier).restore();
+    final restoreFuture = ref.read(authControllerProvider.notifier).restore();
     // Fahrhistorie-Einstellungen laden (lokaler Spiegel sofort,
     // Server-Stand best-effort - Fehler sind hier egal).
-    ref.read(rideHistorySettingsProvider.notifier).load().catchError((_) {});
+    unawaited(
+      ref.read(rideHistorySettingsProvider.notifier).load().catchError((_) {}),
+    );
 
     // Kaltstart-Warmup: Die Free-Tier-Instanz des Backends schläft nach
     // ~15 min Leerlauf ein (30-60 s Aufwachzeit). Der Fire-and-Forget-
@@ -57,10 +58,27 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     // Mindestdauer 900 ms (Marke + Test-Timing) UND Restore fertig,
     // dann EINMALIG weiterleiten (Navigation nie im Build auslösen).
-    Future.wait([
-      _restoreFuture!,
-      Future<void>.delayed(const Duration(milliseconds: 900)),
-    ]).then((_) => _navigateOnce());
+    unawaited(_finishStartup(restoreFuture));
+  }
+
+  Future<void> _finishStartup(Future<void> restoreFuture) async {
+    try {
+      await Future.wait<void>([
+        _restoreWithinLimit(restoreFuture),
+        Future<void>.delayed(const Duration(milliseconds: 900)),
+      ]);
+    } catch (_) {
+      // Kein optionaler Startschritt darf den Splash dauerhaft festhalten.
+    }
+    await _navigateOnce();
+  }
+
+  Future<void> _restoreWithinLimit(Future<void> restoreFuture) async {
+    try {
+      await restoreFuture.timeout(const Duration(seconds: 4));
+    } catch (_) {
+      // Fehler oder hängende Wiederherstellung: ohne Sitzung fortfahren.
+    }
   }
 
   /// Fire-and-Forget-Warmup (siehe initState). try/catch statt
@@ -79,8 +97,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (_navigated || !mounted) return;
     _navigated = true;
 
-    final prefs = await SharedPreferences.getInstance();
-    final onboardingDone = prefs.getBool('onboarding.done') ?? false;
+    var onboardingDone = false;
+    try {
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 2));
+      onboardingDone = prefs.getBool('onboarding.done') ?? false;
+    } catch (_) {
+      // Ohne lesbare lokale Einstellungen zur sicheren Login-Seite leiten.
+    }
     final authenticated = ref.read(authControllerProvider).isAuthenticated;
     if (!mounted) return;
 
@@ -118,7 +142,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     shape: BoxShape.circle,
                     color: AppColors.accentPrimaryDark.withValues(alpha: 0.12),
                     border: Border.all(
-                      color: AppColors.accentPrimaryDark.withValues(alpha: 0.35),
+                      color:
+                          AppColors.accentPrimaryDark.withValues(alpha: 0.35),
                       width: 2,
                     ),
                   ),
@@ -139,7 +164,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text('Fahrspaß statt nur ankommen', style: AppTypography.caption),
+                Text('Fahrspaß statt nur ankommen',
+                    style: AppTypography.caption),
                 const SizedBox(height: AppSpacing.xxl),
                 SizedBox(
                   width: 132,
@@ -148,7 +174,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     child: const LinearProgressIndicator(
                       minHeight: 2,
                       backgroundColor: AppColors.bgSurfaceRaisedDark,
-                      valueColor: AlwaysStoppedAnimation(AppColors.accentPrimaryDark),
+                      valueColor:
+                          AlwaysStoppedAnimation(AppColors.accentPrimaryDark),
                     ),
                   ),
                 ),

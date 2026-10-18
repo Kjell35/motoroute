@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,7 +23,8 @@ import 'package:motoroute_app/features/routing/route_overview_screen.dart';
 import 'package:motoroute_app/features/routing/route_style_selection.dart';
 import 'package:motoroute_app/features/search/search_screen.dart';
 import 'package:motoroute_app/features/shell/home_shell.dart';
-import 'package:motoroute_app/features/chat/data/chat_repository.dart' show ConversationType;
+import 'package:motoroute_app/features/chat/data/chat_repository.dart'
+    show ConversationType;
 import 'package:motoroute_app/core/network/server_keep_alive.dart';
 import 'package:motoroute_app/features/chat/presentation/conversation_screen.dart';
 import 'package:motoroute_app/features/chat/presentation/group_create_screen.dart';
@@ -45,12 +48,18 @@ Future<void> main() async {
   // Persistierte Einstellungen + Server-Override laden, BEVOR das
   // erste Widget gebaut wird (Provider-Startwerte lesen die Werte;
   // ApiClient.baseUrl muss vor dem ersten Request korrekt sein).
-  await initSessionSettings();
-  // Anonymes Fehler-Reporting: Opt-out laden + Crash-Hooks installieren.
-  // Meldet fehlgeschlagene Aktionen/Abstuerze OHNE personenbezogene
-  // Daten, damit der Support ohne Screenshots sieht, was Nutzer trifft.
-  await ErrorReporter.instance.init();
+  // Einstellungen sind optional für den ersten Frame. Ein defekter oder
+  // hängender Plattform-Storage darf Android nicht dauerhaft auf dem
+  // nativen Launch-Screen festhalten.
+  try {
+    await initSessionSettings().timeout(const Duration(seconds: 2));
+  } catch (_) {
+    // Sichere In-Memory-Defaults verwenden und App trotzdem starten.
+  }
+  // Reporting ist ebenfalls best-effort und darf den App-Start nicht blockieren.
+  unawaited(ErrorReporter.instance.init().catchError((_) {}));
   installErrorReportingHooks();
+
   // Backend wachhalten, solange die App offen ist (GitHub-Cron wird
   // massiv verzögert - ohne In-App-Ping schläft der Free-Tier-Server
   // ein und jede erste Aktion läuft in "Verbindung prüfen").
@@ -134,20 +143,23 @@ class _MotoRouteAppBody extends ConsumerWidget {
         '/imprint': (context) => const ImprintScreen(),
         '/about': (context) => const AboutScreen(),
         '/search': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return SearchScreen(
             addWaypointMode: args?['addWaypoint'] == true,
             returnResult: args?['returnResult'] == true,
           );
         },
         '/route-start': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return StartPointSelectionScreen(
             destination: args?['destination'] as Waypoint,
           );
         },
         '/route-style': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return RouteStyleSelectionScreen(
             start: args?['start'] as Waypoint,
             destination: args?['destination'] as Waypoint,
@@ -168,7 +180,8 @@ class _MotoRouteAppBody extends ConsumerWidget {
         '/tour-diary': (context) => const TourDiaryScreen(),
         // ----------------------------------------- Chat-Bereich (💬)
         '/chat/conversation': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           final typeRaw = (args?['type'] ?? 'private') as String;
           final type = switch (typeRaw) {
             'public' => ConversationType.public,
@@ -187,7 +200,8 @@ class _MotoRouteAppBody extends ConsumerWidget {
         '/chat/group-create': (context) => const GroupCreateScreen(),
         '/chat/group-join': (context) => const GroupJoinScreen(),
         '/chat/group-info': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return GroupInfoScreen(
             conversationId: (args?['conversationId'] ?? '') as String,
             group: args?['group'] as Map<String, dynamic>?,
@@ -195,23 +209,28 @@ class _MotoRouteAppBody extends ConsumerWidget {
         },
         // ----------------------- Gemeinsame Routenplanung (🏍️)
         '/chat/group-route-create': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return GroupRouteCreateScreen(groupId: args?['groupId'] as String);
         },
         '/chat/group-route-list': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return GroupRouteListScreen(groupId: args?['groupId'] as String);
         },
         '/chat/group-route-planner': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return GroupRoutePlannerScreen(routeId: args?['routeId'] as String);
         },
         '/chat/group-route-start': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return GroupRouteStartScreen(routeId: args?['routeId'] as String);
         },
         '/chat/group-ride': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return GroupRideScreen(routeId: args?['routeId'] as String);
         },
         // ---------------- M3-FEATURE: App-zu-App-Routenübernahme per QR-Scan ----
