@@ -7,10 +7,12 @@ import 'package:motoroute_app/core/network/api_client.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('create() liefert Dio mit Retry-Interceptor', () {
+  test('create() liefert Dio mit Retry-Interceptor und Produktions-API als Default', () {
     final dio = ApiClient.create();
     expect(dio.interceptors, isNotEmpty);
     expect(dio.options.connectTimeout, const Duration(seconds: 25));
+    expect(ApiClient.baseUrl, 'https://motoroute-api-8fi9.onrender.com');
+    expect(dio.options.baseUrl, ApiClient.baseUrl);
   });
 
   test('Retry-Interceptor: connectionTimeout wird 4x versucht, 4xx nicht',

@@ -70,13 +70,32 @@ jobs:
       - name: Build APK (release, debug-signed)
         working-directory: apps/mobile
         env:
+          # Haupt-API (Login, Profile, Chat usw.) der wiederhergestellten App.
+          # MOTOROUTE_API_BASE_URL bleibt separat für das neue Pairing-Backend.
+          API_BASE_URL: https://motoroute-api-8fi9.onrender.com
           MOTOROUTE_API_BASE_URL: ${{ vars.MOTOROUTE_API_BASE_URL || 'https://motoroute.example' }}
         run: |
           set -o pipefail
           set -x
           flutter build apk --release \
+            --dart-define="API_BASE_URL=$API_BASE_URL" \
             --dart-define="MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL" 2>&1 \
             | tee build-release.log
+
+      - name: Produktions-API erreichbar
+        if: success()
+        env:
+          API_BASE_URL: https://motoroute-api-8fi9.onrender.com
+        run: curl --fail --silent --show-error --retry 3 --retry-delay 5 "$API_BASE_URL/v1/health"
+
+      - name: APK enthält Produktions-API
+        if: success()
+        working-directory: apps/mobile
+        run: |
+          strings build/app/outputs/flutter-apk/app-release.apk | grep -Fq 'https://motoroute-api-8fi9.onrender.com' || {
+            echo 'Release-APK enthält nicht die erwartete Produktions-API-URL.' >&2
+            exit 1
+          }
 
       # Diagnostik: Log-Tail in die Job-Summary — der ist öffentlich auf der
       # Run-Seite lesbar, ohne Admin-Token (Job-Logs-Download braucht Admin).

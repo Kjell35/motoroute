@@ -17,7 +17,7 @@ typedef TokenRefresher = Future<String?> Function();
 ///      Screen live aktualisiert (NEUE Clients wirken sofort, ohne
 ///      Neubau der App).
 ///   2. `--dart-define=API_BASE_URL=...` beim Build (dev/staging/prod)
-///   3. Default: Android-Emulator-Loopback (10.0.2.2 -> localhost)
+///   3. Default: die produktive MotoRoute-API (installierbar auf echten Geräten)
 ///
 /// Die WebSocket-URL des Chats/Ride-Radars leitet sich aus derselben
 /// Basis ab (baseUrl + asWebSocketUrl) - ein Regler für alles.
@@ -26,7 +26,7 @@ class ApiClient {
 
   static const _envBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3000', // Android-Emulator -> localhost
+    defaultValue: 'https://motoroute-api-8fi9.onrender.com',
   );
 
   static const _overrideKey = 'settings.apiBaseUrl';
