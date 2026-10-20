@@ -39,9 +39,9 @@ class _MarketplaceInboxScreenState extends ConsumerState<MarketplaceInboxScreen>
     final who = n.actor ?? 'Jemand';
     final what = n.listingTitle ?? 'dein Angebot';
     return switch (n.type) {
-      'favorite' => '$who hat \"$what\" gemerkt.',
-      'report' => '$who hat \"$what\" gemeldet - Admins prüfen das.',
-      'review' => '$who hat \"$what\" bewertet.',
+      'favorite' => '$who hat "$what" gemerkt.',
+      'report' => '$who hat "$what" gemeldet - Admins prüfen das.',
+      'review' => '$who hat "$what" bewertet.',
       _ => n.body,
     };
   }

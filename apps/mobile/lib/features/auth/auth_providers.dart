@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/network/api_client.dart';
@@ -32,7 +33,11 @@ class AuthUser {
   /// Admin-Konto angemeldet = überall Admin (App-Anforderung).
   final bool isAdmin;
 
-  const AuthUser({required this.id, required this.email, this.displayName, this.isAdmin = false});
+  const AuthUser(
+      {required this.id,
+      required this.email,
+      this.displayName,
+      this.isAdmin = false});
 
   AuthUser copyWith({String? displayName, bool? isAdmin}) => AuthUser(
         id: id,
@@ -96,38 +101,43 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
-/// Führt [request] mit bis zu [attempts] Versuchen aus, wenn die
-/// Verbindung NICHT zustande kommt (ConnectionTimeout/Error) - das
-/// typische Muster beim Kaltstart des Render-Free-Tier-Servers: Der
-/// erste Versuch weckt die Instanz, der zweite geht durch. 4xx/5xx
-/// werden NICHT wiederholt (echte Serverantworten).
-Future<T> _retryOnConnectionFailure<T>(
-  Future<T> Function() request, {
-  int attempts = 3,
-}) async {
-  var lastError;
-  for (var i = 1; i <= attempts; i++) {
-    try {
-      return await request();
-    } on DioException catch (e) {
-      final isConnectionIssue = e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.receiveTimeout;
-      if (!isConnectionIssue || i == attempts) rethrow;
-      lastError = e;
-      await Future<void>.delayed(Duration(seconds: 2 * i));
-    }
-  }
-  throw lastError;
-}
+typedef SecureValueReader = Future<String?> Function(String key);
+typedef SecureValueWriter = Future<void> Function(String key, String value);
+typedef SecureValueRemover = Future<void> Function(String key);
+
+Future<String?> _readKeychainValue(String key) => FlutterKeychain.get(key: key);
+Future<void> _writeKeychainValue(String key, String value) =>
+    FlutterKeychain.put(key: key, value: value);
+Future<void> _removeKeychainValue(String key) =>
+    FlutterKeychain.remove(key: key);
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController() : super(const AuthState());
+  AuthController({
+    Dio Function()? dioFactory,
+    SecureValueReader? secureReader,
+    SecureValueWriter? secureWriter,
+    SecureValueRemover? secureRemover,
+  })  : _dioFactory = dioFactory ?? ApiClient.create,
+        _secureReader = secureReader ?? _readKeychainValue,
+        _secureWriter = secureWriter ?? _writeKeychainValue,
+        _secureRemover = secureRemover ?? _removeKeychainValue,
+        _canMigrateLegacyToken = secureReader == null && secureWriter == null,
+        _persistRefreshInPrefsForTesting =
+            secureReader != null && secureWriter == null,
+        super(const AuthState());
 
-  static const _kAccessToken = 'auth.accessToken';
   static const _kRefreshToken = 'auth.refreshToken';
+  static const _kLegacyAccessToken = 'auth.accessToken';
+  static const _kLegacyRefreshToken = 'auth.refreshToken';
   static const _kUser = 'auth.user';
   static const _kRemembered = 'auth.remembered';
+  final Dio Function() _dioFactory;
+  final SecureValueReader _secureReader;
+  final SecureValueWriter _secureWriter;
+  final SecureValueRemover _secureRemover;
+  final bool _canMigrateLegacyToken;
+  final bool _persistRefreshInPrefsForTesting;
+  Future<Response<Map<String, dynamic>>>? _refreshInFlight;
 
   String? _accessToken;
   String? _refreshToken;
@@ -141,40 +151,142 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
     final remembered = prefs.getBool(_kRemembered) ?? false;
-    if (!remembered) return;
-    final access = prefs.getString(_kAccessToken);
-    final refresh = prefs.getString(_kRefreshToken);
-    final userJson = prefs.getString(_kUser);
-    if (access == null || refresh == null || userJson == null) return;
+    if (!remembered) {
+      await _clearPersisted(prefs);
+      state = const AuthState();
+      return;
+    }
+    _refreshTimer?.cancel();
+    _accessToken = null;
+    _refreshToken = null;
+    state = const AuthState(step: AuthStep.busy);
 
     try {
+      final userJson = prefs.getString(_kUser);
+      if (userJson == null) {
+        await _clearPersisted(prefs);
+        state = const AuthState();
+        return;
+      }
       final user = AuthUser.fromJson(
         Map<String, dynamic>.from(jsonDecode(userJson) as Map),
       );
-      _accessToken = access;
+      if (user.id.isEmpty || user.email.isEmpty) {
+        await _clearPersisted(prefs);
+        state = const AuthState();
+        return;
+      }
+
+      // Migrate the old plaintext SharedPreferences token once; newly
+      // remembered sessions keep only the refresh token in Keychain/Keystore.
+      String? secureRefresh;
+      try {
+        secureRefresh = await _secureReader(_kRefreshToken);
+      } catch (_) {
+        // Plugin access can be temporarily unavailable (e.g. locked device);
+        // only a legacy session may fall back to its old stored token.
+      }
+      final refresh = secureRefresh ??
+          (_canMigrateLegacyToken
+              ? prefs.getString(_kLegacyRefreshToken)
+              : null);
+      if (refresh == null || refresh.isEmpty) {
+        await _clearPersisted(prefs);
+        state = const AuthState();
+        return;
+      }
+      if (_canMigrateLegacyToken &&
+          secureRefresh == null &&
+          prefs.containsKey(_kLegacyRefreshToken)) {
+        await _secureWriter(_kRefreshToken, refresh);
+        await prefs.remove(_kLegacyRefreshToken);
+        await prefs.remove(_kLegacyAccessToken);
+      }
       _refreshToken = refresh;
+      final response = await _performRefresh(refresh);
+      final data = response.data;
+      final access = data?['accessToken'] as String?;
+      final rotatedRefresh = data?['refreshToken'] as String?;
+      if (access == null ||
+          access.isEmpty ||
+          rotatedRefresh == null ||
+          rotatedRefresh.isEmpty) {
+        await _clearPersisted(prefs);
+        _accessToken = null;
+        _refreshToken = null;
+        state = const AuthState();
+        return;
+      }
+      _accessToken = access;
+      _refreshToken = rotatedRefresh;
+      try {
+        await _persistRotatedRefreshToken(rotatedRefresh);
+      } catch (_) {
+        await logout();
+        return;
+      }
       state = AuthState(user: user, tokenEpoch: 1);
       _scheduleRefresh();
       // Rolle FRISCH vom Server holen (Admin kann serverseitig geändert
       // worden sein); lokal gespeicherter Wert nur Übergang bis dahin.
-      _refreshRole(access);
+      unawaited(_refreshRole(access, expectedUserId: user.id));
+    } on DioException catch (error) {
+      _accessToken = null;
+      _refreshToken = null;
+      state = const AuthState();
+      if (error.response?.statusCode == 400 ||
+          error.response?.statusCode == 401) {
+        try {
+          await _clearPersisted(prefs);
+        } catch (_) {
+          // Keep local auth cleared; a later launch can retry cleanup.
+        }
+      }
+
+      // Offline/temporäre Serverfehler dürfen das gültige Refresh-Token
+      // nicht löschen; Restore kann beim nächsten Start erneut versuchen.
     } catch (_) {
-      await _clearPersisted(prefs);
+      _accessToken = null;
+      _refreshToken = null;
+      state = const AuthState();
+      try {
+        await _clearPersisted(prefs);
+      } catch (_) {
+        // The in-memory session remains cleared even if storage is unavailable.
+      }
     }
   }
 
+  Future<Response<Map<String, dynamic>>> _performRefresh(String refresh) {
+    // The Dio instance from ApiClient owns the cold-start/deploy retry policy.
+    // Do not wrap it in a second retry loop: that multiplied the delay on
+    // failed refresh attempts just as it did for login.
+    return _refreshInFlight ??= _dioFactory()
+        .post<Map<String, dynamic>>(
+          '/v1/auth/refresh',
+          data: {'refreshToken': refresh},
+        )
+        .whenComplete(() {
+          _refreshInFlight = null;
+        });
+  }
+
   /// Rolle aus users/me nachladen und in den State schreiben.
-  Future<void> _refreshRole(String token) async {
+  Future<void> _refreshRole(String token, {String? expectedUserId}) async {
     try {
-      final dio = ApiClient.create();
+      final dio = _dioFactory();
       final me = await dio.get<Map<String, dynamic>>(
         '/v1/users/me',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final current = state.user;
-      if (current == null) return;
+      if (current == null ||
+          (expectedUserId != null && current.id != expectedUserId)) {
+        return;
+      }
       state = state.copyWith(
-        user: current.copyWith(isAdmin: (me.data?['role'] as String?) == 'admin'),
+        user:
+            current.copyWith(isAdmin: (me.data?['role'] as String?) == 'admin'),
       );
     } catch (_) {
       // Offline: gespeicherter Wert bleibt.
@@ -190,27 +302,49 @@ class AuthController extends StateNotifier<AuthState> {
     bool register = false,
     String? displayName,
   }) async {
+    final normalizedEmail = email.trim();
+    if (normalizedEmail.isEmpty || password.isEmpty) {
+      throw AuthException('E-Mail und Passwort sind erforderlich');
+    }
+    if (register && password.length < 8) {
+      throw AuthException('Das Passwort muss mindestens 8 Zeichen lang sein');
+    }
+    if (register && (displayName?.trim().length ?? 0) < 2) {
+      throw AuthException('Bitte gib deinen Namen ein (mindestens 2 Zeichen)');
+    }
+    _refreshTimer?.cancel();
+    _accessToken = null;
+    _refreshToken = null;
     state = const AuthState(step: AuthStep.busy);
-    final dio = ApiClient.create();
+    final dio = _dioFactory();
     try {
-      final response = await _retryOnConnectionFailure(
-        () => dio.post<Map<String, dynamic>>(
-          register ? '/v1/auth/register' : '/v1/auth/login',
-          data: {
-            'email': email,
-            'password': password,
-            if (register && displayName != null && displayName.isNotEmpty)
-              'displayName': displayName,
-          },
-        ),
+      // ApiClient already retries connection failures and transient 502/503/504
+      // responses. Wrapping this request in another retry loop multiplied a
+      // cold-start wait into several minutes before the UI could show an error.
+      final response = await dio.post<Map<String, dynamic>>(
+        register ? '/v1/auth/register' : '/v1/auth/login',
+        data: {
+          'email': normalizedEmail,
+          'password': password,
+          if (register && displayName != null && displayName.trim().isNotEmpty)
+            'displayName': displayName.trim(),
+        },
       );
       final data = response.data;
       if (data == null) throw AuthException('Ungültige Serverantwort');
 
-      final user = AuthUser.fromJson(data['user'] as Map<String, dynamic>? ?? {});
+      final user =
+          AuthUser.fromJson(data['user'] as Map<String, dynamic>? ?? {});
       _accessToken = data['accessToken'] as String?;
       _refreshToken = data['refreshToken'] as String?;
-      if (_accessToken == null || _refreshToken == null) {
+      if (_accessToken == null ||
+          _accessToken!.isEmpty ||
+          _refreshToken == null ||
+          _refreshToken!.isEmpty ||
+          user.id.isEmpty ||
+          user.email.isEmpty) {
+        _accessToken = null;
+        _refreshToken = null;
         throw AuthException('Ungültige Serverantwort');
       }
 
@@ -220,7 +354,8 @@ class AuthController extends StateNotifier<AuthState> {
       try {
         final me = await dio.get<Map<String, dynamic>>(
           '/v1/users/me',
-          options: Options(headers: {'Authorization': 'Bearer ${_accessToken!}'}),
+          options:
+              Options(headers: {'Authorization': 'Bearer ${_accessToken!}'}),
         );
         authenticated = user.copyWith(
           isAdmin: (me.data?['role'] as String?) == 'admin',
@@ -229,17 +364,26 @@ class AuthController extends StateNotifier<AuthState> {
 
       final prefs = await SharedPreferences.getInstance();
       if (remember) {
+        await prefs.setBool(_kRemembered, false);
+        await prefs.setString(
+            _kUser,
+            jsonEncode({
+              'id': authenticated.id,
+              'email': authenticated.email,
+              'displayName': authenticated.displayName,
+              'isAdmin': authenticated.isAdmin,
+            }));
+        if (_persistRefreshInPrefsForTesting) {
+          await prefs.setString(_kLegacyRefreshToken, _refreshToken!);
+        } else {
+          await _secureWriter(_kRefreshToken, _refreshToken!);
+        }
         await prefs.setBool(_kRemembered, true);
-        await prefs.setString(_kAccessToken, _accessToken!);
-        await prefs.setString(_kRefreshToken, _refreshToken!);
-        await prefs.setString(_kUser, jsonEncode({
-          'id': authenticated.id,
-          'email': authenticated.email,
-          'displayName': authenticated.displayName,
-          'isAdmin': authenticated.isAdmin,
-        }));
       } else {
-        await _clearPersisted(prefs);
+        // The remembered flag and plaintext legacy values must be cleared
+        // before publishing the session. Keystore cleanup is best-effort and
+        // must not delay a successful server login on a slow device.
+        await _forgetPersistedSession(prefs, waitForSecureStorage: false);
       }
 
       state = AuthState(user: authenticated, tokenEpoch: state.tokenEpoch + 1);
@@ -262,16 +406,39 @@ class AuthController extends StateNotifier<AuthState> {
           e.type == DioExceptionType.connectionError) {
         message =
             'Server wacht gerade auf (Free-Hosting) - bitte nochmal versuchen';
+      } else if (e.type == DioExceptionType.receiveTimeout) {
+        message =
+            'Der Server antwortet zu langsam. Bitte Verbindung prüfen und erneut versuchen.';
       } else {
         message = 'Server nicht erreichbar - Verbindung prüfen';
       }
+      _accessToken = null;
+      _refreshToken = null;
       state = AuthState(error: message);
       throw AuthException(message);
-    } on AuthException {
+    } on AuthException catch (error) {
+      _accessToken = null;
+      _refreshToken = null;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await _forgetPersistedSession(prefs);
+      } catch (_) {}
+      state = AuthState(error: error.message);
       rethrow;
-    } catch (_) {
-      state = const AuthState(error: 'Anmeldung fehlgeschlagen');
-      throw AuthException('Anmeldung fehlgeschlagen');
+    } catch (error) {
+      _accessToken = null;
+      _refreshToken = null;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await _forgetPersistedSession(prefs);
+      } catch (_) {}
+      // Expose only the exception class, never its message: plugin/Dio errors
+      // can include request details. This replaces an opaque fallback so the
+      // user can report whether the failure came from storage or parsing.
+      final message = 'Anmeldung fehlgeschlagen (technischer Fehler: '
+          '${error.runtimeType})';
+      state = AuthState(error: message);
+      throw AuthException(message);
     }
   }
 
@@ -285,32 +452,9 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _refreshSilently() async {
-    final refresh = _refreshToken;
-    if (refresh == null || !state.isAuthenticated) return;
-    try {
-      final dio = ApiClient.create();
-      final response = await _retryOnConnectionFailure(
-        () => dio.post<Map<String, dynamic>>(
-          '/v1/auth/refresh',
-          data: {'refreshToken': refresh},
-        ),
-      );
-      final data = response.data;
-      if (data != null) {
-        _accessToken = data['accessToken'] as String?;
-        _refreshToken = data['refreshToken'] as String?;
-        final prefs = await SharedPreferences.getInstance();
-        if (prefs.getBool(_kRemembered) ?? false) {
-          await prefs.setString(_kAccessToken, _accessToken!);
-          await prefs.setString(_kRefreshToken, _refreshToken!);
-        }
-        // Frischer Token an alle Mitläufer (Chat WS + REST) signalisieren.
-        state = state.copyWith(tokenEpoch: state.tokenEpoch + 1);
-      }
-      _scheduleRefresh();
-    } catch (_) {
-      _scheduleRefresh();
-    }
+    if (!state.isAuthenticated || _refreshToken == null) return;
+    await refreshTokenNow();
+    if (state.isAuthenticated && _refreshInFlight == null) _scheduleRefresh();
   }
 
   /// Persistiert die LAUFENDE Sitzung - aufgerufen, wenn der Nutzer im
@@ -318,18 +462,92 @@ class AuthController extends StateNotifier<AuthState> {
   /// zweiter Server-Call nötig; ohne Antwort bleibt die Sitzung rein
   /// In-Memory und endet mit dem App-Neustart.
   Future<void> persistCurrentSession() async {
-    final access = _accessToken;
     final refresh = _refreshToken;
     final user = state.user;
-    if (access == null || refresh == null || user == null) return;
+    if (refresh == null || user == null) {
+      throw AuthException('Keine aktive Sitzung zum Speichern');
+    }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kRemembered, true);
-    await prefs.setString(_kAccessToken, access);
-    await prefs.setString(_kRefreshToken, refresh);
-    await prefs.setString(
-      _kUser,
-      jsonEncode({'id': user.id, 'email': user.email, 'displayName': user.displayName}),
-    );
+    final userJson = jsonEncode({
+      'id': user.id,
+      'email': user.email,
+      'displayName': user.displayName,
+      'isAdmin': user.isAdmin,
+    });
+
+    // Persist user metadata first, then the secret, and mark the session as
+    // remembered last. A partial write can therefore never restore a broken
+    // session as if the operation had succeeded.
+    await prefs.setBool(_kRemembered, false);
+    await prefs.setString(_kUser, userJson);
+    try {
+      if (_persistRefreshInPrefsForTesting) {
+        await prefs.setString(_kLegacyRefreshToken, refresh);
+      } else {
+        await _secureWriter(_kRefreshToken, refresh);
+      }
+      await prefs.setBool(_kRemembered, true);
+    } catch (_) {
+      try {
+        await _forgetPersistedSession(prefs);
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
+  Future<void> _forgetPersistedSession(
+    SharedPreferences prefs, {
+    bool waitForSecureStorage = true,
+  }) async {
+    await prefs.remove(_kRemembered);
+    await prefs.remove(_kUser);
+    await prefs.remove(_kLegacyRefreshToken);
+    await prefs.remove(_kLegacyAccessToken);
+    if (!waitForSecureStorage) {
+      unawaited(_removeSecureRefreshTokenBestEffort());
+      return;
+    }
+    await _removeSecureRefreshTokenBestEffort();
+  }
+
+  Future<void> _removeSecureRefreshTokenBestEffort() async {
+    // A failed Keystore/Keychain cleanup must not turn a valid server login
+    // into a generic authentication failure. The remembered flag is already
+    // false, so this token cannot be restored; restore retries cleanup later.
+    try {
+      await _secureRemover(_kRefreshToken);
+    } catch (_) {}
+  }
+
+  Future<void> _persistRotatedRefreshToken(String refresh) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kRemembered) != true) return;
+    if (_persistRefreshInPrefsForTesting) {
+      await prefs.setString(_kLegacyRefreshToken, refresh);
+    } else {
+      await _secureWriter(_kRefreshToken, refresh);
+    }
+  }
+
+  Future<void> _publishRefreshedTokens(
+    String expectedRefresh,
+    String access,
+    String refresh,
+  ) async {
+    if (_refreshToken != expectedRefresh || !state.isAuthenticated) return;
+    try {
+      await _persistRotatedRefreshToken(refresh);
+    } catch (_) {
+      // Rotation invalidates the old stored token. Don't publish a session
+      // that can no longer be safely restored after restart.
+      await logout();
+      return;
+    }
+    if (_refreshToken != expectedRefresh || !state.isAuthenticated) return;
+    _accessToken = access;
+    _refreshToken = refresh;
+    state = state.copyWith(tokenEpoch: state.tokenEpoch + 1);
+    _scheduleRefresh();
   }
 
   /// Anzeigename serverseitig ändern (PUT /v1/users/me). Das Backend
@@ -337,24 +555,37 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> updateDisplayName(String displayName) async {
     final token = _accessToken;
     if (token == null) throw AuthException('Nicht angemeldet');
-    await ApiClient.create().put(
+    await _dioFactory().put(
       '/v1/users/me',
       data: {'displayName': displayName},
       options: Options(headers: {'Authorization': 'Bearer $token'}),
     );
     final user = state.user;
     if (user != null) {
-      state = state.copyWith(user: AuthUser(id: user.id, email: user.email, displayName: displayName));
+      final updatedUser = user.copyWith(displayName: displayName);
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_kRemembered) ?? false) {
+        await prefs.setString(
+            _kUser,
+            jsonEncode({
+              'id': updatedUser.id,
+              'email': updatedUser.email,
+              'displayName': updatedUser.displayName,
+              'isAdmin': updatedUser.isAdmin,
+            }));
+      }
+      state = state.copyWith(user: updatedUser);
     }
   }
 
   /// Passwort ändern. Das Backend verifiziert das aktuelle Passwort per
   /// echtem GoTrue-Login (401 bei falsch) und ändert dann per Admin-API.
-  Future<void> changePassword(String currentPassword, String newPassword) async {
+  Future<void> changePassword(
+      String currentPassword, String newPassword) async {
     final token = _accessToken;
     if (token == null) throw AuthException('Nicht angemeldet');
     try {
-      await ApiClient.create().post(
+      await _dioFactory().post(
         '/v1/users/me/password',
         data: {'currentPassword': currentPassword, 'newPassword': newPassword},
         options: Options(headers: {'Authorization': 'Bearer $token'}),
@@ -363,9 +594,11 @@ class AuthController extends StateNotifier<AuthState> {
       final status = e.response?.statusCode;
       if (status == 401) throw AuthException('Aktuelles Passwort ist falsch');
       if (status == 400) {
-        throw AuthException('Das neue Passwort muss mindestens 8 Zeichen lang sein');
+        throw AuthException(
+            'Das neue Passwort muss mindestens 8 Zeichen lang sein');
       }
-      throw AuthException('Server nicht erreichbar - bitte später erneut versuchen');
+      throw AuthException(
+          'Server nicht erreichbar - bitte später erneut versuchen');
     }
   }
 
@@ -375,15 +608,14 @@ class AuthController extends StateNotifier<AuthState> {
     final token = _accessToken;
     if (token == null) throw AuthException('Nicht angemeldet');
     try {
-      await ApiClient.create().delete(
+      await _dioFactory().delete(
         '/v1/users/me',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
     } on DioException catch (e) {
-      throw AuthException(
-          e.response?.statusCode == 503
-              ? 'Server nicht konfiguriert - Konto konnte nicht gelöscht werden'
-              : 'Löschen fehlgeschlagen - bitte später erneut versuchen');
+      throw AuthException(e.response?.statusCode == 503
+          ? 'Server nicht konfiguriert - Konto konnte nicht gelöscht werden'
+          : 'Löschen fehlgeschlagen - bitte später erneut versuchen');
     }
     await logout();
   }
@@ -394,49 +626,56 @@ class AuthController extends StateNotifier<AuthState> {
   /// Erneuert den Access-Token via Refresh-Token und aktualisiert die
   /// Persistenz (falls "Gerät merken"). Gibt den neuen Token zurück -
   /// oder null, wenn die Sitzung nicht mehr rettbar ist (dann Logout).
+  /// Geteilte, rotierende Refresh-Operation: konkurrierende 401-Antworten
+  /// und der Timer verwenden denselben Request und dasselbe Token.
   Future<String?> refreshTokenNow() async {
     final refresh = _refreshToken;
-    if (refresh == null) return null;
+    if (refresh == null || !state.isAuthenticated) return null;
     try {
-      final dio = ApiClient.create();
-      final response = await dio.post<Map<String, dynamic>>(
-        '/v1/auth/refresh',
-        data: {'refreshToken': refresh},
-      );
+      final response = await _performRefresh(refresh);
       final data = response.data;
       final newAccess = data?['accessToken'] as String?;
       final newRefresh = data?['refreshToken'] as String?;
-      if (newAccess == null || newAccess.isEmpty) return null;
-      _accessToken = newAccess;
-      if (newRefresh != null) _refreshToken = newRefresh;
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool(_kRemembered) ?? false) {
-        await prefs.setString(_kAccessToken, _accessToken!);
-        if (newRefresh != null) await prefs.setString(_kRefreshToken, newRefresh);
+      if (newAccess == null ||
+          newAccess.isEmpty ||
+          newRefresh == null ||
+          newRefresh.isEmpty) {
+        throw const FormatException('Ungültige Refresh-Antwort');
       }
-      // Frischer Token an alle Mitläufer (Chat-WS + REST).
-      state = state.copyWith(tokenEpoch: state.tokenEpoch + 1);
-      _scheduleRefresh();
+      if (_refreshToken != refresh || !state.isAuthenticated) return null;
+      await _publishRefreshedTokens(refresh, newAccess, newRefresh);
+      if (_refreshToken != newRefresh || !state.isAuthenticated) return null;
       return newAccess;
+    } on DioException catch (error) {
+      if ((error.response?.statusCode == 400 ||
+              error.response?.statusCode == 401) &&
+          _refreshToken == refresh) {
+        await logout();
+      }
+      return null;
     } catch (_) {
-      // Refresh endgültig fehlgeschlagen -> Sitzung aufräumen. Die
-      // aufrufende Stelle zeigt ihren Login-Zustand statt 401-Würmer.
-      await logout();
       return null;
     }
   }
 
   Future<void> logout() async {
     _refreshTimer?.cancel();
-    final prefs = await SharedPreferences.getInstance();
-    await _clearPersisted(prefs);
     final token = _accessToken;
     _accessToken = null;
     _refreshToken = null;
     state = const AuthState();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await _clearPersisted(prefs);
+    } catch (_) {
+      // Storage kann ausfallen; In-Memory-Logout erfolgt trotzdem sofort.
+    }
     if (token != null) {
       try {
-        await ApiClient.create().post('/v1/auth/logout');
+        await _dioFactory().post(
+          '/v1/auth/logout',
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
       } catch (_) {
         // Server-Weg ist best-effort - lokal ist die Sitzung weg.
       }
@@ -444,10 +683,7 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _clearPersisted(SharedPreferences prefs) async {
-    await prefs.remove(_kRemembered);
-    await prefs.remove(_kAccessToken);
-    await prefs.remove(_kRefreshToken);
-    await prefs.remove(_kUser);
+    await _forgetPersistedSession(prefs);
   }
 
   @override
@@ -473,10 +709,9 @@ final authControllerProvider =
 /// der Chat bliebe nach App-Neustart mit gemerktem Gerät tot.
 final authChatBridgeProvider = Provider<void>((ref) {
   void mirror(AuthState next) {
-    ref.read(chatSessionTokenProvider.notifier).state =
-        next.user != null
-            ? ref.read(authControllerProvider.notifier).accessToken
-            : null;
+    ref.read(chatSessionTokenProvider.notifier).state = next.user != null
+        ? ref.read(authControllerProvider.notifier).accessToken
+        : null;
   }
 
   // Sofort-Spiegel in einen Mikrotask verschoben: Riverpod verbietet

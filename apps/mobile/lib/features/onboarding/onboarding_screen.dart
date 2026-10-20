@@ -61,7 +61,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               alignment: Alignment.topRight,
               child: TextButton(
                 onPressed: _skip,
-                child: Text('Überspringen', style: AppTypography.caption),
+                child: const Text('Überspringen', style: AppTypography.caption),
               ),
             ),
             Expanded(
@@ -159,9 +159,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         children: [
           const Icon(Icons.motorcycle, size: 64, color: AppColors.accentPrimaryDark),
           const SizedBox(height: AppSpacing.xl),
-          Text('Fahrzeug wählen', style: AppTypography.title, textAlign: TextAlign.center),
+          const Text('Fahrzeug wählen', style: AppTypography.title, textAlign: TextAlign.center),
           const SizedBox(height: AppSpacing.md),
-          Text(
+          const Text(
             'Motorrad, Auto oder Fahrrad - jedes Fahrzeug hat eigene Routing-Regeln. Welches soll dein Standard sein?',
             style: AppTypography.body,
             textAlign: TextAlign.center,

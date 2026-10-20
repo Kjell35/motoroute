@@ -4,6 +4,7 @@
 /// Navigation (GPS-Punkte) und kann als GPX exportiert/importiert
 /// werden (kompatibel mit Calimoto, Kurviger, OsmAnd ...). Bewusst
 /// frei von Flutter-Imports - alles rein testbar.
+library;
 
 /// Ein aufgezeichneter GPS-Punkt während der Fahrt.
 class TrackPoint {

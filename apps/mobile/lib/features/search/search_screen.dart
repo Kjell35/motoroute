@@ -199,7 +199,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return ListView(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         children: [
-          Text('Zuletzt gesucht', style: AppTypography.caption),
+          const Text('Zuletzt gesucht', style: AppTypography.caption),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Noch keine Suchanfragen in dieser Sitzung.',

@@ -97,7 +97,8 @@ class GpxParser {
         final lng = double.tryParse(wpt.getAttribute('lon') ?? '');
         if (lat == null || lng == null) continue;
         final name = _texts(wpt, ['name']).join(' ');
-        pois.add(TourPoiRef(label: name.isEmpty ? 'Wegpunkt' : name, lat: lat, lng: lng));
+        pois.add(TourPoiRef(
+            label: name.isEmpty ? 'Wegpunkt' : name, lat: lat, lng: lng));
       }
     }
 
@@ -154,7 +155,8 @@ class GpxParser {
     }
 
     return (
-      TrackPoint(lat: lat, lng: lng, elevationMeters: ele, secondsSinceStart: 0),
+      TrackPoint(
+          lat: lat, lng: lng, elevationMeters: ele, secondsSinceStart: 0),
       time,
     );
   }
@@ -209,7 +211,8 @@ class GpxParser {
     return RecordedTour(
       title: title,
       startedAt: start,
-      endedAt: endedAt ?? start.add(Duration(milliseconds: (span * 1000).round())),
+      endedAt:
+          endedAt ?? start.add(Duration(milliseconds: (span * 1000).round())),
       distanceMeters: distance,
       elevationGainMeters: elevationGain,
       durationSeconds: span,
@@ -234,7 +237,10 @@ class GpxParser {
     final dLat = _rad(lat2 - lat1);
     final dLng = _rad(lng2 - lng1);
     final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_rad(lat1)) * math.cos(_rad(lat2)) * math.sin(dLng / 2) * math.sin(dLng / 2);
+        math.cos(_rad(lat1)) *
+            math.cos(_rad(lat2)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
     return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
@@ -247,8 +253,8 @@ class GpxGenerator {
   String generate(RecordedTour tour) {
     final builder = XmlBuilder();
     builder.processing('xml', 'version="1.0" encoding="UTF-8"');
-    builder.element('gpx', namespaces: {
-      'http://www.topografix.com/GPX/1/1': null,
+    builder.element('gpx', namespaceUris: {
+      null: 'http://www.topografix.com/GPX/1/1',
     }, attributes: {
       'version': '1.1',
       'creator': 'MotoRoute',
@@ -281,7 +287,8 @@ class GpxGenerator {
               'lon': p.lng.toStringAsFixed(6),
             }, nest: () {
               if (p.elevationMeters != null) {
-                builder.element('ele', nest: p.elevationMeters!.toStringAsFixed(1));
+                builder.element('ele',
+                    nest: p.elevationMeters!.toStringAsFixed(1));
               }
               builder.element('time', nest: _iso(t));
             });

@@ -1,7 +1,50 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motoroute_app/features/chat/data/chat_repository.dart';
 
 void main() {
+  test(
+      'Chat REST-Aufrufe senden Bearer-Token pro Request, ohne Dio global zu ändern',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://chat.test'))
+      ..httpClientAdapter = _ChatAdapter((options) {
+        requests.add(options);
+        if (options.path.endsWith('/messages') && options.method == 'GET') {
+          return _jsonResponse({'messages': [], 'hasMore': false});
+        }
+        if (options.path.endsWith('/messages') && options.method == 'POST') {
+          return _jsonResponse({
+            'id': 'message-1',
+            'conversation_id': 'conversation-1',
+            'sender_id': 'user-1',
+            'content': 'Hallo',
+            'created_at': '2026-10-20T12:00:00Z',
+          });
+        }
+        return _jsonResponse({});
+      });
+    final repository = ChatRepository(dio);
+
+    await repository.messages('token-one', 'conversation-1');
+    await repository.send('token-two', 'conversation-1', 'Hallo');
+
+    expect(
+      requests.map((request) => request.headers['Authorization']),
+      ['Bearer token-one', 'Bearer token-two'],
+    );
+    expect(requests.map((request) => request.method), ['GET', 'POST']);
+    expect(requests.every((request) => request.path.contains('conversation-1')),
+        isTrue);
+    expect(requests.first.queryParameters['limit'], 30);
+    expect(requests.last.data, {'content': 'Hallo'});
+    expect(dio.options.headers.containsKey('Authorization'), isFalse);
+    expect(dio.options.headers.containsKey('Authorization'), isFalse);
+  });
+
   group('ChatUser.fromJson', () {
     test('parst alle Felder inkl. display_name-Kette', () {
       final user = ChatUser.fromJson({
@@ -79,9 +122,36 @@ void main() {
     });
 
     test('Standort-Attachment', () {
-      final a = ChatAttachment.location(lat: 47.42, lng: 11.07, label: 'Treffpunkt');
+      final a =
+          ChatAttachment.location(lat: 47.42, lng: 11.07, label: 'Treffpunkt');
       expect(a['type'], 'location');
       expect(a['lat'], 47.42);
     });
   });
+}
+
+ResponseBody _jsonResponse(Map<String, Object?> value) =>
+    ResponseBody.fromString(
+      jsonEncode(value),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+
+class _ChatAdapter implements HttpClientAdapter {
+  _ChatAdapter(this.handle);
+
+  final ResponseBody Function(RequestOptions options) handle;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async =>
+      handle(options);
+
+  @override
+  void close({bool force = false}) {}
 }

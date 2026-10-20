@@ -105,19 +105,6 @@ void main() {
       registerFallbackValue(<List<double>>[]);
     });
 
-    ProviderContainer containerWith(ControllerSeed seed) {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-      // Repository-Override über den Provider-Familie-Trick: direkt
-      // den Controller mit Mock bauen und State setzen.
-      final controller = seed(repo);
-      final provider = StateNotifierProvider<RouteWeatherController,
-          RouteWeatherState>((_) => controller);
-      // Trigger Start über den Container (liest/initialisiert).
-      container.read(provider);
-      return container;
-    }
-
     test('lädt Report und setzt State', () async {
       final json = {
         'isEnabled': true,
@@ -209,7 +196,3 @@ void main() {
     });
   });
 }
-
-typedef ControllerSeed = RouteWeatherController Function(
-  _MockRepository repo,
-);

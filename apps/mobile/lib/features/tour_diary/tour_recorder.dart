@@ -8,8 +8,6 @@ import '../map/data/location_repository.dart';
 import '../settings/energy_saver.dart' show energySaverControllerProvider;
 import 'domain/tour_entities.dart';
 import 'tour_diary_providers.dart' show tourDatabaseProvider;
-import '../map/data/location_repository.dart'
-    show locationRepositoryProvider;
 
 /// Live-Aufzeichnung einer Fahrt: sammelt GPS-Punkte, gefahrene
 /// Kilometer, Höhenmeter und verstrichene Zeit. Bewusst VOM Navigations-

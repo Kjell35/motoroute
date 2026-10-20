@@ -38,16 +38,12 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
-  MaplibreMapController? _mapController;
+  MapLibreMapController? _mapController;
   late final PoiMapLayer _poiLayer;
   bool _hasLocationPermission = false;
   String? _styleString;
   final List<Circle> _incidentCircles = [];
   final List<Circle> _hazardCircles = [];
-
-  /// Kartentap-Modus: aktivierte Route "Auf Karte antippen" (Phase 3,
-  /// Screen 9: expliziter Modus-Umschalter, kein versehentlicher Tap).
-  bool _tapMode = false;
 
   Timer? _bikerPoiSyncTimer;
   StreamSubscription<List<({String id, String action})>>? _bikerPoiPushSub;
@@ -68,7 +64,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     // POI-Kategorie-Toggles SOFORT anwenden: Vorher zeichnete der Layer
     // nur bei der nächsten Kartenbewegung neu - ein frisch abgewählter
     // POI blieb bis dahin sichtbar (Audit-Fund "Filter wirkt nicht").
-    ref.listenManual<Set<PoiCategory>>(activePoiCategoriesProvider, (prev, next) {
+    ref.listenManual<Set<PoiCategory>>(activePoiCategoriesProvider,
+        (prev, next) {
       if (!mounted || identical(prev, next)) return;
       if (_poiLayer.hasLastBounds) {
         _poiLayer.refreshIgnoringThrottle(ref);
@@ -100,7 +97,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     // Render nach jedem Sync-State-Wechsel mit neuen POIs (Identitäts-
     // vergleich: isSyncing/error-Wechsel zeichnen nicht neu).
-    _bikerPoiStateSub = ref.listenManual<BikerPoiSyncState>(bikerPoiSyncProvider, (prev, next) {
+    _bikerPoiStateSub =
+        ref.listenManual<BikerPoiSyncState>(bikerPoiSyncProvider, (prev, next) {
       if (!mounted || identical(prev?.pois, next.pois)) return;
       _poiLayer.applyBikerPois(ref);
     });
@@ -178,7 +176,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
     _incidentCircles.clear();
 
-    for (final incident in ref.read(trafficControllerProvider).incidents.take(50)) {
+    for (final incident
+        in ref.read(trafficControllerProvider).incidents.take(50)) {
       if (incident.geometry.isEmpty) continue;
       final point = incident.geometry.first;
       try {
@@ -206,8 +205,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     // 24-h-Ablauf); Throttle im Controller verhindert Request-Stürme.
     try {
       final bounds = await controller.getVisibleRegion();
-      final centerLat = (bounds.northeast.latitude + bounds.southwest.latitude) / 2;
-      final centerLng = (bounds.northeast.longitude + bounds.southwest.longitude) / 2;
+      final centerLat =
+          (bounds.northeast.latitude + bounds.southwest.latitude) / 2;
+      final centerLng =
+          (bounds.northeast.longitude + bounds.southwest.longitude) / 2;
       await ref
           .read(hazardRadarProvider.notifier)
           .loadViewport(centerLat: centerLat, centerLng: centerLng);
@@ -228,9 +229,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           CircleOptions(
             geometry: LatLng(hazard.lat, hazard.lng),
             circleRadius: 8 + (hazard.upvotes.clamp(1, 10)).toDouble(),
-            circleColor: hazard.type == HazardType.sperrung
-                ? '#E5484D'
-                : '#F5A623',
+            circleColor:
+                hazard.type == HazardType.sperrung ? '#E5484D' : '#F5A623',
             circleStrokeWidth: 2,
             circleStrokeColor: '#0B0E11',
             circleOpacity: 0.9,
@@ -254,60 +254,76 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
-    if (!_tapMode) return;
+    if (!ref.read(mapWaypointTapModeProvider)) return;
 
-    final position = await LocationRepository().getCurrentPosition();
     final waypoints = [...ref.read(waypointListProvider)];
     if (waypoints.isEmpty) {
-      waypoints.add(Waypoint(
-        lat: position.latitude,
-        lng: position.longitude,
-        label: 'Start',
-      ));
+      try {
+        final position =
+            await ref.read(locationRepositoryProvider).getCurrentPosition();
+        waypoints.add(Waypoint(
+          lat: position.latitude,
+          lng: position.longitude,
+          label: 'Start',
+        ));
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Standort nicht verfügbar - bitte Startpunkt wählen')),
+        );
+        return;
+      }
     }
 
     // Ortsname asynchron aufloesen (TomTom Reverse-Geocoding im BFF):
     // Der Wegpunkt erscheint sofort mit Fallback-Label, der Name wird
     // nachgereicht - fuehlt sich sofort an, heisst aber Klartext.
     final isTargetReplacement = waypoints.length >= 2;
+    final waypointIndex =
+        isTargetReplacement ? waypoints.length - 1 : waypoints.length;
     final fallbackLabel =
         '${tapped.latitude.toStringAsFixed(4)}, ${tapped.longitude.toStringAsFixed(4)}';
-    ref.read(searchRepositoryProvider).reverse(lat: tapped.latitude, lng: tapped.longitude).then((result) {
-      if (!mounted) return;
-      final list = [...ref.read(waypointListProvider)];
-      if (list.isEmpty) return;
-      final updated = Waypoint(
-        lat: tapped.latitude,
-        lng: tapped.longitude,
-        label: result?.label ?? fallbackLabel,
-      );
-      if (isTargetReplacement && list.length >= 2) {
-        list[list.length - 1] = updated;
-      } else {
-        list.add(updated);
-      }
-      ref.read(waypointListProvider.notifier).state = list;
-    });
+    final tappedWaypoint = Waypoint(
+      lat: tapped.latitude,
+      lng: tapped.longitude,
+      label: fallbackLabel,
+    );
 
-    // Ziel wird ersetzt, wenn es schon existiert; sonst neuer Wegpunkt.
+    // Erst die Fallback-Position eintragen. Reverse-Geocoding aktualisiert
+    // anschließend genau diesen Eintrag, anstatt einen zweiten anzuhängen.
     if (isTargetReplacement) {
-      waypoints[waypoints.length - 1] = Waypoint(
-        lat: tapped.latitude,
-        lng: tapped.longitude,
-        label: fallbackLabel,
-      );
+      waypoints[waypointIndex] = tappedWaypoint;
     } else {
-      waypoints.add(Waypoint(
-        lat: tapped.latitude,
-        lng: tapped.longitude,
-        label: fallbackLabel,
-      ));
+      waypoints.add(tappedWaypoint);
     }
     ref.read(waypointListProvider.notifier).state = waypoints;
+
+    ref
+        .read(searchRepositoryProvider)
+        .reverse(lat: tapped.latitude, lng: tapped.longitude)
+        .then((result) {
+      if (!mounted || result == null) return;
+      final list = [...ref.read(waypointListProvider)];
+      if (waypointIndex >= list.length) return;
+      final current = list[waypointIndex];
+      // Ein späterer Kartentap kann denselben Ziel-Slot überschreiben.
+      // In dem Fall darf ein verspätetes Ergebnis den neuen Ort nicht ändern.
+      if (current.lat != tapped.latitude || current.lng != tapped.longitude) {
+        return;
+      }
+      list[waypointIndex] = Waypoint(
+        lat: current.lat,
+        lng: current.lng,
+        label: result.label,
+      );
+      ref.read(waypointListProvider.notifier).state = list;
+    }, onError: (Object _) {});
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Wegpunkt gesetzt - Ort wird aufgeloest …'),
+          content: const Text('Wegpunkt gesetzt - Ort wird aufgeloest …'),
           action: SnackBarAction(
             label: 'Verwalten',
             onPressed: () => Navigator.of(context).pushNamed('/waypoints'),
@@ -357,7 +373,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   // Bestätigungen: große Zahl = viele Biker haben sie
                   // bestätigt = glaubwürdig.
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppColors.bgSurfaceRaisedDark,
                       borderRadius: BorderRadius.circular(12),
@@ -388,8 +405,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () async {
                     Navigator.of(sheetContext).pop();
-                    final res =
-                        await ref.read(hazardRadarProvider.notifier).upvote(hazard.id);
+                    final res = await ref
+                        .read(hazardRadarProvider.notifier)
+                        .upvote(hazard.id);
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -474,7 +492,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 // Bild oben (kuratierte POIs) oder Kategorie-Platzhalter.
                 if ((detail?.imageUrl != null))
                   ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(16)),
                     child: Image.network(
                       detail!.imageUrl!,
                       height: 180,
@@ -498,15 +517,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           const SizedBox(width: AppSpacing.sm),
                           Expanded(
                             child: Text(
-                              poi.name.isNotEmpty ? poi.name : (detail?.name ?? 'POI'),
+                              poi.name.isNotEmpty
+                                  ? poi.name
+                                  : (detail?.name ?? 'POI'),
                               style: AppTypography.title,
                             ),
                           ),
                           if (bikerPoi != null || detail?.bikerScore != null)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
+                                color: AppColors.accentPrimaryDark
+                                    .withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
@@ -521,7 +544,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       // Beschreibung + Website (aus dem Backend-Detail).
-                      if (detail?.description != null && detail!.description!.isNotEmpty)
+                      if (detail?.description != null &&
+                          detail!.description!.isNotEmpty)
                         Text(detail.description!, style: AppTypography.caption)
                       else
                         Text(
@@ -534,7 +558,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           child: InkWell(
                             onTap: () async {
                               final uri = Uri.tryParse(detail!.website!);
-                              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              if (uri != null) {
+                                await launchUrl(uri,
+                                    mode: LaunchMode.externalApplication);
+                              }
                             },
                             child: Text(
                               detail!.website!,
@@ -545,8 +572,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               ),
                             ),
                           ),
-                      ),
-                      if (bikerPoi != null && (bikerPoi.motorcycleParking || bikerPoi.meetingPoint))
+                        ),
+                      if (bikerPoi != null &&
+                          (bikerPoi.motorcycleParking || bikerPoi.meetingPoint))
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Wrap(
@@ -554,7 +582,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             children: [
                               if (bikerPoi.motorcycleParking)
                                 _amenityChip('🏍️ Motorradparkplatz'),
-                              if (bikerPoi.meetingPoint) _amenityChip('👥 Treffpunkt'),
+                              if (bikerPoi.meetingPoint)
+                                _amenityChip('👥 Treffpunkt'),
                             ],
                           ),
                         ),
@@ -565,8 +594,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       // Wikipedia-Quelle der Beschreibung (CC BY-SA macht
                       // die Namensangabe zur Pflicht - ehrlich gekennzeichnet).
                       if (detail?.descriptionSource == 'wikipedia')
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
                           child: Text(
                             'Beschreibung: Wikipedia (CC BY-SA)',
                             style: AppTypography.caption,
@@ -580,7 +609,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           child: InkWell(
                             onTap: () async {
                               final uri = Uri.tryParse(detail!.googleMapsUri!);
-                              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              if (uri != null) {
+                                await launchUrl(uri,
+                                    mode: LaunchMode.externalApplication);
+                              }
                             },
                             child: const Text(
                               'In Google Maps öffnen',
@@ -643,11 +675,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             _addBikerPoiAsWaypoint(poi);
                           },
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.accentSecondary),
+                            side: const BorderSide(
+                                color: AppColors.accentSecondary),
                           ),
-                          icon: const Icon(Icons.add_road, color: AppColors.accentSecondary),
+                          icon: const Icon(Icons.add_road,
+                              color: AppColors.accentSecondary),
                           label: const Text('Als Stopp in die Route',
-                              style: TextStyle(color: AppColors.accentSecondary)),
+                              style:
+                                  TextStyle(color: AppColors.accentSecondary)),
                         ),
                       ),
                     ],
@@ -666,7 +701,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         width: double.infinity,
         color: AppColors.bgSurfaceRaisedDark,
         child: const Center(
-          child: Icon(Icons.place_outlined, size: 44, color: AppColors.textSecondaryDark),
+          child: Icon(Icons.place_outlined,
+              size: 44, color: AppColors.textSecondaryDark),
         ),
       );
 
@@ -708,7 +744,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final current = ref.read(waypointListProvider);
     if (current.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Setze zuerst Start und Ziel - dann füge Stopps hinzu')),
+        const SnackBar(
+            content:
+                Text('Setze zuerst Start und Ziel - dann füge Stopps hinzu')),
       );
       return;
     }
@@ -730,13 +768,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         color: AppColors.bgSurfaceRaisedDark,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(label, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 11)),
+      child: Text(label,
+          style: const TextStyle(
+              color: AppColors.textSecondaryDark, fontSize: 11)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final vehicleType = ref.watch(vehicleTypeProvider);
+    final tapMode = ref.watch(mapWaypointTapModeProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
@@ -744,7 +785,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                MaplibreMap(
+                MapLibreMap(
                   // Fallback: leerer Stil - maplibre_gl verlangt einen
                   // nicht-leeren String. Routing bleibt trotzdem nutzbar.
                   styleString: isPlaceholderStyle(_styleString!)
@@ -790,7 +831,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
                 _buildTopBar(context, vehicleType),
                 _buildSideButtons(context),
-                if (_tapMode) _buildTapModeBanner(context),
+                if (tapMode) _buildTapModeBanner(context),
               ],
             ),
     );
@@ -807,7 +848,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 onTap: () => Navigator.of(context).pushNamed('/search'),
                 child: Container(
                   height: AppSpacing.touchTargetPlanning,
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                   decoration: BoxDecoration(
                     color: AppColors.bgSurfaceDark,
                     borderRadius: BorderRadius.circular(12),
@@ -833,6 +875,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Widget _buildSideButtons(BuildContext context) {
+    final tapMode = ref.read(mapWaypointTapModeProvider);
     return Positioned(
       right: AppSpacing.lg,
       bottom: AppSpacing.xxxl,
@@ -878,7 +921,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.borderHairlineDark),
               ),
-              child: const Icon(Icons.route, color: AppColors.accentPrimaryDark),
+              child:
+                  const Icon(Icons.route, color: AppColors.accentPrimaryDark),
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -886,25 +930,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           GestureDetector(
             onTap: () {
               HapticFeedback.selectionClick();
-              setState(() => _tapMode = !_tapMode);
+              ref.read(mapWaypointTapModeProvider.notifier).state = !tapMode;
             },
             child: Container(
               width: AppSpacing.touchTargetPlanning,
               height: AppSpacing.touchTargetPlanning,
               decoration: BoxDecoration(
-                color: _tapMode
+                color: tapMode
                     ? AppColors.accentPrimaryDark
                     : AppColors.bgSurfaceRaisedDark,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: _tapMode
+                  color: tapMode
                       ? AppColors.accentPrimaryDark
                       : AppColors.borderHairlineDark,
                 ),
               ),
               child: Icon(
                 Icons.add_location_alt_outlined,
-                color: _tapMode
+                color: tapMode
                     ? AppColors.textPrimaryDark
                     : AppColors.accentPrimaryDark,
               ),
@@ -943,7 +987,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.touch_app, color: AppColors.textPrimaryDark, size: 18),
+            const Icon(Icons.touch_app,
+                color: AppColors.textPrimaryDark, size: 18),
             const SizedBox(width: AppSpacing.sm),
             const Expanded(
               child: Text(
@@ -952,8 +997,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
             GestureDetector(
-              onTap: () => setState(() => _tapMode = false),
-              child: const Icon(Icons.close, color: AppColors.textPrimaryDark, size: 18),
+              onTap: () =>
+                  ref.read(mapWaypointTapModeProvider.notifier).state = false,
+              child: const Icon(Icons.close,
+                  color: AppColors.textPrimaryDark, size: 18),
             ),
           ],
         ),
@@ -1054,7 +1101,8 @@ class _VehicleSwitcher extends ConsumerWidget {
       }
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Neuberechnung fehlgeschlagen - alte Route bleibt')),
+        const SnackBar(
+            content: Text('Neuberechnung fehlgeschlagen - alte Route bleibt')),
       );
     }
   }

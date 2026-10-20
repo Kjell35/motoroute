@@ -20,7 +20,7 @@ class PoiSelectionScreen extends ConsumerWidget {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: Text('POIs auf Karte', style: AppTypography.title),
+        title: const Text('POIs auf Karte', style: AppTypography.title),
       ),
       body: SafeArea(
         child: ListView.builder(
@@ -53,7 +53,7 @@ class PoiSelectionScreen extends ConsumerWidget {
                       value ? updated.add(category) : updated.remove(category);
                       ref.read(activePoiCategoriesProvider.notifier).state = updated;
                     },
-                    activeColor: AppColors.accentSecondary,
+                    activeThumbColor: AppColors.accentSecondary,
                     inactiveThumbColor: AppColors.textMutedDark,
                     inactiveTrackColor: AppColors.bgSurfaceRaisedDark,
                   ),

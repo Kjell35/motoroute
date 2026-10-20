@@ -55,6 +55,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
     if (edit != null) {
       _title.text = edit.title;
       _description.text = edit.description;
+      _photos.addAll(edit.imageUrls.map((url) => XFile(url)));
       _price.text = (edit.priceCents / 100).toStringAsFixed(0);
       _brand.text = edit.brand ?? '';
       _model.text = edit.model ?? '';
@@ -99,12 +100,16 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
   }
 
   Future<void> _pickPhotos() async {
+    final remaining = 8 - _photos.length;
+    if (remaining <= 0) return;
     final picker = ImagePicker();
-    final picked = await picker.pickMultiImage(imageQuality: 80, limit: 8 - _photos.length);
-    if (picked.isNotEmpty) {
-      setState(() => _photos.addAll(picked.take(8 - _photos.length)));
+    final picked = await picker.pickMultiImage(imageQuality: 80, limit: remaining);
+    if (picked.isNotEmpty && mounted) {
+      setState(() => _photos.addAll(picked.take(remaining)));
     }
   }
+
+  bool get _hasListingPhoto => _photos.isNotEmpty;
 
   List<MpSubcategoryDef> get _subcategories {
     final key = _category?.name;
@@ -161,6 +166,10 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
       _showSnack(i18n.mpCategoryRequired, error: true);
       return;
     }
+    if (!_hasListingPhoto) {
+      _showSnack('Bitte füge mindestens ein Artikelbild hinzu.', error: true);
+      return;
+    }
     final token = ref.read(marketplaceTokenProvider);
     if (token == null) {
       _showSnack(i18n.mpNotLoggedIn, error: true);
@@ -191,7 +200,10 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
           token: token,
           id: widget.editListing!.id,
           fields: fields,
-          imagePaths: _photos.map((p) => p.path).toList(),
+          imagePaths: _photos
+              .where((p) => !p.path.startsWith('http://') && !p.path.startsWith('https://'))
+              .map((p) => p.path)
+              .toList(),
         );
       } else {
         listing = await repo.create(
@@ -283,7 +295,15 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
             const SizedBox(height: 16),
 
             // 3) Fotos
-            Text(i18n.mpStepPhotos, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('${i18n.mpStepPhotos} *', style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(
+              _hasListingPhoto ? 'Mindestens ein aussagekräftiges Artikelbild erforderlich.' : 'Pflichtfeld: mindestens ein Foto des angebotenen Artikels.',
+              style: TextStyle(
+                fontSize: 12,
+                color: _hasListingPhoto ? scheme.onSurfaceVariant : AppColors.statusWarning,
+              ),
+            ),
             const SizedBox(height: 8),
             SizedBox(
               height: 92,
@@ -310,27 +330,31 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
                           clipBehavior: Clip.antiAlias,
-                          // LOKALE Datei (ImagePicker) -> Image.file. Image.
-                          // network kann mit einem Gerätepfaad niemals laden
-                          // (früher: Vorschau zeigte immer nur den Platzhalter).
-                          child: Image.file(
-                            File(p.path),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.image)),
-                          ),
-                        ),
-                        Positioned(
-                          top: 0,
-                          right: 8,
-                          child: GestureDetector(
-                            onTap: () => setState(() => _photos.remove(p)),
-                            child: const CircleAvatar(
-                              radius: 11,
-                              backgroundColor: AppColors.statusDanger,
-                              child: Icon(Icons.close, size: 14, color: Colors.white),
+                          child: p.path.startsWith('http://') || p.path.startsWith('https://')
+                              ? Image.network(
+                                  p.path,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.image)),
+                                )
+                              : Image.file(
+                                  File(p.path),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.image)),
+                                ),
+                        ),                        if (!p.path.startsWith('http://') && !p.path.startsWith('https://'))
+                          Positioned(
+                            top: 0,
+                            right: 8,
+                            child: GestureDetector(
+                              onTap: () => setState(() => _photos.remove(p)),
+                              child: const CircleAvatar(
+                                radius: 11,
+                                backgroundColor: AppColors.statusDanger,
+                                child: Icon(Icons.close, size: 14, color: Colors.white),
+                              ),
                             ),
                           ),
-                        ),
+
                       ])),
                 ],
               ),

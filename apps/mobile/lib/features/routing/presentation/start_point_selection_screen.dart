@@ -94,7 +94,7 @@ class _StartPointSelectionScreenState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '${widget.destination.label ?? i18n.tr('route.overview')}',
+                widget.destination.label ?? i18n.tr('route.overview'),
                 style: AppTypography.caption,
               ),
               const SizedBox(height: AppSpacing.lg),

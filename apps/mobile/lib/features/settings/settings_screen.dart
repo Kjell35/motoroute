@@ -82,17 +82,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // Persoenliches Gesicht (Vorbild: Profil-Tab des Referenz-Screens).
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           children: [
             Center(
               child: Column(
                 children: [
                   // AuthUser hat bewusst kein avatarUrl (App setzt es
                   // nie) - der Initialen-/Icon-Fallback reicht hier.
-                  CircleAvatar(
+                  const CircleAvatar(
                     radius: 44,
                     backgroundColor: AppColors.bgSurfaceRaisedDark,
-                    child: Icon(Icons.person, size: 44, color: AppColors.textSecondaryDark),
+                    child: Icon(Icons.person,
+                        size: 44, color: AppColors.textSecondaryDark),
                   ),
                   const SizedBox(height: 10),
                   Text(
@@ -100,106 +102,136 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     style: AppTypography.title.copyWith(fontSize: 20),
                   ),
                   if (user?.email != null)
-                    Text(user!.email, style: AppTypography.body.copyWith(color: AppColors.textSecondaryDark)),
+                    Text(user!.email,
+                        style: AppTypography.body
+                            .copyWith(color: AppColors.textSecondaryDark)),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
 
             // --------------------------------------------- 1. Navigation
-            _buildSection('nav', i18n.navigation, icon: Icons.navigation_outlined, children: [
-              ListTile(
-                leading: const Icon(Icons.motorcycle, color: AppColors.textSecondaryDark, size: 20),
-                title: Text('Fahrzeugstandard', style: AppTypography.body),
-                subtitle: Text('Beeinflusst Routing und Dauer', style: AppTypography.caption),
-                trailing: SegmentedButton<VehicleType>(
-                  segments: const [
-                    ButtonSegment(value: VehicleType.motorcycle, icon: Icon(Icons.two_wheeler, size: 18)),
-                    ButtonSegment(value: VehicleType.car, icon: Icon(Icons.directions_car, size: 18)),
-                    ButtonSegment(value: VehicleType.bicycle, icon: Icon(Icons.pedal_bike, size: 18)),
-                  ],
-                  selected: {vehicleType},
-                  onSelectionChanged: (selection) {
-                    ref.read(vehicleTypeProvider.notifier).state = selection.first;
-                    persistVehicleType(selection.first);
-                  },
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.straighten, color: AppColors.textSecondaryDark, size: 20),
-                title: Text('Einheiten', style: AppTypography.body),
-                subtitle: Text(unit == DistanceUnit.kilometers ? 'Kilometer' : 'Meilen', style: AppTypography.caption),
-                trailing: SegmentedButton<DistanceUnit>(
-                  segments: const [
-                    ButtonSegment(value: DistanceUnit.kilometers, label: Text('km')),
-                    ButtonSegment(value: DistanceUnit.miles, label: Text('mi')),
-                  ],
-                  selected: {unit},
-                  onSelectionChanged: (selection) {
-                    ref.read(distanceUnitProvider.notifier).state = selection.first;
-                    persistDistanceUnit(selection.first);
-                  },
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
-              // Sprachansagen: DERSSELBE Provider wie der Lautsprecher-
-              // Toggle am aktiven Nav-Screen - beide Orte bleiben immer
-              // synchron, die Persistierung läuft über initSessionSettings.
-              _buildSwitchTile(
-                Icons.record_voice_over,
-                i18n.tr('settings.voiceAnnouncements'),
-                voiceOn,
-                (value) {
-                  ref.read(voiceAnnouncementsEnabledProvider.notifier).state = value;
-                  unawaited(persistVoiceAnnouncementsEnabled(value));
-                },
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.record_voice_over, color: AppColors.textMutedDark, size: 18),
-                title: Text(
-                  i18n.tr('settings.voiceAnnouncements.desc'),
-                  style: AppTypography.caption,
-                ),
-              ),
-              _buildSwitchTile(
-                Icons.battery_saver,
-                'Energiesparmodus',
-                energy.mode != EnergySaverMode.off,
-                (value) async {
-                  await ref.read(energySaverControllerProvider.notifier).setEnabled(value);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          value
-                              ? 'Energiesparmodus aktiv - GPS wird während der Navigation gedrosselt.'
-                              : 'Energiesparmodus aus - volle GPS-Genauigkeit.',
-                        ),
+            _buildSection('nav', i18n.navigation,
+                icon: Icons.navigation_outlined,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.motorcycle,
+                        color: AppColors.textSecondaryDark, size: 20),
+                    title: const Text('Fahrzeugstandard',
+                        style: AppTypography.body),
+                    subtitle: const Text('Beeinflusst Routing und Dauer',
+                        style: AppTypography.caption),
+                    trailing: SegmentedButton<VehicleType>(
+                      segments: const [
+                        ButtonSegment(
+                            value: VehicleType.motorcycle,
+                            icon: Icon(Icons.two_wheeler, size: 18)),
+                        ButtonSegment(
+                            value: VehicleType.car,
+                            icon: Icon(Icons.directions_car, size: 18)),
+                        ButtonSegment(
+                            value: VehicleType.bicycle,
+                            icon: Icon(Icons.pedal_bike, size: 18)),
+                      ],
+                      selected: {vehicleType},
+                      onSelectionChanged: (selection) {
+                        ref.read(vehicleTypeProvider.notifier).state =
+                            selection.first;
+                        persistVehicleType(selection.first);
+                      },
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    );
-                  }
-                },
-              ),
-              if (energy.mode != EnergySaverMode.off)
-                ListTile(
-                  leading: const Icon(Icons.bolt, color: AppColors.statusWarning, size: 20),
-                  title: Text(
-                    energy.mode == EnergySaverMode.critical
-                        ? 'Kritischer Akku - minimale GPS-Genauigkeit'
-                        : 'GPS gedrosselt',
-                    style: AppTypography.caption,
+                    ),
                   ),
-                  subtitle: Text('Akkustand: ${energy.batteryLevelPercent} %', style: AppTypography.caption),
-                ),
-            ]),
+                  ListTile(
+                    leading: const Icon(Icons.straighten,
+                        color: AppColors.textSecondaryDark, size: 20),
+                    title: const Text('Einheiten', style: AppTypography.body),
+                    subtitle: Text(
+                        unit == DistanceUnit.kilometers
+                            ? 'Kilometer'
+                            : 'Meilen',
+                        style: AppTypography.caption),
+                    trailing: SegmentedButton<DistanceUnit>(
+                      segments: const [
+                        ButtonSegment(
+                            value: DistanceUnit.kilometers, label: Text('km')),
+                        ButtonSegment(
+                            value: DistanceUnit.miles, label: Text('mi')),
+                      ],
+                      selected: {unit},
+                      onSelectionChanged: (selection) {
+                        ref.read(distanceUnitProvider.notifier).state =
+                            selection.first;
+                        persistDistanceUnit(selection.first);
+                      },
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                  // Sprachansagen: DERSSELBE Provider wie der Lautsprecher-
+                  // Toggle am aktiven Nav-Screen - beide Orte bleiben immer
+                  // synchron, die Persistierung läuft über initSessionSettings.
+                  _buildSwitchTile(
+                    Icons.record_voice_over,
+                    i18n.tr('settings.voiceAnnouncements'),
+                    voiceOn,
+                    (value) {
+                      ref
+                          .read(voiceAnnouncementsEnabledProvider.notifier)
+                          .state = value;
+                      unawaited(persistVoiceAnnouncementsEnabled(value));
+                    },
+                  ),
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.record_voice_over,
+                        color: AppColors.textMutedDark, size: 18),
+                    title: Text(
+                      i18n.tr('settings.voiceAnnouncements.desc'),
+                      style: AppTypography.caption,
+                    ),
+                  ),
+                  _buildSwitchTile(
+                    Icons.battery_saver,
+                    'Energiesparmodus',
+                    energy.mode != EnergySaverMode.off,
+                    (value) async {
+                      await ref
+                          .read(energySaverControllerProvider.notifier)
+                          .setEnabled(value);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              value
+                                  ? 'Energiesparmodus aktiv - GPS wird während der Navigation gedrosselt.'
+                                  : 'Energiesparmodus aus - volle GPS-Genauigkeit.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  if (energy.mode != EnergySaverMode.off)
+                    ListTile(
+                      leading: const Icon(Icons.bolt,
+                          color: AppColors.statusWarning, size: 20),
+                      title: Text(
+                        energy.mode == EnergySaverMode.critical
+                            ? 'Kritischer Akku - minimale GPS-Genauigkeit'
+                            : 'GPS gedrosselt',
+                        style: AppTypography.caption,
+                      ),
+                      subtitle: Text(
+                          'Akkustand: ${energy.batteryLevelPercent} %',
+                          style: AppTypography.caption),
+                    ),
+                ]),
             const SizedBox(height: AppSpacing.lg),
 
             // -------------------------------------------------- 2. Konto
@@ -211,13 +243,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
 
             // ---------------------------------------------- 4. Community
-            _buildSection('community', 'Community', icon: Icons.forum_outlined, children: [
-              ..._notificationChildren(),
-              const Divider(height: 1, color: AppColors.borderHairlineDark),
-              ..._chatChildren(),
-              const Divider(height: 1, color: AppColors.borderHairlineDark),
-              ..._rideHistoryChildren(),
-            ]),
+            _buildSection('community', 'Community',
+                icon: Icons.forum_outlined,
+                children: [
+                  ..._notificationChildren(),
+                  const Divider(height: 1, color: AppColors.borderHairlineDark),
+                  ..._chatChildren(),
+                  const Divider(height: 1, color: AppColors.borderHairlineDark),
+                  ..._rideHistoryChildren(),
+                ]),
             const SizedBox(height: AppSpacing.lg),
 
             // ------------------------------------------------ 5. Sprache
@@ -225,22 +259,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
 
             // -------------------------------------------- 6. Recht & Info
-            _buildSection('legal', i18n.tr('settings.legal'), icon: Icons.gavel_outlined, children: [
-              _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz', 'Welche Daten MotoRoute verarbeitet', () {
-                Navigator.of(context).pushNamed('/privacy');
-              }),
-              _buildListTile(Icons.description_outlined, 'Impressum', 'Betreiber der Instanz', () {
-                Navigator.of(context).pushNamed('/imprint');
-              }),
-              _buildListTile(Icons.info_outline, 'Über MotoRoute', 'Version, Datenquellen, Danksagung', () {
-                Navigator.of(context).pushNamed('/about');
-              }),
-              ListTile(
-                dense: true,
-                title: Text(i18n.appVersion, style: AppTypography.body),
-                trailing: Text(_appVersion, style: AppTypography.caption),
-              ),
-            ]),
+            _buildSection('legal', i18n.tr('settings.legal'),
+                icon: Icons.gavel_outlined,
+                children: [
+                  _buildListTile(Icons.privacy_tip_outlined, 'Datenschutz',
+                      'Welche Daten MotoRoute verarbeitet', () {
+                    Navigator.of(context).pushNamed('/privacy');
+                  }),
+                  _buildListTile(Icons.description_outlined, 'Impressum',
+                      'Betreiber der Instanz', () {
+                    Navigator.of(context).pushNamed('/imprint');
+                  }),
+                  _buildListTile(Icons.info_outline, 'Über MotoRoute',
+                      'Version, Datenquellen, Danksagung', () {
+                    Navigator.of(context).pushNamed('/about');
+                  }),
+                  ListTile(
+                    dense: true,
+                    title: Text(i18n.appVersion, style: AppTypography.body),
+                    trailing: Text(_appVersion, style: AppTypography.caption),
+                  ),
+                ]),
           ],
         ),
       ),
@@ -250,85 +289,106 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ------------------------------------------------------------------
   // 1/2: Konto - Profil, Passwort, Konto löschen, Abmelden - alles echt.
   // ------------------------------------------------------------------
-  Widget _buildAccountSection(BuildContext context, WidgetRef ref, AuthState auth) {
+  Widget _buildAccountSection(
+      BuildContext context, WidgetRef ref, AuthState auth) {
     if (!auth.isAuthenticated) {
-      return _buildSection('account', 'Konto', icon: Icons.person_outline, children: [
-        ListTile(
-          leading: const Icon(Icons.person_outline, color: AppColors.textSecondaryDark, size: 20),
-          title: Text('Nicht angemeldet', style: AppTypography.body),
-          subtitle: Text('Chat und Gruppen brauchen ein Konto', style: AppTypography.caption),
-          trailing: TextButton(
-            onPressed: () => Navigator.of(context).pushNamed('/welcome'),
-            child: const Text('Anmelden'),
-          ),
-        ),
-      ]);
+      return _buildSection('account', 'Konto',
+          icon: Icons.person_outline,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_outline,
+                  color: AppColors.textSecondaryDark, size: 20),
+              title: const Text('Nicht angemeldet', style: AppTypography.body),
+              subtitle: const Text('Chat und Gruppen brauchen ein Konto',
+                  style: AppTypography.caption),
+              trailing: TextButton(
+                onPressed: () => Navigator.of(context).pushNamed('/welcome'),
+                child: const Text('Anmelden'),
+              ),
+            ),
+          ]);
     }
 
     final user = auth.user!;
-    return _buildSection('account', 'Konto', icon: Icons.person_outline, children: [
-      ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppColors.accentPrimaryDark.withValues(alpha: 0.2),
-          child: Text(
-            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-            style: const TextStyle(color: AppColors.accentPrimaryDark, fontWeight: FontWeight.w800),
+    return _buildSection('account', 'Konto',
+        icon: Icons.person_outline,
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor:
+                  AppColors.accentPrimaryDark.withValues(alpha: 0.2),
+              child: Text(
+                user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                    color: AppColors.accentPrimaryDark,
+                    fontWeight: FontWeight.w800),
+              ),
+            ),
+            title: Text(user.name, style: AppTypography.body),
+            subtitle: Text(user.email, style: AppTypography.caption),
           ),
-        ),
-        title: Text(user.name, style: AppTypography.body),
-        subtitle: Text(user.email, style: AppTypography.caption),
-      ),
-      _buildListTile(Icons.edit_outlined, 'Anzeigename ändern', user.name, () {
-        _showEditProfileDialog(context, ref, user.displayName ?? '');
-      }),
-      _buildListTile(Icons.password_outlined, 'Passwort ändern', null, () {
-        _showChangePasswordDialog(context, ref);
-      }),
-      _buildListTile(Icons.delete_forever_outlined, 'Konto löschen', 'Endgültig - alle Daten werden entfernt', () {
-        _showDeleteAccountDialog(context, ref);
-      }),
-      ListTile(
-        leading: const Icon(Icons.logout, color: AppColors.statusDanger, size: 20),
-        title: const Text('Abmelden', style: TextStyle(color: AppColors.statusDanger)),
-        onTap: () async {
-          final confirmed = await _confirmDialog(
-            context,
-            title: 'Abmelden?',
-            body: 'Gespeicherte Routen und Einstellungen bleiben auf dem Gerät.',
-            confirmLabel: 'Abmelden',
-            danger: true,
-          );
-          if (confirmed != true) return;
-          await ref.read(authControllerProvider.notifier).logout();
-          if (!context.mounted) return;
-          Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
-        },
-      ),
-    ]);
+          _buildListTile(Icons.edit_outlined, 'Anzeigename ändern', user.name,
+              () {
+            _showEditProfileDialog(context, ref, user.displayName ?? '');
+          }),
+          _buildListTile(Icons.password_outlined, 'Passwort ändern', null, () {
+            _showChangePasswordDialog(context, ref);
+          }),
+          _buildListTile(Icons.delete_forever_outlined, 'Konto löschen',
+              'Endgültig - alle Daten werden entfernt', () {
+            _showDeleteAccountDialog(context, ref);
+          }),
+          ListTile(
+            leading: const Icon(Icons.logout,
+                color: AppColors.statusDanger, size: 20),
+            title: const Text('Abmelden',
+                style: TextStyle(color: AppColors.statusDanger)),
+            onTap: () async {
+              final confirmed = await _confirmDialog(
+                context,
+                title: 'Abmelden?',
+                body:
+                    'Gespeicherte Routen und Einstellungen bleiben auf dem Gerät.',
+                confirmLabel: 'Abmelden',
+                danger: true,
+              );
+              if (confirmed != true) return;
+              await ref.read(authControllerProvider.notifier).logout();
+              if (!context.mounted) return;
+              Navigator.of(context)
+                  .pushNamedAndRemoveUntil('/welcome', (route) => false);
+            },
+          ),
+        ]);
   }
 
-  Future<void> _showEditProfileDialog(BuildContext context, WidgetRef ref, String current) async {
+  Future<void> _showEditProfileDialog(
+      BuildContext context, WidgetRef ref, String current) async {
     final controller = TextEditingController(text: current);
     final newName = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.bgSurfaceDark,
-        title: Text('Anzeigename ändern', style: AppTypography.title),
+        title: const Text('Anzeigename ändern', style: AppTypography.title),
         content: TextField(
           controller: controller,
           maxLength: 80,
           autofocus: true,
           style: AppTypography.body,
-          decoration: const InputDecoration(hintText: 'z. B. Vati auf zwei Rädern'),
+          decoration:
+              const InputDecoration(hintText: 'z. B. Vati auf zwei Rädern'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Abbrechen')),
           FilledButton(
             onPressed: () {
               final name = controller.text.trim();
               if (name.isNotEmpty) Navigator.of(dialogContext).pop(name);
             },
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accentPrimaryDark),
             child: const Text('Speichern'),
           ),
         ],
@@ -336,27 +396,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (newName == null || !mounted) return;
     try {
-      await ref.read(authControllerProvider.notifier).updateDisplayName(newName);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gespeichert: $newName')));
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } catch (_) {
-      if (!mounted) return;
+      await ref
+          .read(authControllerProvider.notifier)
+          .updateDisplayName(newName);
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Server nicht erreichbar - später erneut versuchen')));
+          .showSnackBar(SnackBar(content: Text('Gespeichert: $newName')));
+    } on AuthException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Server nicht erreichbar - später erneut versuchen')));
     }
   }
 
-  Future<void> _showChangePasswordDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showChangePasswordDialog(
+      BuildContext context, WidgetRef ref) async {
     final currentController = TextEditingController();
     final newController = TextEditingController();
     final result = await showDialog<_PasswordChange>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.bgSurfaceDark,
-        title: Text('Passwort ändern', style: AppTypography.title),
+        title: const Text('Passwort ändern', style: AppTypography.title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -364,7 +429,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               controller: currentController,
               obscureText: true,
               style: AppTypography.body,
-              decoration: const InputDecoration(labelText: 'Aktuelles Passwort'),
+              decoration:
+                  const InputDecoration(labelText: 'Aktuelles Passwort'),
             ),
             const SizedBox(height: AppSpacing.sm),
             TextField(
@@ -373,50 +439,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: AppTypography.body,
               decoration: const InputDecoration(
                 labelText: 'Neues Passwort (min. 8 Zeichen)',
-                helperText: 'Alte Sitzungen bleiben gültig - danach überall abmelden, wo nötig.',
+                helperText:
+                    'Alte Sitzungen bleiben gültig - danach überall abmelden, wo nötig.',
                 helperStyle: TextStyle(fontSize: 11),
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Abbrechen')),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(
               _PasswordChange(currentController.text, newController.text),
             ),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accentPrimaryDark),
             child: const Text('Ändern'),
           ),
         ],
       ),
     );
-    if (result == null || !mounted) return;
+    if (!context.mounted) return;
+    if (result == null) return;
     if (result.newPassword.length < 8) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Das neue Passwort muss mindestens 8 Zeichen haben')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Das neue Passwort muss mindestens 8 Zeichen haben')));
       return;
     }
     try {
-      await ref.read(authControllerProvider.notifier).changePassword(result.currentPassword, result.newPassword);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwort geändert ✓')));
+      await ref
+          .read(authControllerProvider.notifier)
+          .changePassword(result.currentPassword, result.newPassword);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Passwort geändert ✓')));
     } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
   /// Konto löschen: doppelte Bestätigung, zweite durch Eingabe von
   /// LÖSCHEN - das ist unwiderruflich (Cascade auf alle Tabellen).
-  Future<void> _showDeleteAccountDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showDeleteAccountDialog(
+      BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         final controller = TextEditingController();
         return AlertDialog(
           backgroundColor: AppColors.bgSurfaceDark,
-          title: Text('Konto endgültig löschen?', style: AppTypography.title),
+          title: const Text('Konto endgültig löschen?',
+              style: AppTypography.title),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,16 +509,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 controller: controller,
                 autofocus: true,
                 style: AppTypography.body,
-                decoration: const InputDecoration(hintText: 'Tippe LÖSCHEN zur Bestätigung'),
+                decoration: const InputDecoration(
+                    hintText: 'Tippe LÖSCHEN zur Bestätigung'),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Abbrechen')),
+            TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Abbrechen')),
             FilledButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(controller.text.trim().toUpperCase() == 'LÖSCHEN'),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
+              onPressed: () => Navigator.of(dialogContext)
+                  .pop(controller.text.trim().toUpperCase() == 'LÖSCHEN'),
+              style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.statusDanger),
               child: const Text('Endgültig löschen'),
             ),
           ],
@@ -451,11 +532,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (confirmed != true || !mounted) return;
     try {
       await ref.read(authControllerProvider.notifier).deleteAccount();
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
+      if (!context.mounted) return;
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil('/welcome', (route) => false);
     } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -469,7 +552,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return _buildSection('map', 'Karte', icon: Icons.map_outlined, children: [
       ListTile(
-        leading: const Icon(Icons.brightness_6_outlined, color: AppColors.textSecondaryDark, size: 20),
+        leading: const Icon(Icons.brightness_6_outlined,
+            color: AppColors.textSecondaryDark, size: 20),
         title: Text(i18n.mapStyleTitle, style: AppTypography.body),
         trailing: SegmentedButton<MapStyleChoice>(
           showSelectedIcon: false,
@@ -487,20 +571,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ListTile(
         leading: const Icon(Icons.download_for_offline_outlined,
             color: AppColors.textSecondaryDark, size: 20),
-        title: Text(i18n.tr('settings.offlineMaps.add'), style: AppTypography.body),
+        title: Text(i18n.tr('settings.offlineMaps.add'),
+            style: AppTypography.body),
         subtitle: offlineState.isDownloading
-            ? LinearProgressIndicator(value: offlineState.activeDownloadProgress)
-            : Text(i18n.tr('settings.offlineMaps.addHint'), style: AppTypography.caption),
-        onTap: offlineState.isDownloading ? null : () => _showOfflineRegionDialog(),
+            ? LinearProgressIndicator(
+                value: offlineState.activeDownloadProgress)
+            : Text(i18n.tr('settings.offlineMaps.addHint'),
+                style: AppTypography.caption),
+        onTap: offlineState.isDownloading
+            ? null
+            : () => _showOfflineRegionDialog(),
       ),
       if (offlineState.error != null)
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
-          child: Text(offlineState.error!, style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+          child: Text(offlineState.error!,
+              style: AppTypography.caption
+                  .copyWith(color: AppColors.statusDanger)),
         ),
       ...offlineState.regions.map(
         (r) => ListTile(
-          leading: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark, size: 20),
+          leading: const Icon(Icons.map_outlined,
+              color: AppColors.textSecondaryDark, size: 20),
           title: Text(r.name, style: AppTypography.body),
           subtitle: Text(
             '${r.createdAt.day}.${r.createdAt.month}.${r.createdAt.year} · '
@@ -536,7 +629,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(i18n.tr('settings.offlineMaps.dialogTitle'), style: AppTypography.title),
+          title: Text(i18n.tr('settings.offlineMaps.dialogTitle'),
+              style: AppTypography.title),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -545,7 +639,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 decoration: const InputDecoration(labelText: 'Name'),
               ),
               const SizedBox(height: AppSpacing.md),
-              Text(i18n.tr('settings.offlineMaps.radius'), style: AppTypography.caption),
+              Text(i18n.tr('settings.offlineMaps.radius'),
+                  style: AppTypography.caption),
               SegmentedButton<double>(
                 showSelectedIcon: false,
                 segments: const [
@@ -554,7 +649,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ButtonSegment(value: 100.0, label: Text('100 km')),
                 ],
                 selected: {radius},
-                onSelectionChanged: (s) => setDialogState(() => radius = s.first),
+                onSelectionChanged: (s) =>
+                    setDialogState(() => radius = s.first),
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
@@ -577,7 +673,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && context.mounted) {
       await ref.read(offlineMapsProvider.notifier).download(
             name: nameController.text.trim().isEmpty
                 ? 'Region'
@@ -605,9 +701,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           persistNotificationsEnabled(value);
         },
       ),
-      ListTile(
+      const ListTile(
         dense: true,
-        leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
+        leading:
+            Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
         title: Text(
           'Es gibt keine Push-Benachrichtigungen von Google - Hinweise erscheinen direkt in der App.',
           style: AppTypography.caption,
@@ -623,9 +720,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           await ErrorReporter.instance.setEnabled(value);
         },
       ),
-      ListTile(
+      const ListTile(
         dense: true,
-        leading: const Icon(Icons.shield_outlined, color: AppColors.textMutedDark, size: 18),
+        leading: Icon(Icons.shield_outlined,
+            color: AppColors.textMutedDark, size: 18),
         title: Text(
           'Hilft dem Support, Ausfälle zu finden - ganz ohne Namen, E-Mail oder Standort. Jederzeit abschaltbar.',
           style: AppTypography.caption,
@@ -641,7 +739,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return [
       ListTile(
-        leading: const Icon(Icons.forum_outlined, color: AppColors.textSecondaryDark, size: 20),
+        leading: const Icon(Icons.forum_outlined,
+            color: AppColors.textSecondaryDark, size: 20),
         title: const Text('Chat-Konto', style: AppTypography.body),
         subtitle: Text(
           token == null
@@ -651,7 +750,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
       ListTile(
-        leading: const Icon(Icons.visibility_outlined, color: AppColors.textSecondaryDark, size: 20),
+        leading: const Icon(Icons.visibility_outlined,
+            color: AppColors.textSecondaryDark, size: 20),
         title: const Text('Online-Status anzeigen', style: AppTypography.body),
         enabled: token != null,
         trailing: Switch(
@@ -660,27 +760,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ? null
               : (value) async {
                   try {
-                    await ref.read(chatRepositoryProvider).updateMe(token, showOnline: value);
+                    await ref
+                        .read(chatRepositoryProvider)
+                        .updateMe(token, showOnline: value);
                     ref.invalidate(chatMeProvider);
                   } catch (_) {}
                 },
-          activeColor: AppColors.accentPrimaryDark,
+          activeThumbColor: AppColors.accentPrimaryDark,
           inactiveThumbColor: AppColors.textMutedDark,
           inactiveTrackColor: AppColors.bgSurfaceRaisedDark,
         ),
       ),
       ListTile(
-        leading: const Icon(Icons.badge_outlined, color: AppColors.textSecondaryDark, size: 20),
-        title: Text(i18n.tr('settings.chatName.mode'), style: AppTypography.body),
+        leading: const Icon(Icons.badge_outlined,
+            color: AppColors.textSecondaryDark, size: 20),
+        title:
+            Text(i18n.tr('settings.chatName.mode'), style: AppTypography.body),
         subtitle: Text(me?.effectiveName ?? '–', style: AppTypography.caption),
         trailing: token == null
             ? null
             : SegmentedButton<String>(
                 showSelectedIcon: false,
                 segments: [
-                  ButtonSegment(value: 'username', label: Text(i18n.tr('settings.chatName.username'))),
-                  ButtonSegment(value: 'first_name', label: Text(i18n.tr('settings.chatName.firstName'))),
-                  ButtonSegment(value: 'custom', label: Text(i18n.tr('settings.chatName.custom'))),
+                  ButtonSegment(
+                      value: 'username',
+                      label: Text(i18n.tr('settings.chatName.username'))),
+                  ButtonSegment(
+                      value: 'first_name',
+                      label: Text(i18n.tr('settings.chatName.firstName'))),
+                  ButtonSegment(
+                      value: 'custom',
+                      label: Text(i18n.tr('settings.chatName.custom'))),
                 ],
                 selected: {(me?.chatNameMode ?? 'username')},
                 onSelectionChanged: (selection) async {
@@ -696,24 +806,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (me?.chatNameMode == 'custom')
         ListTile(
           dense: true,
-          leading: const Icon(Icons.edit_outlined, color: AppColors.textSecondaryDark, size: 20),
-          title: Text(i18n.tr('settings.chatName.customLabel'), style: AppTypography.body),
-          subtitle: Text(me?.chatDisplayName ?? '–', style: AppTypography.caption),
-          trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.textMutedDark),
+          leading: const Icon(Icons.edit_outlined,
+              color: AppColors.textSecondaryDark, size: 20),
+          title: Text(i18n.tr('settings.chatName.customLabel'),
+              style: AppTypography.body),
+          subtitle:
+              Text(me?.chatDisplayName ?? '–', style: AppTypography.caption),
+          trailing: const Icon(Icons.chevron_right,
+              size: 18, color: AppColors.textMutedDark),
           onTap: _editChatDisplayName,
         ),
       ListTile(
         dense: true,
-        leading: const Icon(Icons.person_outline, color: AppColors.textSecondaryDark, size: 20),
+        leading: const Icon(Icons.person_outline,
+            color: AppColors.textSecondaryDark, size: 20),
         title: Text(i18n.firstName, style: AppTypography.body),
         subtitle: Text(me?.firstName ?? '–', style: AppTypography.caption),
-        trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.textMutedDark),
+        trailing: const Icon(Icons.chevron_right,
+            size: 18, color: AppColors.textMutedDark),
         onTap: token == null ? null : _editFirstName,
       ),
     ];
   }
 
-  Future<void> _saveChatNameSettings({String? chatNameMode, String? chatDisplayName, String? firstName}) async {
+  Future<void> _saveChatNameSettings(
+      {String? chatNameMode,
+      String? chatDisplayName,
+      String? firstName}) async {
     final token = ref.read(chatSessionTokenProvider);
     if (token == null) return;
     try {
@@ -743,7 +862,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.bgSurfaceDark,
-        title: Text(ref.read(i18nProvider).tr('settings.chatName.customLabel'), style: AppTypography.title),
+        title: Text(ref.read(i18nProvider).tr('settings.chatName.customLabel'),
+            style: AppTypography.title),
         content: TextField(
           controller: controller,
           maxLength: 80,
@@ -756,8 +876,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Text(ref.read(i18nProvider).cancel),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accentPrimaryDark),
             child: Text(ref.read(i18nProvider).save),
           ),
         ],
@@ -775,7 +897,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.bgSurfaceDark,
-        title: Text(ref.read(i18nProvider).firstName, style: AppTypography.title),
+        title:
+            Text(ref.read(i18nProvider).firstName, style: AppTypography.title),
         content: TextField(
           controller: controller,
           maxLength: 80,
@@ -788,8 +911,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Text(ref.read(i18nProvider).cancel),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accentPrimaryDark),
             child: Text(ref.read(i18nProvider).save),
           ),
         ],
@@ -810,7 +935,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final ok = await call();
       if (mounted && !ok) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Konnte nicht gespeichert werden - offline?')),
+          const SnackBar(
+              content: Text('Konnte nicht gespeichert werden - offline?')),
         );
       }
     }
@@ -819,7 +945,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!ref.read(authControllerProvider).isAuthenticated)
         ListTile(
           dense: true,
-          leading: const Icon(Icons.info_outline, color: AppColors.textMutedDark, size: 18),
+          leading: const Icon(Icons.info_outline,
+              color: AppColors.textMutedDark, size: 18),
           title: Text(
             i18n.tr('rideHistory.requiresLogin'),
             style: AppTypography.caption,
@@ -836,7 +963,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Icons.public,
           i18n.tr('rideHistory.publicProfile'),
           settings.isPublic,
-          (v) => change(() => controller.update(authPrivacy: v ? 'public' : 'private')),
+          (v) => change(
+              () => controller.update(authPrivacy: v ? 'public' : 'private')),
         ),
         if (settings.isPublic) ...[
           _buildSwitchTile(
@@ -860,7 +988,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
         ListTile(
           dense: true,
-          leading: const Icon(Icons.lock_outline, color: AppColors.textMutedDark, size: 18),
+          leading: const Icon(Icons.lock_outline,
+              color: AppColors.textMutedDark, size: 18),
           title: Text(
             settings.isPublic
                 ? i18n.tr('rideHistory.hintPublic')
@@ -880,39 +1009,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final currentLanguage = ref.watch(languageControllerProvider);
     final currentThemeMode = ref.watch(themeModeControllerProvider);
 
-    return _buildSection('language', i18n.tr('settings.languageAndAppearance'), icon: Icons.language, children: [
-      ListTile(
-        leading: const Icon(Icons.language, color: AppColors.textSecondaryDark, size: 20),
-        title: Text(i18n.languageLabel, style: AppTypography.body),
-        trailing: SegmentedButton<AppLanguage>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: AppLanguage.de, label: const Text('🇩🇪 DE')),
-            ButtonSegment(value: AppLanguage.en, label: const Text('🇬🇧 EN')),
-          ],
-          selected: {currentLanguage},
-          onSelectionChanged: (selection) {
-            ref.read(languageControllerProvider.notifier).set(selection.first);
-          },
-        ),
-      ),
-      ListTile(
-        leading: const Icon(Icons.contrast, color: AppColors.textSecondaryDark, size: 20),
-        title: Text(i18n.themeModeTitle, style: AppTypography.body),
-        trailing: SegmentedButton<AppThemeMode>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: AppThemeMode.system, label: Text(i18n.themeModeSystem)),
-            ButtonSegment(value: AppThemeMode.light, label: Text(i18n.themeModeLight)),
-            ButtonSegment(value: AppThemeMode.dark, label: Text(i18n.themeModeDark)),
-          ],
-          selected: {currentThemeMode},
-          onSelectionChanged: (selection) {
-            ref.read(themeModeControllerProvider.notifier).set(selection.first);
-          },
-        ),
-      ),
-    ]);
+    return _buildSection('language', i18n.tr('settings.languageAndAppearance'),
+        icon: Icons.language,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.language,
+                color: AppColors.textSecondaryDark, size: 20),
+            title: Text(i18n.languageLabel, style: AppTypography.body),
+            trailing: SegmentedButton<AppLanguage>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: AppLanguage.de, label: Text('🇩🇪 DE')),
+                ButtonSegment(value: AppLanguage.en, label: Text('🇬🇧 EN')),
+              ],
+              selected: {currentLanguage},
+              onSelectionChanged: (selection) {
+                ref
+                    .read(languageControllerProvider.notifier)
+                    .set(selection.first);
+              },
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.contrast,
+                color: AppColors.textSecondaryDark, size: 20),
+            title: Text(i18n.themeModeTitle, style: AppTypography.body),
+            trailing: SegmentedButton<AppThemeMode>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                    value: AppThemeMode.system,
+                    label: Text(i18n.themeModeSystem)),
+                ButtonSegment(
+                    value: AppThemeMode.light,
+                    label: Text(i18n.themeModeLight)),
+                ButtonSegment(
+                    value: AppThemeMode.dark, label: Text(i18n.themeModeDark)),
+              ],
+              selected: {currentThemeMode},
+              onSelectionChanged: (selection) {
+                ref
+                    .read(themeModeControllerProvider.notifier)
+                    .set(selection.first);
+              },
+            ),
+          ),
+        ]);
   }
 
   // ------------------------------------------------------------------
@@ -932,11 +1074,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: Text(title, style: AppTypography.title),
         content: Text(body, style: AppTypography.caption),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Abbrechen')),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: FilledButton.styleFrom(
-              backgroundColor: danger ? AppColors.statusDanger : AppColors.accentPrimaryDark,
+              backgroundColor:
+                  danger ? AppColors.statusDanger : AppColors.accentPrimaryDark,
               foregroundColor: Colors.white,
             ),
             child: Text(confirmLabel),
@@ -952,10 +1097,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// Calimoto-Look: fette, großere Sektionstitel in Normal-Schreibung
   /// AUSSERHALB der Karte ("Weitere Premium-Vorteile"-Stil), nicht die
   /// kleinen Caps-Labels mit Akzent-Balken.
-  Widget _buildSection(String id, String title, {required List<Widget> children, IconData? icon}) {
+  Widget _buildSection(String id, String title,
+      {required List<Widget> children, IconData? icon}) {
     final collapsed = _collapsed.contains(id);
     final header = Padding(
-      padding: const EdgeInsets.only(left: AppSpacing.xs, bottom: AppSpacing.xs),
+      padding:
+          const EdgeInsets.only(left: AppSpacing.xs, bottom: AppSpacing.xs),
       child: Row(
         children: [
           Expanded(
@@ -1018,33 +1165,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildListTile(IconData icon, String title, String? subtitle, VoidCallback? onTap) {
+  Widget _buildListTile(
+      IconData icon, String title, String? subtitle, VoidCallback? onTap) {
     return ListTile(
       leading: Icon(icon, color: AppColors.textSecondaryDark, size: 20),
       title: Text(title, style: AppTypography.body),
-      subtitle: subtitle != null ? Text(subtitle, style: AppTypography.caption) : null,
+      subtitle: subtitle != null
+          ? Text(subtitle, style: AppTypography.caption)
+          : null,
       onTap: onTap,
       // Chevron auf Tap-Zeilen (calimoto-Stil) - macht klar, dass die
       // Zeile in einen eigenen Screen fuhrt.
       trailing: onTap == null
           ? null
           : const Icon(Icons.chevron_right, color: AppColors.textSecondaryDark),
-      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+      contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
     );
   }
 
-  Widget _buildSwitchTile(IconData icon, String title, bool value, ValueChanged<bool> onChanged) {
+  Widget _buildSwitchTile(
+      IconData icon, String title, bool value, ValueChanged<bool> onChanged) {
     return ListTile(
       leading: Icon(icon, color: AppColors.textSecondaryDark, size: 20),
       title: Text(title, style: AppTypography.body),
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: AppColors.accentPrimaryDark,
+        activeThumbColor: AppColors.accentPrimaryDark,
         inactiveThumbColor: AppColors.textMutedDark,
         inactiveTrackColor: AppColors.bgSurfaceRaisedDark,
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+      contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
     );
   }
 }

@@ -39,7 +39,8 @@ Future<void> initSessionSettings() async {
         .toSet();
   }
   persistedNotificationsEnabled = prefs.getBool(_kNotifications) ?? true;
-  persistedVoiceAnnouncementsEnabled = prefs.getBool(_kVoiceAnnouncements) ?? true;
+  persistedVoiceAnnouncementsEnabled =
+      prefs.getBool(_kVoiceAnnouncements) ?? true;
 }
 
 /// Von initSessionSettings gesetzte Startwerte (Riverpod-Provider
@@ -107,6 +108,10 @@ final activeRouteProvider = StateProvider<ComputedRoute?>((ref) => null);
 
 /// Wegpunkte der aktuellen Planung (Start -> Zwischenziele -> Ziel).
 final waypointListProvider = StateProvider<List<Waypoint>>((ref) => const []);
+
+/// Expliziter Kartentap-Modus zum Setzen/Ersetzen eines Routen-Wegpunkts.
+/// Wird von der Wegpunktverwaltung aktiviert und von der Karte quittiert.
+final mapWaypointTapModeProvider = StateProvider<bool>((ref) => false);
 
 enum PoiCategory {
   fuel,
@@ -210,10 +215,13 @@ class ComputedRoute {
     if (geometry.length < 2) return [0];
     final out = List<double>.filled(geometry.length, 0);
     for (var i = 1; i < geometry.length; i++) {
-      out[i] = out[i - 1] + haversineMeters(
-        geometry[i - 1][1], geometry[i - 1][0],
-        geometry[i][1], geometry[i][0],
-      );
+      out[i] = out[i - 1] +
+          haversineMeters(
+            geometry[i - 1][1],
+            geometry[i - 1][0],
+            geometry[i][1],
+            geometry[i][0],
+          );
     }
     return out;
   }
@@ -231,7 +239,8 @@ class ComputedRoute {
       if (segStart + 5 >= traveledMeters) {
         return (
           text: seg.instruction,
-          distanceMeters: (segStart - traveledMeters).clamp(0, double.infinity).toDouble(),
+          distanceMeters:
+              (segStart - traveledMeters).clamp(0, double.infinity).toDouble(),
         );
       }
       segStart += seg.distanceMeters;

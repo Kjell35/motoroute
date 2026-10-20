@@ -28,12 +28,13 @@ class ActiveNavigationScreen extends ConsumerStatefulWidget {
   const ActiveNavigationScreen({super.key});
 
   @override
-  ConsumerState<ActiveNavigationScreen> createState() => _ActiveNavigationScreenState();
+  ConsumerState<ActiveNavigationScreen> createState() =>
+      _ActiveNavigationScreenState();
 }
 
-class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen> {
-  MaplibreMapController? _mapController;
-  bool _routeDrawn = false;
+class _ActiveNavigationScreenState
+    extends ConsumerState<ActiveNavigationScreen> {
+  MapLibreMapController? _mapController;
   Set<String> _drawnIncidentIds = {};
   final List<Circle> _incidentCircles = [];
   String? _styleString;
@@ -43,7 +44,6 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
   /// die berechnete Route mit dem Fahrzeugprofil der Präferenz.
   final List<Line> _routeLines = [];
   final List<Symbol> _routeSymbols = [];
-  Symbol? _gpsSymbol;
 
   /// Letzter GPS-Fix als LatLng (für den Standort-Marker).
   LatLng? _lastGps;
@@ -145,7 +145,6 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
       } catch (_) {}
     }
     _routeSymbols.clear();
-    _gpsSymbol = null;
 
     final geometry = route.geometry;
     if (geometry.isEmpty) return;
@@ -155,9 +154,8 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
     // Erkennung im NavigationController).
     final navState = ref.read(navigationControllerProvider);
     final isCurrentRoute = identical(navState.route, route);
-    final traveledIdx = isCurrentRoute
-        ? _indexForDistance(route, navState.traveledMeters)
-        : 0;
+    final traveledIdx =
+        isCurrentRoute ? _indexForDistance(route, navState.traveledMeters) : 0;
 
     // Verbleibende Strecke (kräftiges Orange, gut sichtbar).
     final remaining = geometry
@@ -247,7 +245,6 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
           ),
         );
         _routeSymbols.add(sym);
-        _gpsSymbol = sym;
       } catch (_) {}
     }
   }
@@ -302,7 +299,9 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
             _buildTopZone(route, state),
             const RouteWeatherWidget(),
             if (state.energySaverCritical) _buildEnergySaverWarning(),
-            if (state.isRerouting || state.error != null || state.rerouteReason != null)
+            if (state.isRerouting ||
+                state.error != null ||
+                state.rerouteReason != null)
               _buildReroutingBanner(state),
             _buildSpeedCameraBanner(),
             Expanded(
@@ -312,7 +311,7 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
                   ? const Center(child: CircularProgressIndicator())
                   : Stack(
                       children: [
-                        MaplibreMap(
+                        MapLibreMap(
                           // Gleicher Stil wie Hauptkarte (geteilter
                           // Loader); leerer Stil nur als Fallback, wenn
                           // das Asset fehlt.
@@ -322,11 +321,13 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
                           initialCameraPosition: CameraPosition(
                             target: route == null || route.geometry.isEmpty
                                 ? const LatLng(48.1351, 11.5820)
-                                : LatLng(route.geometry.first[1], route.geometry.first[0]),
+                                : LatLng(route.geometry.first[1],
+                                    route.geometry.first[0]),
                             zoom: 14,
                           ),
                           myLocationEnabled: true,
-                          myLocationTrackingMode: MyLocationTrackingMode.tracking,
+                          myLocationTrackingMode:
+                              MyLocationTrackingMode.tracking,
                           onMapCreated: (controller) {
                             _mapController = controller;
                             if (route != null) _drawRoute(route);
@@ -355,10 +356,12 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
     final voiceOn = ref.watch(voiceAnnouncementsEnabledProvider);
     if (route == null) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         decoration: const BoxDecoration(
           color: AppColors.bgSurfaceDark,
-          border: Border(bottom: BorderSide(color: AppColors.borderHairlineDark)),
+          border:
+              Border(bottom: BorderSide(color: AppColors.borderHairlineDark)),
         ),
         child: Text(i18n.navFollowRoute, style: AppTypography.navInstruction),
       );
@@ -401,14 +404,16 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
             : '${(next.distanceMeters / 1000).toStringAsFixed(next.distanceMeters < 10000 ? 1 : 0)} km');
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       decoration: const BoxDecoration(
         color: AppColors.bgSurfaceDark,
         border: Border(bottom: BorderSide(color: AppColors.borderHairlineDark)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.turn_left, color: AppColors.accentPrimaryDark, size: 32),
+          const Icon(Icons.turn_left,
+              color: AppColors.accentPrimaryDark, size: 32),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -440,12 +445,14 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
             tooltip: voiceOn ? i18n.tr('nav.voiceOn') : i18n.tr('nav.voiceOff'),
             onPressed: () {
               final nextValue = !voiceOn;
-              ref.read(voiceAnnouncementsEnabledProvider.notifier).state = nextValue;
+              ref.read(voiceAnnouncementsEnabledProvider.notifier).state =
+                  nextValue;
               unawaited(persistVoiceAnnouncementsEnabled(nextValue));
             },
             icon: Icon(
               voiceOn ? Icons.volume_up : Icons.volume_off,
-              color: voiceOn ? AppColors.accentSecondary : AppColors.textMutedDark,
+              color:
+                  voiceOn ? AppColors.accentSecondary : AppColors.textMutedDark,
               size: 28,
             ),
           ),
@@ -461,7 +468,8 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
   Widget _buildEnergySaverWarning() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
       color: AppColors.statusDanger.withValues(alpha: 0.2),
       child: const Row(
         children: [
@@ -490,7 +498,8 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
     final isAlarm = camState.activeWarning != null;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
       color: isAlarm ? AppColors.statusDanger : AppColors.statusWarning,
       child: Row(
         children: [
@@ -539,7 +548,8 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
       color: bg,
       child: Row(
         children: [
@@ -553,7 +563,8 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
 
   Widget _buildBottomZone(NavigationState state, dynamic unit) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       decoration: const BoxDecoration(
         color: AppColors.bgSurfaceDark,
         border: Border(top: BorderSide(color: AppColors.borderHairlineDark)),
@@ -616,7 +627,8 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
     ref.read(routeWeatherControllerProvider.notifier).stop();
 
     if (!context.mounted) return;
-    Navigator.of(context).popUntil((r) => r.settings.name == '/map' || r.isFirst);
+    Navigator.of(context)
+        .popUntil((r) => r.settings.name == '/map' || r.isFirst);
 
     if (tour != null && context.mounted) {
       // Name abfragen (leer = Standardtitel), dann im Tagebuch auffrischen.
@@ -642,8 +654,10 @@ class _ActiveNavigationScreenState extends ConsumerState<ActiveNavigationScreen>
               child: Text(i18n.tr('tour.discard')),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text.trim()),
+              style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accentPrimaryDark),
               child: Text(i18n.save),
             ),
           ],
@@ -681,7 +695,8 @@ class _OffRouteBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: AppColors.statusWarning.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
@@ -691,7 +706,8 @@ class _OffRouteBadge extends ConsumerWidget {
         children: [
           const Icon(Icons.route, color: AppColors.textPrimaryDark, size: 18),
           const SizedBox(width: AppSpacing.sm),
-          Text(ref.watch(i18nProvider).navOffRoute, style: AppTypography.caption),
+          Text(ref.watch(i18nProvider).navOffRoute,
+              style: AppTypography.caption),
         ],
       ),
     );
@@ -721,7 +737,8 @@ class _CircleButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _CircleButton({required this.icon, required this.label, required this.onTap});
+  const _CircleButton(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

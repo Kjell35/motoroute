@@ -68,6 +68,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Timer? _typingStopTimer;
   Timer? _fallbackPollTimer;
   bool _polling = false;
+  String? _loadedForToken;
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
+  Timer? _readTimer;
 
   ChatRepository get _repo => ref.read(chatRepositoryProvider);
   String? get _token => ref.read(chatSessionTokenProvider);
@@ -79,7 +82,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     _scrollController.addListener(_onScroll);
     _wireRealtime();
     // Lesen markieren (Abschnitt 17) nach kurzem Verweilen.
-    Timer(const Duration(seconds: 2), _markRead);
+    _readTimer = Timer(const Duration(seconds: 2), _markRead);
     // REST-Fallback: Solange der WebSocket nicht verbunden ist (Funkloch,
     // Render-Kaltstart), holt ein Poller neue Nachrichten - der Chat
     // funktioniert dann verzögert, aber zuverlässig (Vater-tauglich).
@@ -91,12 +94,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   @override
   void dispose() {
+    for (final subscription in _subscriptions) {
+      subscription.cancel();
+    }
     ref.read(chatRealtimeProvider).unsubscribe(widget.conversationId);
     _scrollController.dispose();
     _inputController.dispose();
     _composerFocus.dispose();
     _typingStopTimer?.cancel();
     _fallbackPollTimer?.cancel();
+    _readTimer?.cancel();
     super.dispose();
   }
 
@@ -107,10 +114,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     if (token == null || _polling) return;
     _polling = true;
     try {
-      final page = await _repo.messages(token, widget.conversationId, limit: 30);
-      if (!mounted) return;
+      final page =
+          await _repo.messages(token, widget.conversationId, limit: 30);
+      if (!mounted || _token != token) return;
       final knownIds = _messages.map((m) => m.id).toSet();
-      final fresh = page.messages.where((m) => !knownIds.contains(m.id)).toList();
+      final fresh =
+          page.messages.where((m) => !knownIds.contains(m.id)).toList();
       if (fresh.isNotEmpty) {
         final merged = [..._messages, ...fresh]
           ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -127,13 +136,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Future<void> _loadInitial() async {
     final token = _token;
     if (token == null) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
+    _loadedForToken = token;
     ref.read(chatRealtimeProvider).subscribe(widget.conversationId);
     try {
       final page = await _repo.messages(token, widget.conversationId);
-      if (!mounted) return;
+      if (!mounted || _token != token || _loadedForToken != token) return;
       setState(() {
         _messages
           ..clear()
@@ -145,12 +155,22 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       _jumpToBottom();
     } catch (e) {
       ErrorReporter.instance.report('chat.load', e);
-      if (!mounted) return;
+      if (!mounted || _token != token || _loadedForToken != token) return;
       setState(() {
         _isLoading = false;
-        _error = 'Nachrichten konnten nicht geladen werden · ${friendlyErrorMessage(e, ref.read(i18nProvider))}';
+        _error =
+            'Nachrichten konnten nicht geladen werden · ${friendlyErrorMessage(e, ref.read(i18nProvider))}';
       });
     }
+  }
+
+  Future<void> _retryInitialLoad() async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    await _loadInitial();
   }
 
   Future<void> _loadMore() async {
@@ -179,7 +199,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   void _wireRealtime() {
     final realtime = ref.read(chatRealtimeProvider);
-    realtime.messages.listen((msg) {
+    _subscriptions.add(realtime.messages.listen((msg) {
       if (!mounted || msg.conversationId != widget.conversationId) return;
       if (_messages.any((m) => m.id == msg.id)) return; // Dedupe (WS + Polling)
       setState(() {
@@ -187,8 +207,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         _otherTypingUserId = null;
       });
       _jumpToBottom();
-    });
-    realtime.deletions.listen((messageId) {
+    }));
+    _subscriptions.add(realtime.deletions.listen((messageId) {
       if (!mounted) return;
       setState(() {
         _messages = _messages
@@ -207,8 +227,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 : m)
             .toList(growable: false);
       });
-    });
-    realtime.typing.listen((t) {
+    }));
+    _subscriptions.add(realtime.typing.listen((t) {
       if (!mounted || t.userId == ref.read(chatMeProvider).value?.id) return;
       // Nur anzeigen, wenn in DIESEM Chat getippt wird (Abschnitt 19).
       setState(() => _otherTypingUserId = t.isTyping ? t.userId : null);
@@ -218,16 +238,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           if (mounted) setState(() => _otherTypingUserId = null);
         });
       }
-    });
-    realtime.connection.listen((up) {
+    }));
+    _subscriptions.add(realtime.connection.listen((up) {
       if (mounted) setState(() => _connected = up);
-    });
+    }));
   }
 
   Future<void> _markRead() async {
-    final token = _token;
-    if (token == null) return;
-    await ref.read(chatOverviewProvider.notifier).markRead(widget.conversationId);
+    if (_token == null) return;
+    await ref
+        .read(chatOverviewProvider.notifier)
+        .markRead(widget.conversationId);
   }
 
   void _jumpToBottom() {
@@ -247,7 +268,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     _inputController.clear();
     try {
       final msg = await _repo.send(token, widget.conversationId, text);
-      if (!mounted) return;
+      if (!mounted || _token != token) return;
       // Optimistisch anzeigen; WS-Dedupe verhindert Doppelung.
       if (!_messages.any((m) => m.id == msg.id)) {
         setState(() => _messages.add(msg));
@@ -258,7 +279,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       if (!mounted) return;
       _inputController.text = text; // Text zurück ins Feld (nichts verloren)
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Senden fehlgeschlagen: ${friendlyErrorMessage(e, ref.read(i18nProvider))}')),
+        SnackBar(
+            content: Text(
+                'Senden fehlgeschlagen: ${friendlyErrorMessage(e, ref.read(i18nProvider))}')),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -300,8 +323,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     } catch (e) {
       ErrorReporter.instance.report('chat.other', e);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: ${friendlyErrorMessage(e, ref.read(i18nProvider))}')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Löschen fehlgeschlagen: ${friendlyErrorMessage(e, ref.read(i18nProvider))}')));
       }
     }
   }
@@ -312,7 +336,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       context,
       title: 'Nachricht melden',
       onSubmit: (reason, details) async {
-        if (token != null) await _repo.reportMessage(token, msg.id, reason, details: details);
+        if (token != null) {
+          await _repo.reportMessage(token, msg.id, reason, details: details);
+        }
       },
     );
   }
@@ -330,8 +356,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.reply, color: AppColors.accentPrimaryDark),
-              title: const Text('Antworten', style: TextStyle(color: AppColors.textPrimaryDark)),
+              leading:
+                  const Icon(Icons.reply, color: AppColors.accentPrimaryDark),
+              title: const Text('Antworten',
+                  style: TextStyle(color: AppColors.textPrimaryDark)),
               onTap: () {
                 Navigator.pop(context);
                 setState(() => _replyToId = msg.id);
@@ -340,11 +368,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             ),
             if (isMine)
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: AppColors.statusDanger),
+                leading: const Icon(Icons.delete_outline,
+                    color: AppColors.statusDanger),
                 title: const Text('Nachricht löschen',
                     style: TextStyle(color: AppColors.textPrimaryDark)),
-                subtitle: const Text('Wird für alle als „Nachricht gelöscht“ angezeigt',
-                    style: TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
+                subtitle: const Text(
+                    'Wird für alle als „Nachricht gelöscht“ angezeigt',
+                    style: TextStyle(
+                        color: AppColors.textMutedDark, fontSize: 12)),
                 onTap: () {
                   Navigator.pop(context);
                   _deleteMessage(msg);
@@ -352,7 +383,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               ),
             if (!isMine)
               ListTile(
-                leading: const Icon(Icons.flag_outlined, color: AppColors.statusWarning),
+                leading: const Icon(Icons.flag_outlined,
+                    color: AppColors.statusWarning),
                 title: const Text('Nachricht melden',
                     style: TextStyle(color: AppColors.textPrimaryDark)),
                 onTap: () {
@@ -384,9 +416,36 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           ),
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+              ? const Center(
+                  child: CircularProgressIndicator(
+                      color: AppColors.accentPrimaryDark))
               : _error != null
-                  ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.textSecondaryDark)))
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.lg),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: AppColors.textSecondaryDark),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            FilledButton.icon(
+                              onPressed: _retryInitialLoad,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Erneut versuchen'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.accentPrimaryDark,
+                                foregroundColor: AppColors.textPrimaryDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                   : _buildMessageList(me),
         ),
         if (_otherTypingUserId != null) _buildTypingIndicator(),
@@ -406,12 +465,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 radius: 16,
                 backgroundColor: AppColors.bgSurfaceRaisedDark,
                 child: Text(
-                  widget.title.isNotEmpty ? widget.title.characters.first.toUpperCase() : 'G',
-                  style: const TextStyle(color: AppColors.accentPrimaryDark, fontSize: 13),
+                  widget.title.isNotEmpty
+                      ? widget.title.characters.first.toUpperCase()
+                      : 'G',
+                  style: const TextStyle(
+                      color: AppColors.accentPrimaryDark, fontSize: 13),
                 ),
               )
             else
-              const Icon(Icons.lock_outline, size: 18, color: AppColors.textSecondaryDark),
+              const Icon(Icons.lock_outline,
+                  size: 18, color: AppColors.textSecondaryDark),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -420,20 +483,26 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   Text(widget.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 16)),
+                      style: const TextStyle(
+                          color: AppColors.textPrimaryDark, fontSize: 16)),
                   if (widget.subtitle != null)
                     Text(widget.subtitle!,
-                        style: const TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
+                        style: const TextStyle(
+                            color: AppColors.textMutedDark, fontSize: 12)),
                 ],
               ),
             ),
             // Gruppeninfo (Abschnitt 33)
             if (widget.type == ConversationType.group)
               IconButton(
-                icon: const Icon(Icons.info_outline, color: AppColors.textSecondaryDark),
+                icon: const Icon(Icons.info_outline,
+                    color: AppColors.textSecondaryDark),
                 onPressed: () => Navigator.of(context).pushNamed(
                   '/chat/group-info',
-                  arguments: {'group': widget.group, 'conversationId': widget.conversationId},
+                  arguments: {
+                    'group': widget.group,
+                    'conversationId': widget.conversationId
+                  },
                 ),
               ),
           ],
@@ -445,11 +514,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   Widget _buildMessageList(ChatUser? me) {
     if (_messages.isEmpty) {
-      return Center(
+      return const Center(
         child: Text(
           'Noch keine Nachrichten.\nSchreib die erste!',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textMutedDark),
+          style: TextStyle(color: AppColors.textMutedDark),
         ),
       );
     }
@@ -463,7 +532,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           return _isLoadingMore
               ? const Padding(
                   padding: EdgeInsets.all(12),
-                  child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                  child: Center(
+                      child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2))),
                 )
               : TextButton(
                   onPressed: _loadMore,
@@ -484,24 +557,28 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   }
 
   Widget _buildTypingIndicator() {
-    return Padding(
-      padding: const EdgeInsets.only(left: AppSpacing.lg, bottom: 4),
+    return const Padding(
+      padding: EdgeInsets.only(left: AppSpacing.lg, bottom: 4),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
           'schreibt gerade …',
-          style: TextStyle(color: AppColors.textMutedDark, fontStyle: FontStyle.italic, fontSize: 12),
+          style: TextStyle(
+              color: AppColors.textMutedDark,
+              fontStyle: FontStyle.italic,
+              fontSize: 12),
         ),
       ),
     );
   }
 
   Widget _buildComposer() {
-    final disabled = _token == null;
+    final disabled = _token == null || _isLoading || _error != null;
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: const BoxDecoration(
           color: AppColors.bgSurfaceDark,
           border: Border(top: BorderSide(color: AppColors.borderHairlineDark)),
@@ -512,7 +589,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: Chip(
-                  label: const Text('Antworten', style: TextStyle(fontSize: 11)),
+                  label:
+                      const Text('Antworten', style: TextStyle(fontSize: 11)),
                   backgroundColor: AppColors.bgSurfaceRaisedDark,
                   onDeleted: () => setState(() => _replyToId = null),
                 ),
@@ -529,29 +607,37 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 onChanged: _onComposerChanged,
                 style: const TextStyle(color: AppColors.textPrimaryDark),
                 decoration: InputDecoration(
-                  hintText: disabled ? 'Zum Chatten anmelden' : 'Nachricht schreiben ...',
+                  hintText: disabled
+                      ? 'Zum Chatten anmelden'
+                      : 'Nachricht schreiben ...',
                   hintStyle: const TextStyle(color: AppColors.textMutedDark),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
-                    borderSide: const BorderSide(color: AppColors.borderHairlineDark),
+                    borderSide:
+                        const BorderSide(color: AppColors.borderHairlineDark),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            GestureDetector(
-              onTap: _send,
-              child: Container(
+            IconButton(
+              onPressed: disabled || _sending ? null : _send,
+              tooltip: 'Nachricht senden',
+              icon: Container(
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(color: AppColors.accentPrimaryDark, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                    color: AppColors.accentPrimaryDark, shape: BoxShape.circle),
                 child: _sending
                     ? const Padding(
                         padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimaryDark),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.textPrimaryDark),
                       )
-                    : const Icon(Icons.send, color: AppColors.textPrimaryDark, size: 20),
+                    : const Icon(Icons.send,
+                        color: AppColors.textPrimaryDark, size: 20),
               ),
             ),
           ],
@@ -583,22 +669,27 @@ class _RouteCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.bgSurfaceDark,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.accentPrimaryDark.withValues(alpha: 0.4)),
+        border: Border.all(
+            color: AppColors.accentPrimaryDark.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(name.toUpperCase(),
               style: const TextStyle(
-                  color: AppColors.accentPrimaryDark, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  color: AppColors.accentPrimaryDark,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5)),
           const SizedBox(height: 6),
           Text(
             [
               if (km != null) '${km.toStringAsFixed(0)} km',
-              if (hours != null) '$hours:${minutes.toString().padLeft(2, '0')} h',
+              if (hours != null)
+                '$hours:${minutes.toString().padLeft(2, '0')} h',
               if (score != null) '🌀 Kurven-Score $score',
             ].join(' · '),
-            style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
+            style:
+                const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
           ),
           if (routeId != null && routeId.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -611,9 +702,11 @@ class _RouteCard extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.route, size: 18),
                 label: const Text('ROUTE ÖFFNEN',
-                    style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                onPressed: () => Navigator.of(context)
-                    .pushNamed('/chat/group-route-planner', arguments: {'routeId': routeId}),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                onPressed: () => Navigator.of(context).pushNamed(
+                    '/chat/group-route-planner',
+                    arguments: {'routeId': routeId}),
               ),
             ),
           ],
@@ -651,9 +744,12 @@ class _MessageBubble extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.borderHairlineDark),
           ),
-          child: Text(
+          child: const Text(
             'Nachricht gelöscht',
-            style: TextStyle(color: AppColors.textMutedDark, fontStyle: FontStyle.italic, fontSize: 13),
+            style: TextStyle(
+                color: AppColors.textMutedDark,
+                fontStyle: FontStyle.italic,
+                fontSize: 13),
           ),
         ),
       );
@@ -663,9 +759,12 @@ class _MessageBubble extends StatelessWidget {
     final bubble = Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
       decoration: BoxDecoration(
-        color: isMine ? AppColors.accentPrimaryDark.withValues(alpha: 0.25) : AppColors.bgSurfaceRaisedDark,
+        color: isMine
+            ? AppColors.accentPrimaryDark.withValues(alpha: 0.25)
+            : AppColors.bgSurfaceRaisedDark,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
@@ -700,12 +799,14 @@ class _MessageBubble extends StatelessWidget {
           else
             Text(
               message.content,
-              style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 15, height: 1.3),
+              style: const TextStyle(
+                  color: AppColors.textPrimaryDark, fontSize: 15, height: 1.3),
             ),
           const SizedBox(height: 2),
           Text(
             formatClock(message.createdAt),
-            style: const TextStyle(color: AppColors.textMutedDark, fontSize: 10),
+            style:
+                const TextStyle(color: AppColors.textMutedDark, fontSize: 10),
           ),
         ],
       ),

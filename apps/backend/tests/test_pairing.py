@@ -19,7 +19,8 @@ def test_start_pairing_returns_token_and_url() -> None:
         response = client.post("/api/v1/pairing/start")
         assert response.status_code == 200
         body = response.json()
-        assert len(body["token"]) == 6
+        assert len(body["token"]) == 32
+        assert all(char in "0123456789ABCDEF" for char in body["token"])
         assert body["token"] == body["token"].upper()
         assert body["plan_url"].endswith(f"/plan/{body['token']}")
         assert body["expires_in_seconds"] > 0
@@ -67,19 +68,49 @@ def test_plan_roundtrip_via_update_and_read() -> None:
 
 def test_unknown_token_returns_404_not_sniffable() -> None:
     with _client() as client:
-        assert client.get("/api/v1/pairing/000000").status_code == 404
+        assert client.get("/api/v1/pairing/00000000000000000000000000000000").status_code == 404
         assert client.put(
-            "/api/v1/pairing/000000",
+            "/api/v1/pairing/00000000000000000000000000000000",
             json={"points": [{"label": "X", "lat": 0.0, "lon": 0.0}]},
         ).status_code == 404
 
 
 def test_plan_page_is_served_for_browser() -> None:
     with _client() as client:
-        response = client.get("/plan/ABC123")
+        token = client.post("/api/v1/pairing/start").json()["token"]
+        response = client.get(f"/plan/{token}")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
-        assert "ABC123" in response.text
+        assert token in response.text
+        assert response.headers["cache-control"] == "no-store"
+
+        assert client.get("/plan/ABC123").status_code == 404
+
+
+def test_pairing_plan_is_scoped_to_bearer_token_and_search_is_public(monkeypatch) -> None:
+    async def fake_fetch(path: str, params: dict[str, object]) -> dict[str, object]:
+        assert path == "/api"
+        assert params["q"] == "Mu"
+        return {"features": []}
+
+    monkeypatch.setattr("app.api.pairing.photon_client.fetch", fake_fetch)
+    with _client() as client:
+        token = client.post("/api/v1/pairing/start").json()["token"]
+        assert client.put(
+            f"/api/v1/pairing/{token}",
+            json={"points": [{"label": "Start", "lat": 48.0, "lon": 11.0}]},
+        ).status_code == 200
+        assert client.get(f"/api/v1/pairing/{token}").json()["points"][0]["label"] == "Start"
+
+        # Browser-Planung benutzt das isolierte Pairing-Geocoding statt des
+        # geschützten allgemeinen Geocode-Endpunkts.
+        search = client.get(f"/api/v1/pairing/geocode?token={token}&q=Mu&limit=6")
+        assert search.status_code == 200
+        assert search.json() == []
+        invalid_search = client.get(
+            "/api/v1/pairing/geocode?token=00000000000000000000000000000000&q=Mu"
+        )
+        assert invalid_search.status_code == 404
 
 
 def test_plan_validation_rejects_bad_points() -> None:

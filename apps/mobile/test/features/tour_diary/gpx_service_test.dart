@@ -24,8 +24,8 @@ void main() {
 
       expect(tour.title, 'Alpenrunde');
       expect(tour.track.length, 3);
-      expect(tour.startedAt!.toUtc().hour, 9);
-      expect(tour.endedAt!.toUtc().hour, 9);
+      expect(tour.startedAt.toUtc().hour, 9);
+      expect(tour.endedAt.toUtc().hour, 9);
       // Höhengewinn: 1100 -> 1120.5 (+20.5), 1120.5 -> 1115 (kein Gewinn).
       expect(tour.elevationGainMeters, closeTo(20.5, 0.1));
       // Distanz > 0 und grob plausibel (zwei Segmente à ~300 m).
@@ -105,7 +105,7 @@ void main() {
       expect(reimported.track.length, 3);
       expect(reimported.track.first.lat, closeTo(47.561, 0.0001));
       expect(reimported.track.last.lng, closeTo(10.751, 0.0001));
-      expect(reimported.startedAt!.toUtc(), DateTime.utc(2026, 9, 20, 9, 0, 0));
+      expect(reimported.startedAt.toUtc(), DateTime.utc(2026, 9, 20, 9, 0, 0));
       expect(reimported.durationSeconds, closeTo(120, 0.5));
       expect(reimported.pois.length, 1);
       expect(reimported.pois.first.label, 'Gasthaus');

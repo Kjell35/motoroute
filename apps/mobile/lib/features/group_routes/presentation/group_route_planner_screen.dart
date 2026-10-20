@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/utils/formatters.dart' show formatDistanceMeters, formatDurationSeconds;
+import '../../../core/utils/formatters.dart'
+    show formatDistanceMeters, formatDurationSeconds;
 import '../../chat/chat_providers.dart';
 import '../../search/search_providers.dart';
 import '../group_route_providers.dart';
@@ -19,10 +20,12 @@ class GroupRoutePlannerScreen extends ConsumerStatefulWidget {
   const GroupRoutePlannerScreen({super.key, required this.routeId});
 
   @override
-  ConsumerState<GroupRoutePlannerScreen> createState() => _GroupRoutePlannerScreenState();
+  ConsumerState<GroupRoutePlannerScreen> createState() =>
+      _GroupRoutePlannerScreenState();
 }
 
-class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScreen> {
+class _GroupRoutePlannerScreenState
+    extends ConsumerState<GroupRoutePlannerScreen> {
   Timer? _metricsPoll;
 
   @override
@@ -32,7 +35,11 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
       ref.read(groupRouteDetailProvider(widget.routeId).notifier).load();
       // Recalc läuft serverseitig asynchron - Metriken kurz nachziehen.
       _metricsPoll = Timer.periodic(const Duration(seconds: 8), (_) {
-        if (mounted) ref.read(groupRouteDetailProvider(widget.routeId).notifier).refreshFromRealtime();
+        if (mounted) {
+          ref
+              .read(groupRouteDetailProvider(widget.routeId).notifier)
+              .refreshFromRealtime();
+        }
       });
     });
   }
@@ -59,23 +66,30 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
           ..._appBarActions(context, async, me?.id),
           if (async.valueOrNull != null)
             IconButton(
-              icon: const Icon(Icons.groups, color: AppColors.textSecondaryDark),
+              icon:
+                  const Icon(Icons.groups, color: AppColors.textSecondaryDark),
               tooltip: 'Live-Gruppenfahrt',
-              onPressed: () => Navigator.of(context)
-                  .pushNamed('/chat/group-ride', arguments: {'routeId': widget.routeId}),
+              onPressed: () => Navigator.of(context).pushNamed(
+                  '/chat/group-ride',
+                  arguments: {'routeId': widget.routeId}),
             ),
         ],
       ),
       body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark)),
+        loading: () => const Center(
+            child:
+                CircularProgressIndicator(color: AppColors.accentPrimaryDark)),
         error: (msg, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('$msg', style: const TextStyle(color: AppColors.textSecondaryDark)),
+              Text('$msg',
+                  style: const TextStyle(color: AppColors.textSecondaryDark)),
               const SizedBox(height: AppSpacing.md),
               TextButton(
-                onPressed: () => ref.read(groupRouteDetailProvider(widget.routeId).notifier).load(force: true),
+                onPressed: () => ref
+                    .read(groupRouteDetailProvider(widget.routeId).notifier)
+                    .load(force: true),
                 child: const Text('Erneut versuchen'),
               ),
             ],
@@ -86,7 +100,8 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
     );
   }
 
-  List<Widget> _appBarActions(BuildContext context, AsyncValue<GroupRouteDetail> async, String? meId) {
+  List<Widget> _appBarActions(
+      BuildContext context, AsyncValue<GroupRouteDetail> async, String? meId) {
     final detail = async.valueOrNull;
     if (detail == null) return const [];
     final route = detail.route;
@@ -100,22 +115,31 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
           if (isOwner)
             const PopupMenuItem(
                 value: 'permission',
-                child: Text('Routenberechtigungen', style: TextStyle(color: AppColors.textPrimaryDark))),
+                child: Text('Routenberechtigungen',
+                    style: TextStyle(color: AppColors.textPrimaryDark))),
           const PopupMenuItem(
-              value: 'duplicate', child: Text('Route duplizieren', style: TextStyle(color: AppColors.textPrimaryDark))),
+              value: 'duplicate',
+              child: Text('Route duplizieren',
+                  style: TextStyle(color: AppColors.textPrimaryDark))),
           if (isOwner && route.status == GroupRouteStatus.finalized)
             const PopupMenuItem(
-                value: 'lock', child: Text('Route sperren', style: TextStyle(color: AppColors.textPrimaryDark))),
+                value: 'lock',
+                child: Text('Route sperren',
+                    style: TextStyle(color: AppColors.textPrimaryDark))),
           if (isOwner && route.status == GroupRouteStatus.locked)
             const PopupMenuItem(
-                value: 'unlock', child: Text('Route freigeben', style: TextStyle(color: AppColors.textPrimaryDark))),
+                value: 'unlock',
+                child: Text('Route freigeben',
+                    style: TextStyle(color: AppColors.textPrimaryDark))),
         ],
       ),
     ];
   }
 
-  Future<void> _onMenuAction(BuildContext context, String action, GroupRoute route, bool isOwner) async {
-    final controller = ref.read(groupRouteDetailProvider(widget.routeId).notifier);
+  Future<void> _onMenuAction(BuildContext context, String action,
+      GroupRoute route, bool isOwner) async {
+    final controller =
+        ref.read(groupRouteDetailProvider(widget.routeId).notifier);
     switch (action) {
       case 'permission':
         final current = route.permission;
@@ -126,20 +150,28 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
             title: const Text('Routenberechtigungen',
                 style: TextStyle(color: AppColors.textPrimaryDark)),
             children: [
-              RadioListTile<EditingPermission>(
-                value: EditingPermission.allMembers,
+              RadioGroup<EditingPermission>(
                 groupValue: current,
-                activeColor: AppColors.accentPrimaryDark,
-                title: const Text('🔓 Alle Gruppenmitglieder',
-                    style: TextStyle(color: AppColors.textPrimaryDark)),
-                onChanged: (v) => Navigator.pop(dialogContext, v),
-              ),
-              RadioListTile<EditingPermission>(
-                value: EditingPermission.ownerOnly,
-                groupValue: current,
-                activeColor: AppColors.accentPrimaryDark,
-                title: const Text('🔒 Nur Owner', style: TextStyle(color: AppColors.textPrimaryDark)),
-                onChanged: (v) => Navigator.pop(dialogContext, v),
+                onChanged: (value) {
+                  if (value != null) Navigator.pop(dialogContext, value);
+                },
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RadioListTile<EditingPermission>(
+                      value: EditingPermission.allMembers,
+                      activeColor: AppColors.accentPrimaryDark,
+                      title: Text('🔓 Alle Gruppenmitglieder',
+                          style: TextStyle(color: AppColors.textPrimaryDark)),
+                    ),
+                    RadioListTile<EditingPermission>(
+                      value: EditingPermission.ownerOnly,
+                      activeColor: AppColors.accentPrimaryDark,
+                      title: Text('🔒 Nur Owner',
+                          style: TextStyle(color: AppColors.textPrimaryDark)),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -163,7 +195,8 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
     }
   }
 
-  Widget _buildBody(BuildContext context, GroupRouteDetail detail, String? meId) {
+  Widget _buildBody(
+      BuildContext context, GroupRouteDetail detail, String? meId) {
     final route = detail.route;
     final isOwner = route.createdBy == meId;
     // Bearbeiten darf ich, wenn Owner/Ersteller ODER all_members (nicht
@@ -191,11 +224,14 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
               const SizedBox(height: AppSpacing.md),
               // Live-Gruppenfahrt (Abschnitt 18): wer fährt mit?
               OutlinedButton.icon(
-                icon: const Icon(Icons.groups, color: AppColors.accentSecondary),
+                icon:
+                    const Icon(Icons.groups, color: AppColors.accentSecondary),
                 label: const Text('👥 LIVE-GRUPPENFAHRT',
-                    style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
-                onPressed: () => Navigator.of(context)
-                    .pushNamed('/chat/group-ride', arguments: {'routeId': widget.routeId}),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, letterSpacing: 1)),
+                onPressed: () => Navigator.of(context).pushNamed(
+                    '/chat/group-ride',
+                    arguments: {'routeId': widget.routeId}),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.accentSecondary),
                   minimumSize: const Size.fromHeight(48),
@@ -216,12 +252,15 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
       child: Row(
         children: [
           Text(route.status.label,
-              style: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700)),
+              style: const TextStyle(
+                  color: AppColors.textPrimaryDark,
+                  fontWeight: FontWeight.w700)),
           const Spacer(),
           if (isOwner && route.status != GroupRouteStatus.locked)
             TextButton(
               onPressed: () {
-                final controller = ref.read(groupRouteDetailProvider(widget.routeId).notifier);
+                final controller =
+                    ref.read(groupRouteDetailProvider(widget.routeId).notifier);
                 controller.setStatus(
                   route.status == GroupRouteStatus.finalized
                       ? GroupRouteStatus.planning
@@ -229,7 +268,9 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
                 );
               },
               child: Text(
-                route.status == GroupRouteStatus.finalized ? 'Weiter planen' : 'Route fertigstellen',
+                route.status == GroupRouteStatus.finalized
+                    ? 'Weiter planen'
+                    : 'Route fertigstellen',
                 style: const TextStyle(color: AppColors.accentPrimaryDark),
               ),
             ),
@@ -265,7 +306,8 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
           const SizedBox(height: AppSpacing.md),
           Text(
             '${route.startName ?? 'Start'}  →  ${route.destName ?? 'Ziel'}',
-            style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13),
+            style: const TextStyle(
+                color: AppColors.textSecondaryDark, fontSize: 13),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -291,8 +333,12 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
       children: [
         Text(value,
             style: const TextStyle(
-                color: AppColors.textPrimaryDark, fontSize: 22, fontWeight: FontWeight.w700)),
-        Text(label, style: const TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
+                color: AppColors.textPrimaryDark,
+                fontSize: 22,
+                fontWeight: FontWeight.w700)),
+        Text(label,
+            style:
+                const TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
       ],
     );
   }
@@ -304,25 +350,31 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
         color: AppColors.bgSurfaceRaisedDark,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(text, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 11)),
+      child: Text(text,
+          style: const TextStyle(
+              color: AppColors.textSecondaryDark, fontSize: 11)),
     );
   }
 
-  Widget _stopsList(BuildContext context, GroupRouteDetail detail, bool canEdit) {
+  Widget _stopsList(
+      BuildContext context, GroupRouteDetail detail, bool canEdit) {
     final stops = detail.stops;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Stopps (${stops.length})',
             style: const TextStyle(
-                color: AppColors.textPrimaryDark, fontSize: 16, fontWeight: FontWeight.w700)),
+                color: AppColors.textPrimaryDark,
+                fontSize: 16,
+                fontWeight: FontWeight.w700)),
         const SizedBox(height: AppSpacing.sm),
         // START-Marker
         _terminalTile('START', route: true),
         if (stops.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-            child: Text('Noch keine Stopps - füge Tankstellen, Treffs oder Aussichtspunkte hinzu!',
+            child: Text(
+                'Noch keine Stopps - füge Tankstellen, Treffs oder Aussichtspunkte hinzu!',
                 style: TextStyle(color: AppColors.textMutedDark)),
           )
         else
@@ -331,7 +383,7 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: canEdit,
             itemCount: stops.length,
-            onReorder: _onReorder,
+            onReorderItem: _onReorderItem,
             itemBuilder: (context, index) {
               final stop = stops[index];
               return _stopTile(context, stop, canEdit, key: ValueKey(stop.id));
@@ -342,11 +394,11 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
     );
   }
 
-  void _onReorder(int oldIndex, int newIndex) {
-    final detail = ref.read(groupRouteDetailProvider(widget.routeId)).valueOrNull;
+  void _onReorderItem(int oldIndex, int newIndex) {
+    final detail =
+        ref.read(groupRouteDetailProvider(widget.routeId)).valueOrNull;
     if (detail == null) return;
     final stops = [...detail.stops];
-    if (newIndex > oldIndex) newIndex -= 1;
     final moved = stops.removeAt(oldIndex);
     stops.insert(newIndex, moved);
     ref.read(groupRouteDetailProvider(widget.routeId).notifier).reorder(stops);
@@ -362,26 +414,35 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
           const SizedBox(width: AppSpacing.sm),
           Text(label,
               style: const TextStyle(
-                  color: AppColors.textSecondaryDark, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                  color: AppColors.textSecondaryDark,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1)),
         ],
       ),
     );
   }
 
-  Widget _stopTile(BuildContext context, RouteStop stop, bool canEdit, {required Key key}) {
+  Widget _stopTile(BuildContext context, RouteStop stop, bool canEdit,
+      {required Key key}) {
     return ListTile(
       key: key,
       contentPadding: EdgeInsets.zero,
       leading: Text('${stop.position}.',
-          style: const TextStyle(color: AppColors.textMutedDark, fontWeight: FontWeight.w700)),
-      title: Text(stop.category.label + '  ' + stop.name,
-          style: const TextStyle(color: AppColors.textPrimaryDark), maxLines: 1, overflow: TextOverflow.ellipsis),
+          style: const TextStyle(
+              color: AppColors.textMutedDark, fontWeight: FontWeight.w700)),
+      title: Text('${stop.category.label}  ${stop.name}',
+          style: const TextStyle(color: AppColors.textPrimaryDark),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis),
       subtitle: stop.address != null
-          ? Text(stop.address!, style: const TextStyle(color: AppColors.textMutedDark, fontSize: 12))
+          ? Text(stop.address!,
+              style:
+                  const TextStyle(color: AppColors.textMutedDark, fontSize: 12))
           : null,
       trailing: canEdit
           ? IconButton(
-              icon: const Icon(Icons.close, color: AppColors.textMutedDark, size: 18),
+              icon: const Icon(Icons.close,
+                  color: AppColors.textMutedDark, size: 18),
               onPressed: () => _confirmDelete(context, stop),
             )
           : null,
@@ -393,12 +454,17 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.bgSurfaceDark,
-        title: const Text('Stopp wirklich entfernen?', style: TextStyle(color: AppColors.textPrimaryDark)),
-        content: Text(stop.name, style: const TextStyle(color: AppColors.textSecondaryDark)),
+        title: const Text('Stopp wirklich entfernen?',
+            style: TextStyle(color: AppColors.textPrimaryDark)),
+        content: Text(stop.name,
+            style: const TextStyle(color: AppColors.textSecondaryDark)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Abbrechen')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
+            style:
+                FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Entfernen'),
           ),
@@ -406,15 +472,19 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
       ),
     );
     if (confirmed == true) {
-      await ref.read(groupRouteDetailProvider(widget.routeId).notifier).deleteStop(stop.id);
+      await ref
+          .read(groupRouteDetailProvider(widget.routeId).notifier)
+          .deleteStop(stop.id);
     }
   }
 
   Widget _addStopButton(BuildContext context) {
     return OutlinedButton.icon(
-      icon: const Icon(Icons.add_location_alt, color: AppColors.accentPrimaryDark),
+      icon: const Icon(Icons.add_location_alt,
+          color: AppColors.accentPrimaryDark),
       label: const Text('＋ Stopp hinzufügen',
-          style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w600)),
+          style: TextStyle(
+              color: AppColors.textPrimaryDark, fontWeight: FontWeight.w600)),
       onPressed: () => _openAddStopSheet(context),
       style: OutlinedButton.styleFrom(
         side: const BorderSide(color: AppColors.accentPrimaryDark),
@@ -448,13 +518,17 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Änderungen',
-              style: TextStyle(color: AppColors.textSecondaryDark, fontWeight: FontWeight.w700, fontSize: 13)),
+              style: TextStyle(
+                  color: AppColors.textSecondaryDark,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13)),
           const SizedBox(height: AppSpacing.sm),
           ...detail.history.take(5).map((c) => Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   '${c.userName ?? 'Jemand'} · ${_actionLabel(c.action)}${c.detail != null ? ': ${c.detail}' : ''}',
-                  style: const TextStyle(color: AppColors.textMutedDark, fontSize: 12),
+                  style: const TextStyle(
+                      color: AppColors.textMutedDark, fontSize: 12),
                 ),
               )),
         ],
@@ -482,7 +556,8 @@ class _GroupRoutePlannerScreenState extends ConsumerState<GroupRoutePlannerScree
       ),
       icon: const Icon(Icons.motorcycle, size: 24),
       label: const Text('ROUTE STARTEN',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 1)),
+          style: TextStyle(
+              fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 1)),
       onPressed: () {
         // Übergabe an die normale MotoRoute-Navigation (Abschnitt 17).
         Navigator.of(context).pushNamed('/chat/group-route-start',
@@ -540,7 +615,8 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
   }
 
   Future<void> _add(SearchResult r, StopCategory category) async {
-    final controller = ref.read(groupRouteDetailProvider(widget.routeId).notifier);
+    final controller =
+        ref.read(groupRouteDetailProvider(widget.routeId).notifier);
     final stopId = await controller.addStop(RouteStop(
       id: 'pending',
       position: 0,
@@ -555,7 +631,9 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
       Navigator.pop(context);
       if (stopId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Stopp konnte nicht hinzugefügt werden (keine Berechtigung?)')),
+          const SnackBar(
+              content: Text(
+                  'Stopp konnte nicht hinzugefügt werden (keine Berechtigung?)')),
         );
       }
     }
@@ -566,7 +644,9 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
-          left: 20, right: 20, top: 20,
+          left: 20,
+          right: 20,
+          top: 20,
           bottom: MediaQuery.of(context).viewInsets.bottom + 20,
         ),
         child: Column(
@@ -574,7 +654,10 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text('Stopp hinzufügen',
-                style: TextStyle(color: AppColors.textPrimaryDark, fontSize: 18, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    color: AppColors.textPrimaryDark,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             TextField(
               controller: _searchController,
@@ -584,7 +667,8 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
               decoration: InputDecoration(
                 hintText: 'Adresse, Ort oder PLZ suchen …',
                 hintStyle: const TextStyle(color: AppColors.textMutedDark),
-                prefixIcon: const Icon(Icons.search, color: AppColors.textSecondaryDark),
+                prefixIcon: const Icon(Icons.search,
+                    color: AppColors.textSecondaryDark),
                 filled: true,
                 fillColor: AppColors.bgSurfaceRaisedDark,
                 border: OutlineInputBorder(
@@ -599,14 +683,17 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
               runSpacing: 8,
               children: StopCategory.values
                   .map((c) => ActionChip(
-                        label: Text(c.label, style: const TextStyle(fontSize: 12)),
+                        label:
+                            Text(c.label, style: const TextStyle(fontSize: 12)),
                         backgroundColor: AppColors.bgSurfaceRaisedDark,
                         onPressed: () {
                           // Kategorie als Name-Vorlage ohne Koordinate macht
                           // keinen Sinn - Nutzer sucht zuerst, Kategorie ist
                           // im Suchergebnis anpassbar (Placeholder-Tap).
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('${c.label}: Suche zuerst einen Ort aus.')),
+                            SnackBar(
+                                content: Text(
+                                    '${c.label}: Suche zuerst einen Ort aus.')),
                           );
                         },
                       ))
@@ -616,10 +703,13 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
             SizedBox(
               height: 240,
               child: _searching
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                          color: AppColors.accentPrimaryDark))
                   : _results.isEmpty
                       ? const Center(
-                          child: Text('Suche einen Ort - oder tippe später direkt auf der Karte.',
+                          child: Text(
+                              'Suche einen Ort - oder tippe später direkt auf der Karte.',
                               style: TextStyle(color: AppColors.textMutedDark)))
                       : ListView.builder(
                           itemCount: _results.length,
@@ -627,9 +717,12 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
                             final r = _results[i];
                             return ListTile(
                               dense: true,
-                              leading: const Icon(Icons.place, color: AppColors.accentPrimaryDark, size: 18),
+                              leading: const Icon(Icons.place,
+                                  color: AppColors.accentPrimaryDark, size: 18),
                               title: Text(r.label,
-                                  style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13)),
+                                  style: const TextStyle(
+                                      color: AppColors.textPrimaryDark,
+                                      fontSize: 13)),
                               onTap: () => _add(r, StopCategory.other),
                             );
                           },

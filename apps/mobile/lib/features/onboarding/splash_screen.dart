@@ -154,7 +154,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text(
+                const Text(
                   'MOTOROUTE',
                   style: TextStyle(
                     fontSize: 32,
@@ -164,7 +164,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text('Fahrspaß statt nur ankommen',
+                const Text('Fahrspaß statt nur ankommen',
                     style: AppTypography.caption),
                 const SizedBox(height: AppSpacing.xxl),
                 SizedBox(

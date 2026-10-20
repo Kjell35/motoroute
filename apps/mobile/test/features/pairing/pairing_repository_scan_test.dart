@@ -10,7 +10,9 @@ void main() {
   const String planBody = '{"points":['
       '{"label":"Start","lat":48.1,"lon":11.5},'
       '{"label":"Ziel","lat":49.4,"lon":11.1}]}';
-  const String scannedUrl = 'http://192.168.43.10:8000/plan/ABC123';
+  const String scannedUrl =
+      'http://192.168.43.10:8000/plan/ABCDEF0123456789ABCDEF0123456789';
+  const String scannedToken = 'ABCDEF0123456789ABCDEF0123456789';
 
   test('planOriginFromUrl/planTokenFromUrl: Scheme+Host+Port und Token', () {
     expect(
@@ -21,7 +23,7 @@ void main() {
       PairingRepository.planOriginFromUrl('https://motoroute.example.com/plan/abc123'),
       'https://motoroute.example.com',
     );
-    expect(PairingRepository.planTokenFromUrl(scannedUrl), 'ABC123');
+    expect(PairingRepository.planTokenFromUrl(scannedUrl), scannedToken);
     expect(PairingRepository.planTokenFromUrl('nicht einmal eine url'), isNull);
   });
 
@@ -30,7 +32,7 @@ void main() {
     final repo = PairingRepository(
       client: MockClient((request) async {
         hosts.add(request.url.host);
-        expect(request.url.path, '/api/v1/pairing/ABC123');
+        expect(request.url.path, '/api/v1/pairing/$scannedToken');
         return http.Response(planBody, 200);
       }),
     );

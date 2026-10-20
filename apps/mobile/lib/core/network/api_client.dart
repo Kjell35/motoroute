@@ -30,6 +30,9 @@ class ApiClient {
   );
 
   static const _overrideKey = 'settings.apiBaseUrl';
+  static const _maxAttempts = 3;
+  static const _maxRequestDuration = Duration(seconds: 60);
+  static const _retryDelay = Duration(seconds: 2);
 
   /// Cache der gespeicherten Override-URL - synchron lesbar, damit
   /// alle bestehenden Provider-Stellen (ApiClient.create()) unverändert
@@ -87,25 +90,27 @@ class ApiClient {
     return _normalized(prefs.getString(_overrideKey));
   }
 
-  /// Dio-Client mit der effektiven Basis-URL und KALTSTART-Toleranz.
-  ///
-  /// Render-Free-Tier: Die Instanz schläft nach ~15 min Leerlauf ein,
-  /// der erste Request wartet 30-60 s (bzw. scheitert an Connect-Timeout).
-  /// Der Interceptor wiederholt deshalb VERBINDUNGS-Fehler UND
-  /// 502/503/504 (Render-Deploy-Fenster) automatisch (bis zu 4 Versuche,
-  /// mit Backoff 2 s/4 s/6 s) - Timeouts beim Aufwecken werden so
-  /// unsichtbar gefressen, statt "Verbindung prüfen" zu zeigen.
-  /// Andere 4xx/5xx werden NICHT wiederholt (echte Serverantworten).
+  /// Dio-Client mit einer gemeinsamen Obergrenze für kalte/gestörte APIs.
+  /// Verbindungsfehler und 502/503/504 werden insgesamt höchstens dreimal
+  /// versucht; 401/andere 4xx/5xx sind echte Antworten und werden nicht
+  /// wiederholt. Auch ein langsamer Free-Tier-Kaltstart bleibt nach max. 60 s
+  /// erkennbar, statt beliebig lange alle Screens im Ladezustand festzuhalten.
   static Dio create() {
     final dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 25),
-        receiveTimeout: const Duration(seconds: 45),
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
       ),
     );
+    dio.interceptors.add(_RequestDeadlineInterceptor());
     dio.interceptors.add(_TokenRefreshInterceptor());
-    dio.interceptors.add(_ColdStartRetryInterceptor(dio));
+    dio.interceptors.add(_ColdStartRetryInterceptor(
+      dio,
+      maxAttempts: _maxAttempts,
+      maxRequestDuration: _maxRequestDuration,
+      retryDelay: _retryDelay,
+    ));
     return dio;
   }
 
@@ -168,8 +173,8 @@ class _TokenRefreshInterceptor extends Interceptor {
     try {
       final dio = Dio(BaseOptions(
         baseUrl: options.baseUrl,
-        connectTimeout: const Duration(seconds: 25),
-        receiveTimeout: const Duration(seconds: 45),
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
       ));
       final response = await dio.fetch<dynamic>(options);
       handler.resolve(response);
@@ -179,19 +184,36 @@ class _TokenRefreshInterceptor extends Interceptor {
   }
 }
 
-/// Wiederholt VERBINDUNGS-Fehler (Kaltstart des Render-Free-Tiers) und
-/// 502/503/504 (Render-Deploy-Fenster: waehrend des Deploys antwortet
-/// der Proxy mit Gateway-Fehlern, bevor die neue Version startet).
-/// Verbindungs-Layer-Fehler: connectionTimeout/connectionError/
-/// receiveTimeout. Ein 404/500 ist eine echte Antwort und wird nicht
-/// wiederholt. Maximal 4 Versuche mit wachsendem Abstand (2 s, 4 s,
-/// 6 s) - ein 60-s-Kaltstart passt damit in Versuch 1+2 (25 s Timeout
-/// + Pause + 25 s) oder Versuch 3+4.
-class _ColdStartRetryInterceptor extends Interceptor {
-  _ColdStartRetryInterceptor(this._dio);
-  final Dio _dio;
+/// Wiederholt vorübergehende Verbindungsfehler und 502/503/504 mit
+/// begrenzter Gesamtzeit. So bleibt Render-Kaltstart tolerant, ohne dass
+/// Chat- und Datenansichten endlos laden.
+Duration _minDuration(Duration a, Duration b) => a <= b ? a : b;
 
-  static const _maxAttempts = 4;
+/// Apply a single wall-clock budget across retries. Dio's connect/receive
+/// timeouts individually do not bound total time spent across retries.
+class _RequestDeadlineInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.extra['__requestStartedAt'] ??=
+        DateTime.now().millisecondsSinceEpoch;
+    handler.next(options);
+  }
+}
+
+class _ColdStartRetryInterceptor extends Interceptor {
+  _ColdStartRetryInterceptor(
+    this._dio, {
+    required int maxAttempts,
+    required Duration maxRequestDuration,
+    required Duration retryDelay,
+  })  : _maxAttempts = maxAttempts,
+        _maxRequestDuration = maxRequestDuration,
+        _retryDelay = retryDelay;
+
+  final Dio _dio;
+  final int _maxAttempts;
+  final Duration _maxRequestDuration;
+  final Duration _retryDelay;
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
@@ -205,16 +227,33 @@ class _ColdStartRetryInterceptor extends Interceptor {
     final isDeployWindow = status == 502 || status == 503 || status == 504;
 
     final attempts = (err.requestOptions.extra['__retryCount'] as int?) ?? 0;
-    if ((!isConnectionIssue && !isDeployWindow) || attempts >= _maxAttempts - 1) {
+    final startedAt = err.requestOptions.extra['__requestStartedAt'] as int? ??
+        DateTime.now().millisecondsSinceEpoch;
+    final elapsed = DateTime.now().millisecondsSinceEpoch - startedAt;
+    final delay = Duration(milliseconds: _retryDelay.inMilliseconds * attempts);
+    if ((!isConnectionIssue && !isDeployWindow) ||
+        attempts >= _maxAttempts - 1 ||
+        elapsed + delay.inMilliseconds >= _maxRequestDuration.inMilliseconds) {
       handler.next(err);
       return;
     }
 
-    final delay = Duration(seconds: 2 * (attempts + 1));
     await Future<void>.delayed(delay);
 
     final options = err.requestOptions;
     options.extra['__retryCount'] = attempts + 1;
+    options.extra['__requestStartedAt'] = startedAt;
+    final remaining = _maxRequestDuration -
+        Duration(
+            milliseconds: DateTime.now().millisecondsSinceEpoch - startedAt);
+    if (remaining <= Duration.zero) {
+      handler.next(err);
+      return;
+    }
+    options.connectTimeout =
+        _minDuration(const Duration(seconds: 15), remaining);
+    options.receiveTimeout =
+        _minDuration(const Duration(seconds: 20), remaining);
     try {
       final response = await _dio.fetch<void>(options);
       handler.resolve(response);

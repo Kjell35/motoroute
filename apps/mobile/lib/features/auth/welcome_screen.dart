@@ -23,6 +23,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   final _nameController = TextEditingController();
   bool _isRegister = false;
   bool _obscure = true;
+  bool _submitting = false;
   String? _error;
 
   @override
@@ -34,12 +35,32 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    if (email.isEmpty || password.length < 6) {
-      setState(() => _error = 'E-Mail eingeben und Passwort (min. 6 Zeichen)');
+    final emailOk = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email);
+    if (!emailOk) {
+      setState(() => _error = 'Bitte gib eine gültige E-Mail-Adresse ein.');
       return;
     }
+    if (password.isEmpty) {
+      setState(() => _error = 'Bitte gib dein Passwort ein.');
+      return;
+    }
+    if (_isRegister && password.length < 8) {
+      setState(
+          () => _error = 'Das Passwort muss mindestens 8 Zeichen lang sein.');
+      return;
+    }
+    if (_isRegister && _nameController.text.trim().length < 2) {
+      setState(
+          () => _error = 'Bitte gib deinen Namen ein (mindestens 2 Zeichen).');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
 
     // 1) Anmelden/Registrieren (Sitzung lebt erst mal nur In-Memory).
     try {
@@ -51,7 +72,20 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
             displayName: _nameController.text.trim(),
           );
     } on AuthException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _submitting = false;
+        });
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Anmeldung fehlgeschlagen. Bitte versuche es erneut.';
+          _submitting = false;
+        });
+      }
       return;
     }
 
@@ -64,7 +98,19 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     //    Login-Call): danach überlebt sie App-Neustarts. Bei "Nein"
     //    bleibt alles In-Memory und endet mit dem Prozess.
     if (remember) {
-      await ref.read(authControllerProvider.notifier).persistCurrentSession();
+      try {
+        await ref.read(authControllerProvider.notifier).persistCurrentSession();
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _error =
+                'Sichere Anmeldungsspeicherung nicht verfügbar. Bitte erneut versuchen.';
+            _submitting = false;
+          });
+        }
+        await ref.read(authControllerProvider.notifier).logout();
+        return;
+      }
     }
 
     if (!mounted) return;
@@ -78,6 +124,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
         backgroundColor: AppColors.accentPrimaryDark,
       ),
     );
+    setState(() => _submitting = false);
     Navigator.of(context).pushReplacementNamed('/home');
   }
 
@@ -85,6 +132,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.bgSurfaceDark,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -92,7 +140,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
           children: [
             const Icon(Icons.phone_iphone, color: AppColors.accentPrimaryDark),
             const SizedBox(width: AppSpacing.sm),
-            Text(ref.read(i18nProvider).tr('auth.rememberQuestion'), style: AppTypography.title),
+            Text(ref.read(i18nProvider).tr('auth.rememberQuestion'),
+                style: AppTypography.title),
           ],
         ),
         content: Text(
@@ -141,7 +190,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     shape: BoxShape.circle,
                     color: AppColors.accentPrimaryDark.withValues(alpha: 0.12),
                     border: Border.all(
-                      color: AppColors.accentPrimaryDark.withValues(alpha: 0.35),
+                      color:
+                          AppColors.accentPrimaryDark.withValues(alpha: 0.35),
                       width: 2,
                     ),
                   ),
@@ -150,7 +200,9 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  _isRegister ? i18n.tr('auth.welcomeRegister') : i18n.tr('auth.welcomeLogin'),
+                  _isRegister
+                      ? i18n.tr('auth.welcomeRegister')
+                      : i18n.tr('auth.welcomeLogin'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 26,
@@ -171,20 +223,52 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                   TextField(
                     controller: _nameController,
                     textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.name],
+                    enabled: !_submitting,
                     decoration: _inputDecoration(i18n.tr('auth.yourName')),
+                    onChanged: (_) {
+                      if (_error != null) setState(() => _error = null);
+                    },
                   ),
                   const SizedBox(height: AppSpacing.md),
                 ],
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [
+                    AutofillHints.username,
+                    AutofillHints.email
+                  ],
                   autocorrect: false,
-                  decoration: _inputDecoration(i18n.email),
+                  enabled: !_submitting,
+                  decoration: _inputDecoration(i18n.email).copyWith(
+                    errorText: _emailController.text.isNotEmpty &&
+                            !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+                                .hasMatch(_emailController.text.trim())
+                        ? 'E-Mail-Adresse prüfen'
+                        : null,
+                  ),
+                  onChanged: (_) => setState(() {
+                    _error = null;
+                  }),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscure,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: [
+                    _isRegister
+                        ? AutofillHints.newPassword
+                        : AutofillHints.password
+                  ],
+                  enabled: !_submitting,
+                  onSubmitted: (_) => _submit(),
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
                   decoration: _inputDecoration(i18n.password).copyWith(
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -213,14 +297,14 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                 SizedBox(
                   height: AppSpacing.touchTargetPlanning,
                   child: FilledButton(
-                    onPressed: auth.isBusy ? null : _submit,
+                    onPressed: auth.isBusy || _submitting ? null : _submit,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.accentPrimaryDark,
                       foregroundColor: AppColors.textPrimaryDark,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: auth.isBusy
+                    child: auth.isBusy || _submitting
                         ? const SizedBox(
                             width: 22,
                             height: 22,
@@ -235,12 +319,12 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextButton(
-                  onPressed: auth.isBusy
+                  onPressed: auth.isBusy || _submitting
                       ? null
                       : () => setState(() {
-                          _isRegister = !_isRegister;
-                          _error = null;
-                        }),
+                            _isRegister = !_isRegister;
+                            _error = null;
+                          }),
                   child: Text(
                     _isRegister
                         ? i18n.tr('auth.hasAccount')
@@ -250,7 +334,10 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
+                  onPressed: auth.isBusy || _submitting
+                      ? null
+                      : () =>
+                          Navigator.of(context).pushReplacementNamed('/home'),
                   child: Text(
                     i18n.tr('auth.browseWithoutAccount'),
                     style: const TextStyle(color: AppColors.textMutedDark),

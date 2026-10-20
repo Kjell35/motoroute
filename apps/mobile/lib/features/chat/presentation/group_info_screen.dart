@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -47,6 +49,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
       // erwartet die Gruppen-UUID - aus dem Gruppenobjekt oder Nachladen.
       final groupId = (_group?['id'] ?? '') as String;
       final group = groupId.isEmpty ? _group : await repo.group(token, groupId);
+      if (group != null && group['id'] != null) _group = group;
       final members = await repo.listMembers(token, widget.conversationId);
       if (!mounted) return;
       String? code;
@@ -170,14 +173,51 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Einladungscode',
+            const Text('QR-Code und Einladungscode',
                 style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+            if (_activeCode != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Center(
+                child: Container(
+                  width: 210,
+                  height: 210,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: PrettyQrView.data(
+                    data: 'motoroute://group-invite/${Uri.encodeComponent(_activeCode!)}',
+                    errorCorrectLevel: QrErrorCorrectLevel.H,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const Text(
+                'Lade Biker ein: QR-Code scannen oder Code teilen.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 6),
-            SelectableText(
-              _activeCode ?? 'Noch kein aktiver Code',
-              style: const TextStyle(
-                  color: AppColors.textPrimaryDark, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 2),
-            ),
+            if (_activeCode != null)
+              SelectableText(
+                _activeCode!,
+                style: const TextStyle(
+                    color: AppColors.textPrimaryDark, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 2),
+              )
+            else
+              const Text('Noch kein aktiver Code',
+                  style: TextStyle(color: AppColors.textMutedDark)),
+            if (_activeCode != null)
+              TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: _activeCode!));
+                  if (mounted) _showCopiedSnackBar('Einladungscode kopiert');
+                },
+                icon: const Icon(Icons.copy, size: 16),
+                label: const Text('Code kopieren'),
+              ),
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [

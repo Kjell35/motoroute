@@ -1,18 +1,21 @@
-// Smoke-Test: Die App startet ohne Crash. Der Splash wiederherstellt
-// keine Sitzung (keine persistierte) und leitet zur Willkommens-/Login-
-// Seite weiter; mit gespeicherter Sitzung (+ "Gerät merken") würde die
-// Tab-Shell mit Begrüßung kommen. shared_preferences braucht in Unit-
-// Tests Mock-Initialwerte; der Splash navigiert nach min. 900 ms.
+// App smoke tests: splash navigation, resilience to auth restore failures,
+// and regressions in route navigation state.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
+import 'package:motoroute_app/core/state/app_providers.dart';
+import 'package:motoroute_app/features/poi/biker_poi_sync.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
+import 'package:motoroute_app/features/badges/presentation/badges_screen.dart';
+import 'package:motoroute_app/features/map/data/location_repository.dart';
 import 'package:motoroute_app/features/onboarding/splash_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:motoroute_app/features/shell/home_shell.dart';
+import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
 import 'package:motoroute_app/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _HangingRestoreAuthController extends AuthController {
   @override
@@ -24,6 +27,21 @@ class _FailingRestoreAuthController extends AuthController {
   Future<void> restore() async => throw StateError('restore failed');
 }
 
+class _EmptyBikerPoiSyncController extends BikerPoiSyncController {
+  _EmptyBikerPoiSyncController() : super(Dio());
+
+  @override
+  Future<void> restoreCache() async {}
+
+  @override
+  Future<void> sync({double? lat, double? lng, double? radiusKm}) async {}
+}
+
+class _NoPermissionLocationRepository extends LocationRepository {
+  @override
+  Future<bool> ensurePermission() async => false;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -31,17 +49,70 @@ void main() {
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const MotoRouteApp());
-    // Splash-Anzeige + Weiter-Navigation: Timer (900 ms) feuert, dann
-    // laufen Restore/SharedPreferences als Mikrotasks, danach baut die
-    // Willkommensroute (eigene Pumps, keine pumpAndSettle - der Splash-
-    // Fortschrittsbalken animiert endlos und würde settle blockieren).
+    // Auth restore is deliberately capped at four seconds in the splash.
+    // Let that timeout/navigation complete instead of assuming local storage
+    // and the secure-store plugin always return immediately in a widget test.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(find.byType(MotoRouteApp), findsOneWidget);
+    expect(find.text('Willkommen zurück!'), findsOneWidget);
+  });
+
+  testWidgets('Mehr-Menü bietet direkten Einstieg zum Trophäenschrank',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        bikerPoiSyncProvider
+            .overrideWith((ref) => _EmptyBikerPoiSyncController()),
+      ],
+      child: MaterialApp(
+        home: const HomeShell(),
+        routes: {'/badges': (_) => const BadgesScreen()},
+      ),
+    ));
+    // Kein pumpAndSettle: Die Karte enthält laufende Animationen und
+    // Hintergrund-Syncs, die nicht zum Settlen kommen müssen.
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.pump(const Duration(milliseconds: 1000));
+
+    await tester.tap(find.text('Mehr').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(MotoRouteApp), findsOneWidget);
-    // Der Willkommens-Screen zeigt seine Begrüßungs-Headline.
-    expect(find.text('Willkommen zurück!'), findsOneWidget);
+    expect(find.text('Pass-Knacker'), findsOneWidget);
+    await tester.tap(find.text('Pass-Knacker'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Bitte melde dich an, um Badges zu sammeln.'),
+        findsOneWidget);
+  });
+
+  testWidgets('Wegpunktmodus bleibt beim Wechsel zur Karte aktiv',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        locationRepositoryProvider
+            .overrideWithValue(_NoPermissionLocationRepository()),
+      ],
+      child: MaterialApp(
+        home: const WaypointManagementScreen(),
+        routes: {
+          '/map': (_) => Consumer(
+                builder: (context, ref, _) => Text(
+                  'Kartentap-Modus: ${ref.watch(mapWaypointTapModeProvider)}',
+                ),
+              ),
+        },
+      ),
+    ));
+
+    expect(find.text('Auf Karte antippen'), findsOneWidget);
+    await tester.tap(find.text('Auf Karte antippen'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kartentap-Modus: true'), findsOneWidget);
   });
 
   for (final (description, controller) in <(String, AuthController)>[

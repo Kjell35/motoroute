@@ -4,6 +4,7 @@
 /// und App nie unbemerkt auseinanderlaufen (z. B. bei einem neuen
 /// Fahrstil müssen beide Seiten geändert werden, aber an klar
 /// auffindbarer Stelle).
+library;
 
 enum VehicleType { motorcycle, car, bicycle }
 

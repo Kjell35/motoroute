@@ -22,10 +22,12 @@ class RoundTripPlannerScreen extends ConsumerStatefulWidget {
   const RoundTripPlannerScreen({super.key});
 
   @override
-  ConsumerState<RoundTripPlannerScreen> createState() => _RoundTripPlannerScreenState();
+  ConsumerState<RoundTripPlannerScreen> createState() =>
+      _RoundTripPlannerScreenState();
 }
 
-class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen> {
+class _RoundTripPlannerScreenState
+    extends ConsumerState<RoundTripPlannerScreen> {
   double _distanceKm = 125;
   RouteStyle _style = RouteStyle.curvy;
   String _direction = 'RANDOM';
@@ -34,7 +36,8 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
   Waypoint? _start;
 
   /// Styles passend zum gewaehlten Fahrzeug (wie im Punkt-zu-Punkt-Flow).
-  List<RouteStyle> get _supportedStyles => switch (ref.read(vehicleTypeProvider)) {
+  List<RouteStyle> get _supportedStyles =>
+      switch (ref.read(vehicleTypeProvider)) {
         VehicleType.motorcycle => const [
             RouteStyle.fast,
             RouteStyle.curvy,
@@ -107,9 +110,12 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
       if (!mounted) return;
       if (_start == null) {
         await _pickStartViaSearch();
-        if (!mounted || _start == null) {
+        if (!mounted) return;
+        if (_start == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(ref.read(i18nProvider).tr('route.chooseStart.noFix'))),
+            SnackBar(
+                content:
+                    Text(ref.read(i18nProvider).tr('route.chooseStart.noFix'))),
           );
           return;
         }
@@ -136,7 +142,8 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
           RoutingFailure(:final message) => message,
           UnexpectedFailure() => ref.read(i18nProvider).errUnknown,
         };
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       },
       (route) {
         final computed = ComputedRoute.fromDomain(route);
@@ -179,10 +186,11 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
                   ),
                   SliderTheme(
                     data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: AppColors.statusDanger,
+                      activeTrackColor: AppColors.accentPrimaryDark,
                       inactiveTrackColor: AppColors.bgSurfaceRaisedDark,
-                      thumbColor: AppColors.textPrimaryLight,
-                      overlayColor: AppColors.statusDanger.withValues(alpha: 0.15),
+                      thumbColor: AppColors.accentPrimaryDark,
+                      overlayColor:
+                          AppColors.accentPrimaryDark.withValues(alpha: 0.15),
                     ),
                     child: Slider(
                       value: _distanceKm,
@@ -206,12 +214,15 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
                           label: i18n.tr('roundtrip.startFrom'),
                           value: _locating
                               ? i18n.tr('roundtrip.locating')
-                              : (_start?.label ?? i18n.tr('roundtrip.startAuto')),
-                          onTap: _locating ? null : () async {
-                            await _ensureStart();
-                            if (!mounted || _start != null) return;
-                            await _pickStartViaSearch();
-                          },
+                              : (_start?.label ??
+                                  i18n.tr('roundtrip.startAuto')),
+                          onTap: _locating
+                              ? null
+                              : () async {
+                                  await _ensureStart();
+                                  if (!mounted || _start != null) return;
+                                  await _pickStartViaSearch();
+                                },
                         ),
                         _Divider(),
                         // Routingprofil: zyklisch durch die unterstuetzten
@@ -222,7 +233,8 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
                           value: _styleLabel(_style, i18n),
                           onTap: () {
                             final styles = _supportedStyles;
-                            final next = styles[(styles.indexOf(_style) + 1) % styles.length];
+                            final next = styles[
+                                (styles.indexOf(_style) + 1) % styles.length];
                             setState(() => _style = next);
                           },
                         ),
@@ -233,8 +245,15 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
                           label: i18n.tr('roundtrip.direction'),
                           value: _directionLabel(_direction, i18n),
                           onTap: () {
-                            const order = ['RANDOM', 'NORTH', 'EAST', 'SOUTH', 'WEST'];
-                            final next = order[(order.indexOf(_direction) + 1) % order.length];
+                            const order = [
+                              'RANDOM',
+                              'NORTH',
+                              'EAST',
+                              'SOUTH',
+                              'WEST'
+                            ];
+                            final next = order[
+                                (order.indexOf(_direction) + 1) % order.length];
                             setState(() => _direction = next);
                           },
                         ),
@@ -253,9 +272,10 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
                 child: ElevatedButton(
                   onPressed: _creating ? null : _create,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.statusDanger,
-                    foregroundColor: AppColors.textPrimaryLight,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    backgroundColor: AppColors.accentPrimaryDark,
+                    foregroundColor: AppColors.textPrimaryDark,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28)),
                   ),
                   child: _creating
                       ? const SizedBox(
@@ -263,11 +283,12 @@ class _RoundTripPlannerScreenState extends ConsumerState<RoundTripPlannerScreen>
                           height: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            color: AppColors.textPrimaryLight,
+                            color: AppColors.textPrimaryDark,
                           ),
                         )
                       : Text(i18n.tr('roundtrip.create'),
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                          style: const TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.w600)),
                 ),
               ),
             ),
@@ -284,7 +305,11 @@ class _Row extends StatelessWidget {
   final String value;
   final VoidCallback? onTap;
 
-  const _Row({required this.icon, required this.label, required this.value, this.onTap});
+  const _Row(
+      {required this.icon,
+      required this.label,
+      required this.value,
+      this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -292,14 +317,16 @@ class _Row extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
         child: Row(
           children: [
             Icon(icon, color: AppColors.textSecondaryDark, size: 20),
             const SizedBox(width: AppSpacing.md),
             Expanded(child: Text(label, style: AppTypography.bodyStrong)),
             Text(value,
-                style: AppTypography.body.copyWith(color: AppColors.textSecondaryDark)),
+                style: AppTypography.body
+                    .copyWith(color: AppColors.textSecondaryDark)),
             const SizedBox(width: AppSpacing.xs),
           ],
         ),

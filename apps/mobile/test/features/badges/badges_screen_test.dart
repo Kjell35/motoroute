@@ -23,7 +23,7 @@ BadgeShelf _shelf() => BadgeShelf(
           unlocked: true,
           unlockedAt: DateTime.parse('2026-09-27T10:00:00Z'),
         ),
-        BadgeItem(
+        const BadgeItem(
           id: 'b2',
           title: 'Köterberg',
           description: 'Treff',

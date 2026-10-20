@@ -364,7 +364,7 @@ class MarketplaceRepository {
       '/v1/marketplace/me/listings/$id/status',
       data: {'status': status},
     );
-    return MpListing.fromJson((res.data ?? const {}) as Map<String, dynamic>);
+    return MpListing.fromJson(res.data ?? const {});
   }
 
   Future<void> delete({required String token, required String id}) async {

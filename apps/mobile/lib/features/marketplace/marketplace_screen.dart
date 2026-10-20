@@ -513,7 +513,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       builder: (sheetContext) {
         var condition = _filter.condition;
         var shipping = _filter.shipping == true;
-        var maxPriceController = TextEditingController(
+        final maxPriceController = TextEditingController(
           text: _filter.maxPrice != null ? (_filter.maxPrice! / 100).toStringAsFixed(0) : '',
         );
         return StatefulBuilder(
@@ -681,7 +681,7 @@ class _ListingCard extends StatelessWidget {
                       children: [
                         Text(
                           listing.priceLabel,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
                             color: AppColors.accentPrimaryDark,

@@ -426,8 +426,8 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                                           ? 0
                                           : shelf.unlockedCount / shelf.totalCount,
                                       minHeight: 8,
-                                      backgroundColor: textSecondary.withOpacity(0.2),
-                                      valueColor: AlwaysStoppedAnimation(AppColors.accentPrimaryDark),
+                                      backgroundColor: textSecondary.withValues(alpha: 0.2),
+                                      valueColor: const AlwaysStoppedAnimation(AppColors.accentPrimaryDark),
                                     ),
                                   ),
                                 ],
@@ -536,7 +536,7 @@ class _BadgeCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: raised,
         borderRadius: BorderRadius.circular(16),
-        border: unlocked ? Border.all(color: color.withOpacity(0.6), width: 1.5) : null,
+        border: unlocked ? Border.all(color: color.withValues(alpha: 0.6), width: 1.5) : null,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

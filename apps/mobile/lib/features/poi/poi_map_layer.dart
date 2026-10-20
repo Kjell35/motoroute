@@ -19,7 +19,7 @@ import 'package:motoroute_app/features/poi/poi_providers.dart';
 ///   Drosselung würde jedes Kartenschubsen einen Backend-/Overpass-
 ///   Request auslösen.
 class PoiMapLayer {
-  final MaplibreMapController? Function() _controllerGetter;
+  final MapLibreMapController? Function() _controllerGetter;
 
   static const _maxCircles = 200;
 
@@ -78,7 +78,8 @@ class PoiMapLayer {
         if (!_rendered) {
           await refresh(ref, bounds);
         } else {
-          final tooSoon = DateTime.now().difference(_lastLoad) < const Duration(seconds: 5);
+          final tooSoon =
+              DateTime.now().difference(_lastLoad) < const Duration(seconds: 5);
           if (!tooSoon) await refresh(ref, bounds);
         }
       } else if (_rendered) {
@@ -104,8 +105,8 @@ class PoiMapLayer {
     final now = DateTime.now();
     final sameCategories = categories.difference(_lastCategories).isEmpty &&
         _lastCategories.difference(categories).isEmpty;
-    final sameArea =
-        _lastLoadedBounds != null && _containsBounds(_lastLoadedBounds!, bounds);
+    final sameArea = _lastLoadedBounds != null &&
+        _containsBounds(_lastLoadedBounds!, bounds);
     final tooSoon = now.difference(_lastLoad) < const Duration(seconds: 5);
 
     if (sameCategories && sameArea && tooSoon) return;
@@ -176,9 +177,9 @@ class PoiMapLayer {
           ..clear()
           ..addEntries(fallback.map((p) => MapEntry(p.id, p)));
         ref.read(poiLayerControllerProvider.notifier).adoptMerged(
-              osmPois: const [],
-              bikerPois: fallback,
-            );
+          osmPois: const [],
+          bikerPois: fallback,
+        );
         await _render(fallback);
       } catch (_) {
         ref
@@ -225,8 +226,9 @@ class PoiMapLayer {
         .where((p) => categories.contains(p.category))
         .where((p) => _inBounds(p, bounds))
         .toList();
-    final currentOsm =
-        _poisById.values.where((p) => p.source != 'BIKER_SERVICE').toList(growable: false);
+    final currentOsm = _poisById.values
+        .where((p) => p.source != 'BIKER_SERVICE')
+        .toList(growable: false);
     final combined = <Poi>[...bikerPois, ...currentOsm];
 
     _poisById
@@ -309,7 +311,9 @@ class PoiMapLayer {
           final symbol = await controller.addSymbol(
             SymbolOptions(
               geometry: LatLng(poi.lat, poi.lng),
-              textField: poi.name.length > 24 ? '${poi.name.substring(0, 24)}…' : poi.name,
+              textField: poi.name.length > 24
+                  ? '${poi.name.substring(0, 24)}…'
+                  : poi.name,
               textSize: 11,
               textColor: '#FFFFFF',
               textHaloColor: '#0B0E11',

@@ -31,14 +31,20 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
   @override
   void initState() {
     super.initState();
+    _tabs.addListener(_onTabChanged);
     // Nach dem ersten Frame laden (Provider-Zugriff im State).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(chatOverviewProvider.notifier).load();
     });
   }
 
+  void _onTabChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     super.dispose();
   }
@@ -93,12 +99,16 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
                     _ConversationListTab(
                       conversations: state.conversations.where((c) => c.type == ConversationType.private).toList(),
                       emptyText: 'Noch keine privaten Chats.\nSuche einen Biker und starte ein Gespräch!',
+                      actionLabel: 'Biker suchen',
                       onNew: () => Navigator.of(context).pushNamed('/chat/new'),
+                      onRefresh: () => ref.read(chatOverviewProvider.notifier).load(),
                     ),
                     _ConversationListTab(
                       conversations: state.conversations.where((c) => c.type == ConversationType.group).toList(),
                       emptyText: 'Noch keine Gruppen.\nErstelle eine oder tritt per Einladungscode bei!',
+                      actionLabel: 'Gruppe erstellen oder beitreten',
                       onNew: () => _showGroupActions(context),
+                      onRefresh: () => ref.read(chatOverviewProvider.notifier).load(),
                     ),
                   ],
                 ),
@@ -204,7 +214,7 @@ class _PublicTabState extends ConsumerState<_PublicTab> {
               style: TextStyle(color: AppColors.statusWarning, fontSize: 12),
             ),
           ),
-        Expanded(
+        const Expanded(
           child: ConversationScreen(
             conversationId: publicConversationId,
             title: '🌍 Öffentlicher Chat',
@@ -220,41 +230,68 @@ class _PublicTabState extends ConsumerState<_PublicTab> {
 class _ConversationListTab extends StatelessWidget {
   final List<ConversationSummary> conversations;
   final String emptyText;
+  final String actionLabel;
   final VoidCallback onNew;
+  final Future<void> Function() onRefresh;
 
   const _ConversationListTab({
     required this.conversations,
     required this.emptyText,
+    required this.actionLabel,
     required this.onNew,
+    required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
     if (conversations.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.chat_bubble_outline,
-                  size: 48, color: AppColors.textMutedDark),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                emptyText,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondaryDark),
+      return RefreshIndicator(
+        color: AppColors.accentPrimaryDark,
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.55,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.chat_bubble_outline,
+                          size: 48, color: AppColors.textMutedDark),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        emptyText,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.textSecondaryDark),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      FilledButton.icon(
+                        onPressed: onNew,
+                        icon: const Icon(Icons.add),
+                        label: Text(actionLabel),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.accentPrimaryDark,
+                          foregroundColor: AppColors.textPrimaryDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
 
     return RefreshIndicator(
       color: AppColors.accentPrimaryDark,
-      onRefresh: () async {}, // Liste kommt vom Controller (pull-to-refresh folgt).
+      onRefresh: onRefresh,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: conversations.length,
         separatorBuilder: (_, __) =>
             const Divider(height: 1, color: AppColors.borderHairlineDark),
@@ -514,9 +551,9 @@ class _AdminReportsSheetState extends State<_AdminReportsSheet> {
       controller: widget.scrollCtrl,
       padding: const EdgeInsets.all(16),
       children: [
-        Row(children: [
+        const Row(children: [
           Icon(Icons.flag_outlined, size: 20, color: AppColors.textPrimaryDark),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text(
             'Nutzer-Meldungen',
             style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 18),

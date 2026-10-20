@@ -30,11 +30,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   /// Index in der 4-Punkt-Navigationsleiste für den aktuellen Stack-Tab.
   int get _navIndex => switch (_tab) {
-    0 => 0, // Karte -> Home
-    2 => 1, // Garage
-    1 || 3 || 4 => 2, // Marktplatz/Touren/Chat -> "Mehr"
-    _ => 3, // Einstellungen
-  };
+        0 => 0, // Karte -> Home
+        2 => 1, // Garage
+        1 || 3 || 4 => 2, // Marktplatz/Touren/Chat -> "Mehr"
+        _ => 3, // Einstellungen
+      };
 
   /// "Mehr"-Sheet: Marktplatz, Touren und Chat als große Touch-Ziele.
   void _openMoreSheet() {
@@ -57,9 +57,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               (1, Icons.storefront, i18n.marketplaceTab),
               (3, Icons.route, i18n.toursTab),
               (4, Icons.forum, i18n.chatTab),
+              (6, Icons.emoji_events, i18n.tr('badges.shelfEntry')),
             ])
               ListTile(
-                leading: Icon(entry.$2, color: AppColors.accentPrimaryDark, size: 28),
+                leading: Icon(entry.$2,
+                    color: AppColors.accentPrimaryDark, size: 28),
                 title: Text(
                   entry.$3,
                   style: const TextStyle(
@@ -73,15 +75,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                         label: Text('$unread'),
                         backgroundColor: AppColors.statusDanger,
                       )
-                    : const Icon(Icons.chevron_right, color: AppColors.textSecondaryDark),
+                    : const Icon(Icons.chevron_right,
+                        color: AppColors.textSecondaryDark),
                 onTap: () {
                   Navigator.of(context).pop();
-                  if (_tab != entry.$1) setState(() => _tab = entry.$1);
+                  if (entry.$1 == 6) {
+                    Navigator.of(this.context).pushNamed('/badges');
+                  } else if (_tab != entry.$1) {
+                    setState(() => _tab = entry.$1);
+                  }
                 },
               ),
             // M3-Feature, dezenter Zugang: Route von anderer App scannen.
             ListTile(
-              leading: const Icon(Icons.qr_code_scanner, color: AppColors.accentSecondary, size: 28),
+              leading: const Icon(Icons.qr_code_scanner,
+                  color: AppColors.accentSecondary, size: 28),
               title: const Text(
                 'Route scannen',
                 style: TextStyle(
@@ -90,28 +98,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   fontSize: 17,
                 ),
               ),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondaryDark),
+              trailing: const Icon(Icons.chevron_right,
+                  color: AppColors.textSecondaryDark),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).pushNamed('/scan');
-              },
-            ),
-            // Pass-Knacker: bewusst eigener Einstieg über Route (kein
-            // Shell-Tab - der Trophäenschrank ist ein Ziel, kein Hub).
-            ListTile(
-              leading: const Icon(Icons.emoji_events, color: AppColors.statusWarning, size: 28),
-              title: Text(
-                i18n.tr('badges.shelfEntry'),
-                style: const TextStyle(
-                  color: AppColors.textPrimaryDark,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 17,
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondaryDark),
-              onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).pushNamed('/badges');
               },
             ),
             const SizedBox(height: 8),
@@ -203,13 +194,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           },
           destinations: [
             NavigationDestination(
-              icon: const Icon(Icons.map_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.map, color: AppColors.accentPrimaryDark),
+              icon: const Icon(Icons.map_outlined,
+                  color: AppColors.textSecondaryDark),
+              selectedIcon:
+                  const Icon(Icons.map, color: AppColors.accentPrimaryDark),
               label: i18n.mapTab,
             ),
             NavigationDestination(
-              icon: const Icon(Icons.garage_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.garage, color: AppColors.accentPrimaryDark),
+              icon: const Icon(Icons.garage_outlined,
+                  color: AppColors.textSecondaryDark),
+              selectedIcon:
+                  const Icon(Icons.garage, color: AppColors.accentPrimaryDark),
               label: i18n.garageTab,
             ),
             NavigationDestination(
@@ -217,15 +212,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   ? Badge(
                       label: Text('$totalUnread'),
                       backgroundColor: AppColors.statusDanger,
-                      child: const Icon(Icons.apps, color: AppColors.textSecondaryDark),
+                      child: const Icon(Icons.apps,
+                          color: AppColors.textSecondaryDark),
                     )
                   : const Icon(Icons.apps, color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.apps, color: AppColors.accentPrimaryDark),
+              selectedIcon:
+                  const Icon(Icons.apps, color: AppColors.accentPrimaryDark),
               label: i18n.moreTab,
             ),
             NavigationDestination(
-              icon: const Icon(Icons.settings_outlined, color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.settings, color: AppColors.accentPrimaryDark),
+              icon: const Icon(Icons.settings_outlined,
+                  color: AppColors.textSecondaryDark),
+              selectedIcon: const Icon(Icons.settings,
+                  color: AppColors.accentPrimaryDark),
               label: i18n.settingsTab,
             ),
           ],

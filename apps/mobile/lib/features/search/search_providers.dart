@@ -72,7 +72,7 @@ class SearchRepository {
       final response = await _dio.get<dynamic>('/v1/search/reverse/$lat/$lng');
       final data = response.data;
       if (data is Map) {
-        return SearchResult.fromJson(Map<String, dynamic>.from(data as Map));
+        return SearchResult.fromJson(Map<String, dynamic>.from(data));
       }
       return null;
     } on DioException catch (e) {
@@ -126,7 +126,7 @@ class SearchController extends StateNotifier<SearchState> {
       state = const SearchState();
       return;
     }
-    state = SearchState(isLoading: true, hasSearched: true);
+    state = const SearchState(isLoading: true, hasSearched: true);
     try {
       final results = await _repository.search(trimmed);
       state = SearchState(results: results, hasSearched: true);

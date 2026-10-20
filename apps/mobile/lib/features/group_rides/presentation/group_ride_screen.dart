@@ -89,7 +89,7 @@ class _GroupRideScreenState extends ConsumerState<GroupRideScreen> {
               ),
               Switch(
                 value: state.isSharing,
-                activeColor: AppColors.accentPrimaryDark,
+                activeThumbColor: AppColors.accentPrimaryDark,
                 onChanged: (v) {
                   final controller = ref.read(groupRideProvider(widget.routeId).notifier);
                   v ? controller.enableSharing() : controller.disableSharing();

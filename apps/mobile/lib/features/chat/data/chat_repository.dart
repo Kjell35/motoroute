@@ -2,7 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/error/failure.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
-import 'package:motoroute_app/core/network/error_message.dart' show technicalCause;
+import 'package:motoroute_app/core/network/error_message.dart'
+    show technicalCause;
 
 /// Chat-Domain-Modelle - Spiegel der Backend-Endpunkte unter /v1/chat.
 /// Bewusst einfache Klassen statt freezed: der Chat hat wenige, stabile
@@ -135,7 +136,9 @@ class ChatMessage {
       replyToId: json['reply_to_id'] as String?,
       createdAt: json['created_at'] as String,
       deletedAt: json['deleted_at'] as String?,
-      sender: senderJson is Map<String, dynamic> ? ChatUser.fromJson(senderJson) : null,
+      sender: senderJson is Map<String, dynamic>
+          ? ChatUser.fromJson(senderJson)
+          : null,
     );
   }
 }
@@ -158,7 +161,8 @@ class ConversationSummary {
     required this.unreadCount,
   });
 
-  factory ConversationSummary.fromJson(Map<String, dynamic> json) => ConversationSummary(
+  factory ConversationSummary.fromJson(Map<String, dynamic> json) =>
+      ConversationSummary(
         id: json['id'] as String,
         type: conversationTypeFrom(json['type'] as String?),
         role: (json['role'] ?? 'member') as String,
@@ -174,9 +178,11 @@ class ConversationMember {
   final String role; // owner | moderator | member
   final ChatUser user;
 
-  const ConversationMember({required this.userId, required this.role, required this.user});
+  const ConversationMember(
+      {required this.userId, required this.role, required this.user});
 
-  factory ConversationMember.fromJson(Map<String, dynamic> json) => ConversationMember(
+  factory ConversationMember.fromJson(Map<String, dynamic> json) =>
+      ConversationMember(
         userId: json['userId'] as String,
         role: (json['role'] ?? 'member') as String,
         user: ChatUser.fromJson(json['profile'] as Map<String, dynamic>),
@@ -228,13 +234,16 @@ class ChatRepository {
 
   Dio get dio => _dio;
 
-  void _auth(String token) => _dio.options.headers['Authorization'] = 'Bearer $token';
+  Options _authOptions(String token) =>
+      Options(headers: {'Authorization': 'Bearer $token'});
 
   // ---------------------------------------------------------------- Profil
 
   Future<ChatUser> me(String token) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/chat/me');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/chat/me',
+      options: _authOptions(token),
+    );
     return ChatUser.fromJson(res.data!);
   }
 
@@ -249,222 +258,313 @@ class ChatRepository {
     String? chatNameMode,
     String? chatDisplayName,
   }) async {
-    _auth(token);
-    final res = await _dio.put<Map<String, dynamic>>('/v1/chat/me', data: {
-      if (displayName != null) 'displayName': displayName,
-      if (bio != null) 'bio': bio,
-      if (vehicleDesc != null) 'vehicleDesc': vehicleDesc,
-      if (showOnline != null) 'showOnline': showOnline,
-      if (username != null) 'username': username,
-      if (firstName != null) 'firstName': firstName,
-      if (chatNameMode != null) 'chatNameMode': chatNameMode,
-      if (chatDisplayName != null) 'chatDisplayName': chatDisplayName,
-    });
+    final res = await _dio.put<Map<String, dynamic>>(
+      '/v1/chat/me',
+      options: _authOptions(token),
+      data: {
+        if (displayName != null) 'displayName': displayName,
+        if (bio != null) 'bio': bio,
+        if (vehicleDesc != null) 'vehicleDesc': vehicleDesc,
+        if (showOnline != null) 'showOnline': showOnline,
+        if (username != null) 'username': username,
+        if (firstName != null) 'firstName': firstName,
+        if (chatNameMode != null) 'chatNameMode': chatNameMode,
+        if (chatDisplayName != null) 'chatDisplayName': chatDisplayName,
+      },
+    );
     return ChatUser.fromJson(res.data!);
   }
 
   Future<List<ChatUser>> searchUsers(String token, String query) async {
-    _auth(token);
-    final res = await _dio.get<List<dynamic>>('/v1/chat/users/search',
-        queryParameters: {'query': query});
+    final res = await _dio.get<List<dynamic>>(
+      '/v1/chat/users/search',
+      options: _authOptions(token),
+      queryParameters: {'query': query},
+    );
     return (res.data ?? [])
         .map((e) => ChatUser.fromJson(e as Map<String, dynamic>))
         .toList(growable: false);
   }
 
   /// Mitglied einer Konversation (user_id, role, Profil eingebettet).
-  Future<List<ConversationMember>> listMembers(String token, String conversationId) async {
-    _auth(token);
-    final res = await _dio.get<List<dynamic>>('/v1/chat/conversations/$conversationId/members');
+  Future<List<ConversationMember>> listMembers(
+      String token, String conversationId) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/v1/chat/conversations/$conversationId/members',
+      options: _authOptions(token),
+    );
     return (res.data ?? [])
         .map((e) => ConversationMember.fromJson(e as Map<String, dynamic>))
         .toList(growable: false);
   }
 
   Future<ChatUser> getUser(String token, String userId) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/chat/users/$userId');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/chat/users/$userId',
+      options: _authOptions(token),
+    );
     return ChatUser.fromJson(res.data!);
   }
 
   // -------------------------------------------------------- Konversationen
 
   Future<List<ConversationSummary>> conversations(String token) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/chat/conversations');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/chat/conversations',
+      options: _authOptions(token),
+    );
     final list = (res.data?['conversations'] as List<dynamic>? ?? []);
     return list
         .map((e) => ConversationSummary.fromJson(e as Map<String, dynamic>))
         .toList(growable: false);
   }
 
-  Future<MessagePage> messages(String token, String conversationId, {String? before, int limit = 30}) async {
-    _auth(token);
+  Future<MessagePage> messages(String token, String conversationId,
+      {String? before, int limit = 30}) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/chat/conversations/$conversationId/messages',
+      options: _authOptions(token),
       queryParameters: {'limit': limit, if (before != null) 'before': before},
     );
     final list = (res.data?['messages'] as List<dynamic>? ?? []);
     return MessagePage(
-      messages: list.map((e) => ChatMessage.fromJson(e as Map<String, dynamic>)).toList(growable: false),
+      messages: list
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList(growable: false),
       hasMore: (res.data?['hasMore'] ?? false) as bool,
     );
   }
 
-  Future<ChatMessage> send(String token, String conversationId, String content, {Map<String, dynamic>? attachment}) async {
-    _auth(token);
+  Future<ChatMessage> send(String token, String conversationId, String content,
+      {Map<String, dynamic>? attachment}) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/chat/conversations/$conversationId/messages',
-      data: {'content': content, if (attachment != null) 'attachment': attachment},
+      options: _authOptions(token),
+      data: {
+        'content': content,
+        if (attachment != null) 'attachment': attachment
+      },
     );
     return ChatMessage.fromJson(res.data!);
   }
 
   Future<void> markRead(String token, String conversationId) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/conversations/$conversationId/read');
+    await _dio.post<void>(
+      '/v1/chat/conversations/$conversationId/read',
+      options: _authOptions(token),
+    );
   }
 
   Future<void> deleteMessage(String token, String messageId) async {
-    _auth(token);
-    await _dio.delete<void>('/v1/chat/messages/$messageId');
+    await _dio.delete<void>(
+      '/v1/chat/messages/$messageId',
+      options: _authOptions(token),
+    );
   }
 
   Future<String> startPrivateChat(String token, String otherUserId) async {
-    _auth(token);
-    final res = await _dio.post<Map<String, dynamic>>('/v1/chat/conversations/private',
-        data: {'otherUserId': otherUserId});
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/chat/conversations/private',
+      options: _authOptions(token),
+      data: {'otherUserId': otherUserId},
+    );
     return res.data!['conversationId'] as String;
   }
 
-  Future<void> typing(String token, String conversationId, {bool isTyping = true}) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/typing', data: {'conversationId': conversationId, 'isTyping': isTyping});
+  Future<void> typing(String token, String conversationId,
+      {bool isTyping = true}) async {
+    await _dio.post<void>(
+      '/v1/chat/typing',
+      options: _authOptions(token),
+      data: {'conversationId': conversationId, 'isTyping': isTyping},
+    );
   }
 
   // ---------------------------------------------------------------- Gruppen
 
-  Future<String> createGroup(String token, {required String name, String? description, String? imageUrl, String? category}) async {
-    _auth(token);
-    final res = await _dio.post<Map<String, dynamic>>('/v1/chat/groups', data: {
-      'name': name,
-      if (description != null) 'description': description,
-      if (imageUrl != null) 'imageUrl': imageUrl,
-      if (category != null) 'category': category,
-    });
+  Future<String> createGroup(String token,
+      {required String name,
+      String? description,
+      String? imageUrl,
+      String? category}) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/chat/groups',
+      options: _authOptions(token),
+      data: {
+        'name': name,
+        if (description != null) 'description': description,
+        if (imageUrl != null) 'imageUrl': imageUrl,
+        if (category != null) 'category': category,
+      },
+    );
     return res.data!['groupId'] as String;
   }
 
   Future<Map<String, dynamic>> group(String token, String groupId) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/chat/groups/$groupId');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/chat/groups/$groupId',
+      options: _authOptions(token),
+    );
     return res.data!;
   }
 
   Future<void> updateGroup(String token, String groupId,
       {String? name, String? description, String? imageUrl}) async {
-    _auth(token);
-    await _dio.put<void>('/v1/chat/groups/$groupId', data: {
-      if (name != null) 'name': name,
-      if (description != null) 'description': description,
-      if (imageUrl != null) 'imageUrl': imageUrl,
-    });
+    await _dio.put<void>(
+      '/v1/chat/groups/$groupId',
+      options: _authOptions(token),
+      data: {
+        if (name != null) 'name': name,
+        if (description != null) 'description': description,
+        if (imageUrl != null) 'imageUrl': imageUrl,
+      },
+    );
   }
 
   Future<void> deleteGroup(String token, String groupId) async {
-    _auth(token);
-    await _dio.delete<void>('/v1/chat/groups/$groupId');
+    await _dio.delete<void>(
+      '/v1/chat/groups/$groupId',
+      options: _authOptions(token),
+    );
   }
 
   /// Verlässt eine Gruppe. Response: {needsOwnershipTransfer: bool} -
   /// der Owner muss erst übertragen/löschen (Abschnitt 35).
   Future<bool> leaveGroup(String token, String groupId) async {
-    _auth(token);
-    final res = await _dio.post<Map<String, dynamic>>('/v1/chat/groups/$groupId/leave');
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/chat/groups/$groupId/leave',
+      options: _authOptions(token),
+    );
     return (res.data?['needsOwnershipTransfer'] ?? false) as bool;
   }
 
-  Future<void> transferOwnership(String token, String groupId, String newOwnerId) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/groups/$groupId/transfer-ownership',
-        data: {'newOwnerId': newOwnerId});
+  Future<void> transferOwnership(
+      String token, String groupId, String newOwnerId) async {
+    await _dio.post<void>(
+      '/v1/chat/groups/$groupId/transfer-ownership',
+      options: _authOptions(token),
+      data: {'newOwnerId': newOwnerId},
+    );
   }
 
   Future<void> removeMember(String token, String groupId, String userId) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/groups/$groupId/members/remove', data: {'userId': userId});
+    await _dio.post<void>(
+      '/v1/chat/groups/$groupId/members/remove',
+      options: _authOptions(token),
+      data: {'userId': userId},
+    );
   }
 
-  Future<String> createInvitation(String token, String groupId, {int? expiresInDays}) async {
-    _auth(token);
-    final res = await _dio.post<Map<String, dynamic>>('/v1/chat/groups/$groupId/invitations',
-        data: {'expiresInDays': expiresInDays});
+  Future<String> createInvitation(String token, String groupId,
+      {int? expiresInDays}) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/chat/groups/$groupId/invitations',
+      options: _authOptions(token),
+      data: {'expiresInDays': expiresInDays},
+    );
     return res.data!['code'] as String;
   }
 
   Future<void> deactivateInvitation(String token, String groupId) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/groups/$groupId/invitations/deactivate');
+    await _dio.post<void>(
+      '/v1/chat/groups/$groupId/invitations/deactivate',
+      options: _authOptions(token),
+    );
   }
 
-  Future<Map<String, dynamic>?> activeInvitation(String token, String groupId) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/chat/groups/$groupId/invitations/active');
+  Future<Map<String, dynamic>?> activeInvitation(
+      String token, String groupId) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/chat/groups/$groupId/invitations/active',
+      options: _authOptions(token),
+    );
     final code = res.data?['code'];
     return code == null ? null : {'code': code as String};
   }
 
   Future<Map<String, dynamic>> previewByCode(String token, String code) async {
-    _auth(token);
-    final res = await _dio.post<Map<String, dynamic>>('/v1/chat/invitations/preview', data: {'code': code});
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/chat/invitations/preview',
+      options: _authOptions(token),
+      data: {'code': code},
+    );
     return res.data!;
   }
 
   Future<String> joinByCode(String token, String code) async {
-    _auth(token);
-    final res = await _dio.post<Map<String, dynamic>>('/v1/chat/invitations/join', data: {'code': code});
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/chat/invitations/join',
+      options: _authOptions(token),
+      data: {'code': code},
+    );
     return res.data!['conversationId'] as String;
   }
 
   // ------------------------------------------------------------- Moderation
 
   Future<void> blockUser(String token, String userId) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/blocks', data: {'userId': userId});
+    await _dio.post<void>(
+      '/v1/chat/blocks',
+      options: _authOptions(token),
+      data: {'userId': userId},
+    );
   }
 
   Future<void> unblockUser(String token, String userId) async {
-    _auth(token);
-    await _dio.delete<void>('/v1/chat/blocks/$userId');
+    await _dio.delete<void>(
+      '/v1/chat/blocks/$userId',
+      options: _authOptions(token),
+    );
   }
 
-  Future<void> reportMessage(String token, String messageId, String reason, {String? details}) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/reports/message',
-        data: {'messageId': messageId, 'reason': reason, if (details != null) 'details': details});
+  Future<void> reportMessage(String token, String messageId, String reason,
+      {String? details}) async {
+    await _dio.post<void>(
+      '/v1/chat/reports/message',
+      options: _authOptions(token),
+      data: {
+        'messageId': messageId,
+        'reason': reason,
+        if (details != null) 'details': details
+      },
+    );
   }
 
-  Future<void> reportUser(String token, String userId, String reason, {String? details}) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/reports/user',
-        data: {'reportedUserId': userId, 'reason': reason, if (details != null) 'details': details});
+  Future<void> reportUser(String token, String userId, String reason,
+      {String? details}) async {
+    await _dio.post<void>(
+      '/v1/chat/reports/user',
+      options: _authOptions(token),
+      data: {
+        'reportedUserId': userId,
+        'reason': reason,
+        if (details != null) 'details': details
+      },
+    );
   }
 
   // -- Admin: Nutzer-Meldungen pruefen (App-Anforderung: Admin sieht
   //    Meldungen; serverseitig via users.role geschuetzt) ------------------
 
-  Future<List<Map<String, dynamic>>> adminReports(String token, {String status = 'open'}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/chat/admin/reports',
-        queryParameters: {'status': status});
+  Future<List<Map<String, dynamic>>> adminReports(String token,
+      {String status = 'open'}) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/chat/admin/reports',
+      options: _authOptions(token),
+      queryParameters: {'status': status},
+    );
     return ((res.data?['reports'] as List?) ?? const [])
         .map((e) => (e as Map).cast<String, dynamic>())
         .toList(growable: false);
   }
 
-  Future<void> adminResolveReport(String token, String reportId, String status) async {
-    _auth(token);
-    await _dio.post<void>('/v1/chat/admin/reports/$reportId/resolve', data: {'status': status});
+  Future<void> adminResolveReport(
+      String token, String reportId, String status) async {
+    await _dio.post<void>(
+      '/v1/chat/admin/reports/$reportId/resolve',
+      options: _authOptions(token),
+      data: {'status': status},
+    );
   }
 }
 
@@ -480,10 +580,18 @@ Failure chatFailure(Object error) {
         error.type == DioExceptionType.connectionTimeout) {
       return const NetworkFailure('Keine Internetverbindung');
     }
-    if (code == 'RATE_LIMITED') return const NetworkFailure('Zu viele Nachrichten - bitte kurz warten');
-    if (code == 'BLOCKED') return const NetworkFailure('Aktion durch Blockierung verhindert');
-    if (code == 'INVALID_CODE') return const NetworkFailure('Einladungscode ungültig oder abgelaufen');
-    if (code == 'ALREADY_EXISTS') return const NetworkFailure('Existiert bereits');
+    if (code == 'RATE_LIMITED') {
+      return const NetworkFailure('Zu viele Nachrichten - bitte kurz warten');
+    }
+    if (code == 'BLOCKED') {
+      return const NetworkFailure('Aktion durch Blockierung verhindert');
+    }
+    if (code == 'INVALID_CODE') {
+      return const NetworkFailure('Einladungscode ungültig oder abgelaufen');
+    }
+    if (code == 'ALREADY_EXISTS') {
+      return const NetworkFailure('Existiert bereits');
+    }
     if (status == 401) return const NetworkFailure('Bitte neu anmelden');
     if (status == 403) return const NetworkFailure('Kein Zugriff');
     if (status == 404) return const NetworkFailure('Nicht gefunden');

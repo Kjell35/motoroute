@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 /// „Route am Computer planen“ (M3-Feature) — Repository-Port des
@@ -139,7 +138,6 @@ class PairingRepository {
   }
 
   /// Extrahiert das Plan-Token aus einer MotoRoute-Plan-URL; `null` bei fremden URLs.
-  @visibleForTesting
   static String? planTokenFromUrl(String value) {
     final Uri? uri = Uri.tryParse(value.trim());
     if (uri == null || !uri.path.contains('/plan/')) return null;
@@ -149,7 +147,6 @@ class PairingRepository {
   }
 
   /// Ursprung (Scheme+Host+Port) einer Plan-URL; `null` ohne Host.
-  @visibleForTesting
   static String? planOriginFromUrl(String value) {
     final Uri? uri = Uri.tryParse(value.trim());
     if (uri == null || uri.host.isEmpty || !uri.path.contains('/plan/')) return null;

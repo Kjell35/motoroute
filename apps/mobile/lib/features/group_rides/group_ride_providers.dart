@@ -222,7 +222,7 @@ class GroupRideController extends StateNotifier<GroupRideState> {
     _gpsSub?.cancel();
     _gpsSub = LocationRepository()
         .watchPosition(
-          tuning: LocationTuning(
+          tuning: const LocationTuning(
             accuracy: LocationAccuracyPreset.low,
             distanceFilterMeters: 30,
           ),

@@ -130,6 +130,7 @@ class _MotoRouteAppBody extends ConsumerWidget {
         // Splash entscheidet: Willkommen/Login, Onboarding oder Shell.
         '/': (context) => const SplashScreen(),
         '/home': (context) => const HomeShell(),
+        '/badges': (context) => const BadgesScreen(),
         '/welcome': (context) => const WelcomeScreen(),
         // Tab-Aliase (Deep-Links aus Nicht-Shell-Kontexten): Shell mit
         // dem jeweiligen Start-Tab.

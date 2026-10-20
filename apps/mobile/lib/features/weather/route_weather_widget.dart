@@ -179,7 +179,7 @@ class _ShelterSheet extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             if (shelters.isEmpty)
-              Text(
+              const Text(
                 'Keine Schutz-POIs in der Nähe des kritischen Abschnitts '
                 'gefunden. Suche selbst nach Tankstellen oder Überdachungen '
                 'auf der Karte.',

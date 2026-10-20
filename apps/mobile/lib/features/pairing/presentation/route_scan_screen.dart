@@ -19,12 +19,6 @@ import '../data/pairing_repository.dart';
 class RouteScanScreen extends ConsumerStatefulWidget {
   const RouteScanScreen({super.key, this.repository});
 
-  /// Extrahiert das Plan-Token aus einer MotoRoute-Plan-URL; `null` bei
-  /// fremden URLs. Öffentlich/statisch, damit die Erkennung ohne Kamera
-  /// testbar ist.
-  static String? planTokenFromUrl(String value) =>
-      PairingRepository.planTokenFromUrl(value);
-
   /// Injektion für Tests; Produktion nutzt `null` und baut das Default-
   /// Repository.
   final PairingRepository? repository;
@@ -51,7 +45,7 @@ class _RouteScanScreenState extends ConsumerState<RouteScanScreen> {
     for (final barcode in capture.barcodes) {
       final String? value = barcode.rawValue;
       if (value == null) continue;
-      final String? token = RouteScanScreen.planTokenFromUrl(value);
+      final String? token = PairingRepository.planTokenFromUrl(value);
       if (token == null) {
         if (mounted) {
           setState(() => _error = 'Das ist kein MotoRoute-Plan-QR-Code.');

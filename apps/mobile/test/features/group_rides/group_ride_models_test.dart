@@ -36,9 +36,9 @@ void main() {
 
   group('GroupRideState-Gruppierung (Abschnitt 18: wer ist wo?)', () {
     final riders = [
-      LiveRider(userId: 'a', lat: 1, lng: 1, started: true, finished: false),
-      LiveRider(userId: 'b', lat: 2, lng: 2, started: false, finished: false),
-      LiveRider(userId: 'c', lat: 3, lng: 3, started: true, finished: true),
+      const LiveRider(userId: 'a', lat: 1, lng: 1, started: true, finished: false),
+      const LiveRider(userId: 'b', lat: 2, lng: 2, started: false, finished: false),
+      const LiveRider(userId: 'c', lat: 3, lng: 3, started: true, finished: true),
     ];
 
     test('unterwegs = gestartet UND nicht fertig', () {

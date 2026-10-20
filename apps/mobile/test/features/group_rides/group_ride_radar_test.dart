@@ -55,7 +55,7 @@ void main() {
     test('Radar-Update mit bekannten Nutzern: Position frisch, Profil bleibt', () async {
       // Initialer REST-Stand (Profil von u1 bekannt).
       when(() => repo.liveState(any(), any())).thenAnswer((_) async => [
-            LiveRider(
+            const LiveRider(
               userId: 'u1',
               lat: 48.0,
               lng: 11.0,
@@ -69,10 +69,10 @@ void main() {
       await controller.load();
 
       // Radar-Event: u1 ist inzwischen weiter gefahren.
-      realtime.testInjectRadarEvent(RadarEvent(
+      realtime.testInjectRadarEvent(const RadarEvent(
         routeId: 'r1',
         members: [
-          const RadarMember(userId: 'u1', lat: 48.5, lng: 11.5, lastSeen: '2026-09-18T10:00:00Z'),
+          RadarMember(userId: 'u1', lat: 48.5, lng: 11.5, lastSeen: '2026-09-18T10:00:00Z'),
         ],
       ));
       await Future<void>.delayed(Duration.zero);
@@ -85,8 +85,8 @@ void main() {
 
     test('Leave-Event entfernt den Fahrer aus der Liste', () async {
       when(() => repo.liveState(any(), any())).thenAnswer((_) async => [
-            LiveRider(userId: 'u1', lat: 48.0, lng: 11.0, started: true, finished: false),
-            LiveRider(userId: 'u2', lat: 48.1, lng: 11.1, started: true, finished: false),
+            const LiveRider(userId: 'u1', lat: 48.0, lng: 11.0, started: true, finished: false),
+            const LiveRider(userId: 'u2', lat: 48.1, lng: 11.1, started: true, finished: false),
           ]);
       final controller = container.read(groupRideProvider('r1').notifier);
       await controller.load();

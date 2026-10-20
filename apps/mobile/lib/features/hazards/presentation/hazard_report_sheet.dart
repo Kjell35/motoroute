@@ -92,16 +92,16 @@ class _HazardReportSheetState extends ConsumerState<_HazardReportSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                const Icon(Icons.warning_amber_rounded,
+                Icon(Icons.warning_amber_rounded,
                     color: AppColors.accentSecondary, size: 24),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Text('Gefahrenstelle melden', style: AppTypography.title),
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
-            Text(
+            const Text(
               'Wird automatisch an deiner aktuellen Position gemeldet.\nGilt 24 Stunden, Bestätigungen verlängern die Gültigkeit.',
               style: AppTypography.caption,
             ),

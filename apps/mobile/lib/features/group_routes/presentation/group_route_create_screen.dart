@@ -18,10 +18,12 @@ class GroupRouteCreateScreen extends ConsumerStatefulWidget {
   const GroupRouteCreateScreen({super.key, required this.groupId});
 
   @override
-  ConsumerState<GroupRouteCreateScreen> createState() => _GroupRouteCreateScreenState();
+  ConsumerState<GroupRouteCreateScreen> createState() =>
+      _GroupRouteCreateScreenState();
 }
 
-class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen> {
+class _GroupRouteCreateScreenState
+    extends ConsumerState<GroupRouteCreateScreen> {
   final _nameController = TextEditingController();
   final _searchController = TextEditingController();
 
@@ -29,7 +31,11 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
   SearchResult? _destination;
   VehicleType _vehicle = VehicleType.motorcycle;
   RouteStyle _style = RouteStyle.curvy;
-  final Set<AvoidOption> _avoid = {AvoidOption.highway, AvoidOption.ferry, AvoidOption.toll};
+  final Set<AvoidOption> _avoid = {
+    AvoidOption.highway,
+    AvoidOption.ferry,
+    AvoidOption.toll
+  };
   EditingPermission _permission = EditingPermission.allMembers;
 
   bool _searching = false;
@@ -73,7 +79,13 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
   Future<void> _create() async {
     final token = ref.read(chatSessionTokenProvider);
     final name = _nameController.text.trim();
-    if (token == null || name.isEmpty || _start == null || _destination == null || _creating) return;
+    if (token == null ||
+        name.isEmpty ||
+        _start == null ||
+        _destination == null ||
+        _creating) {
+      return;
+    }
     setState(() => _creating = true);
     try {
       final repo = ref.read(groupRouteRepositoryProvider);
@@ -103,7 +115,9 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
       if (!mounted) return;
       setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Route konnte nicht erstellt werden: ${e.toString().split('(').first}')),
+        SnackBar(
+            content: Text(
+                'Route konnte nicht erstellt werden: ${e.toString().split('(').first}')),
       );
     }
   }
@@ -112,7 +126,9 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
-      appBar: AppBar(backgroundColor: AppColors.bgBaseDark, title: const Text('Neue Gruppenroute')),
+      appBar: AppBar(
+          backgroundColor: AppColors.bgBaseDark,
+          title: const Text('Neue Gruppenroute')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
@@ -142,9 +158,15 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
           const SizedBox(height: AppSpacing.sm),
           SegmentedButton<VehicleType>(
             segments: const [
-              ButtonSegment(value: VehicleType.motorcycle, icon: Icon(Icons.two_wheeler, size: 18)),
-              ButtonSegment(value: VehicleType.car, icon: Icon(Icons.directions_car, size: 18)),
-              ButtonSegment(value: VehicleType.bicycle, icon: Icon(Icons.pedal_bike, size: 18)),
+              ButtonSegment(
+                  value: VehicleType.motorcycle,
+                  icon: Icon(Icons.two_wheeler, size: 18)),
+              ButtonSegment(
+                  value: VehicleType.car,
+                  icon: Icon(Icons.directions_car, size: 18)),
+              ButtonSegment(
+                  value: VehicleType.bicycle,
+                  icon: Icon(Icons.pedal_bike, size: 18)),
             ],
             selected: {_vehicle},
             onSelectionChanged: (s) => setState(() => _vehicle = s.first),
@@ -192,27 +214,42 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
               children: [
                 const Text('Wer darf diese Route bearbeiten?',
                     style: TextStyle(
-                        color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700)),
+                        color: AppColors.textPrimaryDark,
+                        fontWeight: FontWeight.w700)),
                 const SizedBox(height: AppSpacing.sm),
-                RadioListTile<EditingPermission>(
-                  value: EditingPermission.allMembers,
+                RadioGroup<EditingPermission>(
                   groupValue: _permission,
-                  activeColor: AppColors.accentPrimaryDark,
-                  title: const Text('🔓 Alle Gruppenmitglieder',
-                      style: TextStyle(color: AppColors.textPrimaryDark, fontSize: 14)),
-                  subtitle: const Text('Alle dürfen Stopps hinzufügen, verschieben, löschen',
-                      style: TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
-                  onChanged: (v) => setState(() => _permission = v!),
-                ),
-                RadioListTile<EditingPermission>(
-                  value: EditingPermission.ownerOnly,
-                  groupValue: _permission,
-                  activeColor: AppColors.accentPrimaryDark,
-                  title: const Text('🔒 Nur der Owner',
-                      style: TextStyle(color: AppColors.textPrimaryDark, fontSize: 14)),
-                  subtitle: const Text('Andere sehen und fahren die Route nur',
-                      style: TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
-                  onChanged: (v) => setState(() => _permission = v!),
+                  onChanged: (value) {
+                    if (value != null) setState(() => _permission = value);
+                  },
+                  child: const Column(
+                    children: [
+                      RadioListTile<EditingPermission>(
+                        value: EditingPermission.allMembers,
+                        activeColor: AppColors.accentPrimaryDark,
+                        title: Text('🔓 Alle Gruppenmitglieder',
+                            style: TextStyle(
+                                color: AppColors.textPrimaryDark,
+                                fontSize: 14)),
+                        subtitle: Text(
+                            'Alle dürfen Stopps hinzufügen, verschieben, löschen',
+                            style: TextStyle(
+                                color: AppColors.textMutedDark, fontSize: 12)),
+                      ),
+                      RadioListTile<EditingPermission>(
+                        value: EditingPermission.ownerOnly,
+                        activeColor: AppColors.accentPrimaryDark,
+                        title: Text('🔒 Nur der Owner',
+                            style: TextStyle(
+                                color: AppColors.textPrimaryDark,
+                                fontSize: 14)),
+                        subtitle: Text(
+                            'Andere sehen und fahren die Route nur',
+                            style: TextStyle(
+                                color: AppColors.textMutedDark, fontSize: 12)),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -225,12 +262,20 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
               foregroundColor: AppColors.textPrimaryDark,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            onPressed: (_creating || _start == null || _destination == null || _nameController.text.trim().isEmpty)
+            onPressed: (_creating ||
+                    _start == null ||
+                    _destination == null ||
+                    _nameController.text.trim().isEmpty)
                 ? null
                 : _create,
             child: _creating
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('ROUTE ERSTELLEN', style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('ROUTE ERSTELLEN',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, letterSpacing: 1)),
           ),
         ],
       ),
@@ -259,15 +304,20 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
             ),
             Expanded(
               child: _searching
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                          color: AppColors.accentPrimaryDark))
                   : ListView.builder(
                       itemCount: _results.length,
                       itemBuilder: (context, i) {
                         final r = _results[i];
                         return ListTile(
-                          leading: const Icon(Icons.place, color: AppColors.accentPrimaryDark, size: 20),
+                          leading: const Icon(Icons.place,
+                              color: AppColors.accentPrimaryDark, size: 20),
                           title: Text(r.label,
-                              style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 14)),
+                              style: const TextStyle(
+                                  color: AppColors.textPrimaryDark,
+                                  fontSize: 14)),
                           onTap: () {
                             setState(() {
                               if (_pickingStart) {
@@ -288,8 +338,10 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
     );
   }
 
-  TextStyle _sectionLabel() =>
-      const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13, fontWeight: FontWeight.w600);
+  TextStyle _sectionLabel() => const TextStyle(
+      color: AppColors.textSecondaryDark,
+      fontSize: 13,
+      fontWeight: FontWeight.w600);
 
   InputDecoration _input(String label, String hint) => InputDecoration(
         labelText: label,
@@ -305,7 +357,10 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
         counterText: '',
       );
 
-  Widget _locationField({required String label, required IconData icon, required VoidCallback onTap}) {
+  Widget _locationField(
+      {required String label,
+      required IconData icon,
+      required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -322,7 +377,8 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
             Expanded(
               child: Text(label,
                   style: TextStyle(
-                      color: label.startsWith('Start wählen') || label.startsWith('Ziel wählen')
+                      color: label.startsWith('Start wählen') ||
+                              label.startsWith('Ziel wählen')
                           ? AppColors.textMutedDark
                           : AppColors.textPrimaryDark)),
             ),
@@ -339,7 +395,9 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
       selected: selected,
       selectedColor: AppColors.accentPrimaryDark.withValues(alpha: 0.35),
       labelStyle: TextStyle(
-          color: selected ? AppColors.textPrimaryDark : AppColors.textSecondaryDark),
+          color: selected
+              ? AppColors.textPrimaryDark
+              : AppColors.textSecondaryDark),
       onSelected: (_) => setState(() => _style = style),
     );
   }
@@ -352,7 +410,9 @@ class _GroupRouteCreateScreenState extends ConsumerState<GroupRouteCreateScreen>
       selectedColor: AppColors.accentPrimaryDark.withValues(alpha: 0.35),
       checkmarkColor: AppColors.textPrimaryDark,
       labelStyle: TextStyle(
-          color: selected ? AppColors.textPrimaryDark : AppColors.textSecondaryDark),
+          color: selected
+              ? AppColors.textPrimaryDark
+              : AppColors.textSecondaryDark),
       onSelected: (v) => setState(() {
         v ? _avoid.add(option) : _avoid.remove(option);
       }),

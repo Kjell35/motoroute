@@ -55,8 +55,8 @@ class _TrackPainter extends CustomPainter {
     const ky = 111320.0;
     final cosMid = math.cos(midLat * math.pi / 180);
 
-    final mx = (double x) => x * kx * cosMid;
-    final my = (double y) => y * ky;
+    double mx(double x) => x * kx * cosMid;
+    double my(double y) => y * ky;
 
     final minX = mx(minLng);
     final minY = my(minLat);

@@ -147,7 +147,7 @@ class HazardRepository {
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 410) {
-        throw HazardExpiredException();
+        throw const HazardExpiredException();
       }
       rethrow;
     }

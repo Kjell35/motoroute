@@ -164,7 +164,7 @@ class _MyListingTile extends StatelessWidget {
                 child: Text(listing.title, style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
               Text(listing.priceLabel,
-                  style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark)),
+                  style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark)),
             ]),
             const SizedBox(height: 4),
             Row(children: [
@@ -183,7 +183,7 @@ class _MyListingTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 listing.reviewReason!,
-                style: TextStyle(fontSize: 12, color: AppColors.statusDanger),
+                style: const TextStyle(fontSize: 12, color: AppColors.statusDanger),
               ),
             ],
             const SizedBox(height: 10),

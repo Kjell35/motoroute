@@ -90,13 +90,13 @@ class PrivacyScreen extends StatelessWidget {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: Text('Datenschutz', style: AppTypography.title),
+        title: const Text('Datenschutz', style: AppTypography.title),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           children: [
-            Text(
+            const Text(
               'Stand: September 2026 - gilt für die private Testphase (v0.3.0).',
               style: AppTypography.caption,
             ),
@@ -121,7 +121,7 @@ class PrivacyScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
             ],
-            Text(
+            const Text(
               'Fragen zum Datenschutz? Sprich den Betreiber an (siehe Impressum) - '
               'in der Testphase ist das der private Betreiber der MotoRoute-Instanz.',
               style: AppTypography.caption,
@@ -142,7 +142,7 @@ class ImprintScreen extends StatelessWidget {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: Text('Impressum', style: AppTypography.title),
+        title: const Text('Impressum', style: AppTypography.title),
       ),
       body: SafeArea(
         child: ListView(
@@ -193,7 +193,7 @@ class AboutScreen extends ConsumerWidget {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: Text('Über MotoRoute', style: AppTypography.title),
+        title: const Text('Über MotoRoute', style: AppTypography.title),
       ),
       body: SafeArea(
         child: ListView(
@@ -207,14 +207,14 @@ class AboutScreen extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.borderHairlineDark),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.two_wheeler, color: AppColors.accentPrimaryDark, size: 40),
-                  const SizedBox(height: AppSpacing.md),
+                  Icon(Icons.two_wheeler, color: AppColors.accentPrimaryDark, size: 40),
+                  SizedBox(height: AppSpacing.md),
                   Text('MotoRoute', style: AppTypography.title),
-                  const SizedBox(height: AppSpacing.xs),
-                  const Text(
+                  SizedBox(height: AppSpacing.xs),
+                  Text(
                     'Motorrad-Navigation für kurvige Touren - gebaut für '
                     'kleine Gruppen: gemeinsame Routenplanung, Live-Fahrt '
                     'und Biker-Community.\n\n'
@@ -236,12 +236,12 @@ class AboutScreen extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.borderHairlineDark),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Datenquellen & Danksagung', style: AppTypography.body),
-                  const SizedBox(height: AppSpacing.sm),
-                  const Text(
+                  SizedBox(height: AppSpacing.sm),
+                  Text(
                     '© OpenStreetMap-Mitwirkende - Kartenkacheln (CARTO-Stil)\n'
                     'Routing auf OpenStreetMap-Daten (GraphHopper)\n'
                     'Ortssuche & Verkehr: TomTom\n'

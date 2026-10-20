@@ -230,7 +230,7 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
                             children: [
                               Text(
                                 listing.priceLabel,
-                                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark),
+                                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark),
                               ),
                               const SizedBox(height: 6),
                               Text(listing.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),

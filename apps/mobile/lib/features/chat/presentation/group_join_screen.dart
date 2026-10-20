@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -55,6 +56,57 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
     }
   }
 
+  Future<void> _scanQr() async {
+    final code = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.bgSurfaceDark,
+        title: const Text('Einladungs-QR scannen'),
+        content: SizedBox(
+          width: 320,
+          height: 320,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: MobileScanner(
+              onDetect: (capture) {
+                for (final barcode in capture.barcodes) {
+                  final inviteCode = _inviteCodeFromQr(barcode.rawValue);
+                  if (inviteCode != null) {
+                    Navigator.of(dialogContext).pop(inviteCode);
+                    return;
+                  }
+                }
+              },
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Abbrechen'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || code == null) return;
+    _codeController.text = code;
+    await _lookup();
+  }
+
+  String? _inviteCodeFromQr(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final value = raw.trim();
+    final uri = Uri.tryParse(value);
+    if (uri != null && uri.scheme == 'motoroute' && uri.host == 'group-invite') {
+      final code = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+      return code.isEmpty ? null : code.toUpperCase();
+    }
+    if (RegExp(r'^[A-Za-z0-9-]{4,32}$').hasMatch(value)) {
+      return value.toUpperCase();
+    }
+    return null;
+  }
+
   Future<void> _join() async {
     final token = ref.read(chatSessionTokenProvider);
     final code = _codeController.text.trim().toUpperCase();
@@ -108,6 +160,12 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
                 ),
               ),
               onSubmitted: (_) => _lookup(),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: _checking ? null : _scanQr,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Einladungs-QR scannen'),
             ),
             const SizedBox(height: AppSpacing.md),
             FilledButton(

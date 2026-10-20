@@ -19,16 +19,19 @@ class WaypointManagementScreen extends ConsumerWidget {
     final waypoints = ref.watch(waypointListProvider);
     final notifier = ref.read(waypointListProvider.notifier);
 
+    final tapMode = ref.watch(mapWaypointTapModeProvider);
+
     return Scaffold(
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: Text('Touren', style: AppTypography.title),
+        title: const Text('Touren', style: AppTypography.title),
         actions: [
           // M3-Feature „Route am Computer planen“ (QR + Plan abrufen).
           IconButton(
             tooltip: 'Route am Computer planen',
-            icon: const Icon(Icons.computer_outlined, color: AppColors.textSecondaryDark),
+            icon: const Icon(Icons.computer_outlined,
+                color: AppColors.textSecondaryDark),
             onPressed: () {
               showModalBottomSheet<void>(
                 context: context,
@@ -42,12 +45,14 @@ class WaypointManagementScreen extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Tour-Tagebuch',
-            icon: const Icon(Icons.auto_stories_outlined, color: AppColors.textSecondaryDark),
+            icon: const Icon(Icons.auto_stories_outlined,
+                color: AppColors.textSecondaryDark),
             onPressed: () => Navigator.of(context).pushNamed('/tour-diary'),
           ),
           IconButton(
             tooltip: 'GPX importieren',
-            icon: const Icon(Icons.upload_file_outlined, color: AppColors.textSecondaryDark),
+            icon: const Icon(Icons.upload_file_outlined,
+                color: AppColors.textSecondaryDark),
             onPressed: () => Navigator.of(context).pushNamed('/tour-import'),
           ),
         ],
@@ -60,16 +65,17 @@ class WaypointManagementScreen extends ConsumerWidget {
                   ? Center(
                       child: Text(
                         'Noch keine Wegpunkte - suche ein Ziel, um zu starten.',
-                        style: AppTypography.body.copyWith(color: AppColors.textSecondaryDark),
+                        style: AppTypography.body
+                            .copyWith(color: AppColors.textSecondaryDark),
                         textAlign: TextAlign.center,
                       ),
                     )
                   : ReorderableListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                       itemCount: waypoints.length,
-                      onReorder: (oldIndex, newIndex) {
+                      onReorderItem: (oldIndex, newIndex) {
                         final updated = [...waypoints];
-                        if (newIndex > oldIndex) newIndex -= 1;
                         final item = updated.removeAt(oldIndex);
                         updated.insert(newIndex, item);
                         notifier.state = updated;
@@ -84,7 +90,8 @@ class WaypointManagementScreen extends ConsumerWidget {
                           decoration: BoxDecoration(
                             color: AppColors.bgSurfaceDark,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.borderHairlineDark),
+                            border:
+                                Border.all(color: AppColors.borderHairlineDark),
                           ),
                           child: ListTile(
                             leading: Icon(
@@ -113,11 +120,13 @@ class WaypointManagementScreen extends ConsumerWidget {
                               // Zwischenziele dürfen gelöscht werden.
                               onPressed: (!isFirst && !isLast)
                                   ? () {
-                                      final updated = [...waypoints]..removeAt(index);
+                                      final updated = [...waypoints]
+                                        ..removeAt(index);
                                       notifier.state = updated;
                                     }
                                   : null,
-                              icon: const Icon(Icons.close, color: AppColors.textMutedDark, size: 20),
+                              icon: const Icon(Icons.close,
+                                  color: AppColors.textMutedDark, size: 20),
                             ),
                           ),
                         );
@@ -132,12 +141,15 @@ class WaypointManagementScreen extends ConsumerWidget {
                     width: double.infinity,
                     height: AppSpacing.touchTargetPlanning,
                     child: OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context)
-                          .pushNamed('/search', arguments: {'addWaypoint': true}),
+                      onPressed: () => Navigator.of(context).pushNamed(
+                          '/search',
+                          arguments: {'addWaypoint': true}),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.borderHairlineDark),
+                        side: const BorderSide(
+                            color: AppColors.borderHairlineDark),
                         foregroundColor: AppColors.textPrimaryDark,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.add),
                       label: const Text('Wegpunkt suchen'),
@@ -150,14 +162,22 @@ class WaypointManagementScreen extends ConsumerWidget {
                     child: OutlinedButton.icon(
                       // Phase 3 Screen 9: "Auf Karte antippen" als
                       // expliziter Modus-Umschalter.
-                      onPressed: () => Navigator.of(context).pushNamed('/map'),
+                      onPressed: () {
+                        ref.read(mapWaypointTapModeProvider.notifier).state =
+                            true;
+                        Navigator.of(context).pushNamed('/map');
+                      },
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.borderHairlineDark),
+                        side: const BorderSide(
+                            color: AppColors.borderHairlineDark),
                         foregroundColor: AppColors.textPrimaryDark,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.add_location_alt_outlined),
-                      label: const Text('Auf Karte antippen'),
+                      label: Text(tapMode
+                          ? 'Kartentap-Modus aktiv'
+                          : 'Auf Karte antippen'),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -167,11 +187,14 @@ class WaypointManagementScreen extends ConsumerWidget {
                     child: OutlinedButton.icon(
                       // Tour-Tagebuch: vergangene Fahrten, Statistiken,
                       // GPX-Export/Import (Calimoto/Kurviger-kompatibel).
-                      onPressed: () => Navigator.of(context).pushNamed('/tour-diary'),
+                      onPressed: () =>
+                          Navigator.of(context).pushNamed('/tour-diary'),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.borderHairlineDark),
+                        side: const BorderSide(
+                            color: AppColors.borderHairlineDark),
                         foregroundColor: AppColors.textPrimaryDark,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.auto_stories_outlined),
                       label: const Text('Tour-Tagebuch'),

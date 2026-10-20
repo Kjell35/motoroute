@@ -239,9 +239,9 @@ class PoiLayerController extends StateNotifier<PoiLayerState> {
       );
       state = PoiLayerState(pois: pois);
     } on DioException {
-      state = PoiLayerState(error: 'POIs nicht verfügbar - offline?');
+      state = const PoiLayerState(error: 'POIs nicht verfügbar - offline?');
     } catch (_) {
-      state = PoiLayerState(error: 'POIs konnten nicht geladen werden');
+      state = const PoiLayerState(error: 'POIs konnten nicht geladen werden');
     }
   }
 

@@ -4,7 +4,7 @@ description: >
   Routing (kurvig/extra kurvig/schnell). Siehe /docs (Phase 1-3) im
   Repo-Root für Produktkontext.
 publish_to: 'none'
-version: 1.0.8+44
+version: 1.0.9+45
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -47,6 +47,7 @@ dependencies:
   # Abhängigkeit (geolocator-Plugin-Ecosystem); jetzt explizit.
   connectivity_plus: ^6.1.1
   shared_preferences: ^2.5.5
+  flutter_keychain: ^3.0.0
   intl: any
   flutter_localizations:
     sdk: flutter

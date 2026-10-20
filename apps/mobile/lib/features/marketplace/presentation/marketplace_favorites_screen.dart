@@ -87,7 +87,7 @@ class _MarketplaceFavoritesScreenState extends ConsumerState<MarketplaceFavorite
                               subtitle: Text('${listing.condition.emoji} ${listing.condition.label} · 📍 ${listing.locationLabel}'),
                               trailing: Text(
                                 listing.priceLabel,
-                                style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark),
+                                style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark),
                               ),
                               onLongPress: () => _remove(listing.id),
                               onTap: () {

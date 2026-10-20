@@ -16,11 +16,12 @@ class RouteOverviewScreen extends ConsumerStatefulWidget {
   const RouteOverviewScreen({super.key});
 
   @override
-  ConsumerState<RouteOverviewScreen> createState() => _RouteOverviewScreenState();
+  ConsumerState<RouteOverviewScreen> createState() =>
+      _RouteOverviewScreenState();
 }
 
 class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
-  MaplibreMapController? _mapController;
+  MapLibreMapController? _mapController;
   String? _styleString;
   bool _drawn = false;
 
@@ -92,10 +93,14 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
     await controller.moveCamera(
       CameraUpdate.newLatLngBounds(
         LatLngBounds(
-          southwest: LatLng(lats.reduce((a, b) => a < b ? a : b) - pad,
-              latLngs.map((e) => e.longitude).reduce((a, b) => a < b ? a : b) - pad),
-          northeast: LatLng(lats.reduce((a, b) => a > b ? a : b) + pad,
-              latLngs.map((e) => e.longitude).reduce((a, b) => a > b ? a : b) + pad),
+          southwest: LatLng(
+              lats.reduce((a, b) => a < b ? a : b) - pad,
+              latLngs.map((e) => e.longitude).reduce((a, b) => a < b ? a : b) -
+                  pad),
+          northeast: LatLng(
+              lats.reduce((a, b) => a > b ? a : b) + pad,
+              latLngs.map((e) => e.longitude).reduce((a, b) => a > b ? a : b) +
+                  pad),
         ),
         left: 48,
         top: 48,
@@ -145,7 +150,7 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : Stack(
                       children: [
-                        MaplibreMap(
+                        MapLibreMap(
                           styleString: isPlaceholderStyle(_styleString!)
                               ? emptyMapStyle
                               : _styleString!,
@@ -191,7 +196,8 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
                     child: _SummaryItem(
                       icon: Icons.straighten,
                       label: i18n.tr('route.distance'),
-                      value: formatDistanceMeters(route.distanceMeters, unit: unit),
+                      value: formatDistanceMeters(route.distanceMeters,
+                          unit: unit),
                     ),
                   ),
                   Expanded(
@@ -217,11 +223,13 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
                 width: double.infinity,
                 height: AppSpacing.touchTargetPlanning,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/navigation'),
+                  onPressed: () =>
+                      Navigator.of(context).pushNamed('/navigation'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentPrimaryDark,
                     foregroundColor: AppColors.textPrimaryLight,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: Text(i18n.tr('route.startNavigation'),
                       style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -241,7 +249,8 @@ class _SummaryItem extends StatelessWidget {
   final String label;
   final String value;
 
-  const _SummaryItem({required this.icon, required this.label, required this.value});
+  const _SummaryItem(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
