@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/utils/geo.dart';
+import 'package:motoroute_app/core/utils/route_matcher.dart';
 import 'package:motoroute_app/features/map/data/location_repository.dart';
 import 'package:motoroute_app/features/navigation_session/speed_camera_warner.dart';
 import 'package:motoroute_app/features/navigation_session/voice_announcer.dart';
@@ -19,6 +20,7 @@ import 'package:motoroute_app/features/weather/route_weather_providers.dart';
 /// (GPS-Ungenauigkeit + Karten-Generalisierung einpreisen). Bewusst
 /// konservativ: falsches Rerouting ist ärgerlicher als spätes Rerouting.
 const double kOffRouteThresholdMeters = 60;
+const Duration kRerouteRetryInterval = Duration(seconds: 15);
 
 class NavigationState {
   final bool isNavigating;
@@ -60,11 +62,14 @@ class NavigationState {
     this.rerouteReason,
   });
 
-  double get remainingMeters =>
-      route == null ? 0 : (route!.distanceMeters - traveledMeters).clamp(0, route!.distanceMeters);
+  double get remainingMeters => route == null
+      ? 0
+      : (route!.distanceMeters - traveledMeters)
+          .clamp(0, route!.distanceMeters);
 
-  double get remainingSeconds =>
-      route == null ? 0 : (route!.durationSeconds * (remainingMeters / route!.distanceMeters));
+  double get remainingSeconds => route == null
+      ? 0
+      : (route!.durationSeconds * (remainingMeters / route!.distanceMeters));
 
   NavigationState copyWith({
     bool? isNavigating,
@@ -101,18 +106,27 @@ class NavigationState {
 class NavigationController extends StateNotifier<NavigationState> {
   final Ref _ref;
   final LocationRepository _locationRepository;
+  final Duration rerouteRetryInterval;
   StreamSubscription<Position>? _positionSubscription;
   Position? _lastPosition;
   int? _lastPositionIndex;
   List<double> _cumulative = const [];
+  RouteMatcher? _routeMatcher;
   VoiceAnnouncer? _voice;
   ProviderSubscription<bool>? _voicePrefSub;
+  int _navigationGeneration = 0;
+  DateTime? _lastRerouteAttemptAt;
 
-  NavigationController(this._ref, this._locationRepository) : super(const NavigationState()) {
+  NavigationController(
+    this._ref,
+    this._locationRepository, {
+    this.rerouteRetryInterval = kRerouteRetryInterval,
+  }) : super(const NavigationState()) {
     _watchEnergySaver();
     // Sprachansagen-Toggle: Live-Sync während der Fahrt - der Screen-
     // Schalter wirkt ohne Neustart; Ausschalten stoppt laufende Ansagen.
-    _voicePrefSub = _ref.listen<bool>(voiceAnnouncementsEnabledProvider, (prev, next) {
+    _voicePrefSub =
+        _ref.listen<bool>(voiceAnnouncementsEnabledProvider, (prev, next) {
       final voice = _voice;
       if (voice == null) return;
       voice.enabled = next;
@@ -121,27 +135,36 @@ class NavigationController extends StateNotifier<NavigationState> {
   }
 
   void start(ComputedRoute route) {
+    _navigationGeneration++;
+    _lastRerouteAttemptAt = null;
     _cumulative = cumulativeDistances(route.geometry);
+    _routeMatcher = RouteMatcher(
+      geometry: route.geometry,
+      cumulative: _cumulative,
+      offRouteThresholdMeters: kOffRouteThresholdMeters,
+    );
+    _lastPosition = null;
+    _lastPositionIndex = null;
     state = NavigationState(
       isNavigating: true,
       route: route,
-      energySaverCritical:
-          _ref.read(energySaverControllerProvider).mode == EnergySaverMode.critical,
+      energySaverCritical: _ref.read(energySaverControllerProvider).mode ==
+          EnergySaverMode.critical,
     );
     _subscribeToPositions();
     _watchEnergySaver();
     // Echtzeitverkehr: alle 30 s Vorfälle rund um die Reststrecke laden
     // und auf BLOCKIERENDE Vorfälle prüfen -> proaktives Rerouting.
-    _ref.read(trafficControllerProvider.notifier).startNavigationMonitoring(route.geometry);
+    _ref
+        .read(trafficControllerProvider.notifier)
+        .startNavigationMonitoring(route.geometry);
     _watchBlockingIncidents();
     // Blitzer-Fahrtwarnung: Kameras entlang der Route laden und bei
     // jedem GPS-Fix die Annäherung prüfen (optisch + haptisch).
     _ref.read(speedCameraWarnerProvider.notifier).loadForRoute(route.geometry);
     // Wetter-Radar: Sturm-Frühwarnung entlang der Route (15-min-Refresh
     // im Controller). Stop passiert im Screen-dispose wie beim GPS.
-    _ref
-        .read(routeWeatherControllerProvider.notifier)
-        .startForRoute(
+    _ref.read(routeWeatherControllerProvider.notifier).startForRoute(
           geometry: route.geometry,
           durationSeconds: route.durationSeconds,
         );
@@ -162,9 +185,15 @@ class NavigationController extends StateNotifier<NavigationState> {
     _trafficSub = _ref.listen(
       trafficControllerProvider,
       (previous, next) {
-        if (!state.isNavigating || state.isRerouting || next.incidents.isEmpty) return;
+        if (!state.isNavigating ||
+            state.isRerouting ||
+            next.incidents.isEmpty) {
+          return;
+        }
         final route = state.route;
-        if (route == null) return;
+        if (route == null) {
+          return;
+        }
 
         final blocking = _ref
             .read(trafficControllerProvider.notifier)
@@ -199,7 +228,8 @@ class NavigationController extends StateNotifier<NavigationState> {
     int incidentIdx = 0;
     for (final p in incident.geometry) {
       for (var i = 0; i < route.geometry.length; i++) {
-        final d = haversineMeters(p[1], p[0], route.geometry[i][1], route.geometry[i][0]);
+        final d = haversineMeters(
+            p[1], p[0], route.geometry[i][1], route.geometry[i][0]);
         if (d < bestIncidentDist) {
           bestIncidentDist = d;
           incidentIdx = i;
@@ -219,12 +249,16 @@ class NavigationController extends StateNotifier<NavigationState> {
   /// sich ("Sperrung auf der Route" statt "Von Route abgewichen").
   Future<void> _rerouteProactively(String reason) async {
     final route = state.route;
-    if (route == null || state.isRerouting) return;
+    if (route == null || !_canStartReroute()) return;
+    final generation = _navigationGeneration;
     state = state.copyWith(isRerouting: true, rerouteReason: reason);
 
     final waypoints = <Waypoint>[
       if (_lastPosition != null)
-        Waypoint(lat: _lastPosition!.latitude, lng: _lastPosition!.longitude, label: 'Aktuelle Position')
+        Waypoint(
+            lat: _lastPosition!.latitude,
+            lng: _lastPosition!.longitude,
+            label: 'Aktuelle Position')
       else
         route.waypoints.first,
       ...route.waypoints.skip(1),
@@ -235,6 +269,7 @@ class NavigationController extends StateNotifier<NavigationState> {
             waypoints: waypoints,
             preference: route.preference,
           );
+      if (!_isCurrentNavigation(generation)) return;
       result.fold(
         (failure) {
           state = state.copyWith(
@@ -245,6 +280,12 @@ class NavigationController extends StateNotifier<NavigationState> {
         (newRoute) {
           final computed = ComputedRoute.fromDomain(newRoute);
           _cumulative = cumulativeDistances(computed.geometry);
+          _routeMatcher = RouteMatcher(
+            geometry: computed.geometry,
+            cumulative: _cumulative,
+            offRouteThresholdMeters: kOffRouteThresholdMeters,
+          );
+          _lastPositionIndex = null;
           state = NavigationState(
             isNavigating: true,
             route: computed,
@@ -256,7 +297,9 @@ class NavigationController extends StateNotifier<NavigationState> {
         },
       );
     } catch (_) {
-      state = state.copyWith(isRerouting: false, error: 'Umleitung fehlgeschlagen');
+      if (!_isCurrentNavigation(generation)) return;
+      state =
+          state.copyWith(isRerouting: false, error: 'Umleitung fehlgeschlagen');
     }
   }
 
@@ -265,37 +308,26 @@ class NavigationController extends StateNotifier<NavigationState> {
   /// geolocator-Stream kennt keine Live-Parameter-Änderung).
   void _subscribeToPositions() {
     _positionSubscription?.cancel();
-    final tuning = _ref.read(energySaverControllerProvider.notifier).locationTuning;
-    _positionSubscription = _locationRepository.watchPosition(tuning: tuning).listen(
-          _onPosition,
-          onError: (Object e) => state = state.copyWith(error: 'GPS-Signal verloren'),
-        );
+    final tuning =
+        _ref.read(energySaverControllerProvider.notifier).locationTuning;
+    _positionSubscription =
+        _locationRepository.watchPosition(tuning: tuning).listen(
+              _onPosition,
+              onError: (Object e) =>
+                  state = state.copyWith(error: 'GPS-Signal verloren'),
+            );
   }
 
   void _onPosition(Position position) {
     if (!state.isNavigating || state.route == null) return;
 
-    // Fortschritt: nächstliegender Geometrie-Punkt + dessen kumulierte
-    // Distanz. Für die MVP-Genauigkeit reicht das; ein echtes Map-
-    // Matching entlang von Segmenten ist eine spätere Verfeinerung.
-    double bestDist = double.infinity;
-    int bestIndex = 0;
-    final geometry = state.route!.geometry;
-    for (var i = 0; i < geometry.length; i++) {
-      final d = haversineMeters(
-        position.latitude,
-        position.longitude,
-        geometry[i][1],
-        geometry[i][0],
-      );
-      if (d < bestDist) {
-        bestDist = d;
-        bestIndex = i;
-      }
-    }
-
-    final traveled = bestIndex < _cumulative.length ? _cumulative[bestIndex] : 0.0;
-    final offRoute = bestDist > kOffRouteThresholdMeters;
+    final matcher = _routeMatcher;
+    if (matcher == null) return;
+    final match =
+        matcher.match(lat: position.latitude, lng: position.longitude);
+    final traveled = match.progressMeters;
+    final bestIndex = match.segmentIndex;
+    final offRoute = match.isOffRoute;
 
     _lastPosition = position;
     _lastPositionIndex = bestIndex;
@@ -332,7 +364,8 @@ class NavigationController extends StateNotifier<NavigationState> {
     try {
       final turn = route.nextTurn(state.traveledMeters);
       if (turn != null) {
-        await voice.onTurn(instruction: turn.text, distanceMeters: turn.distanceMeters);
+        await voice.onTurn(
+            instruction: turn.text, distanceMeters: turn.distanceMeters);
       }
       await voice.onDestination(remainingMeters: state.remainingMeters);
     } catch (_) {
@@ -345,12 +378,16 @@ class NavigationController extends StateNotifier<NavigationState> {
   /// und Backend: Rerouting darf den Fahrstil niemals "verlieren".
   Future<void> _reroute(Position position) async {
     final route = state.route;
-    if (route == null) return;
+    if (route == null || !_canStartReroute()) return;
+    final generation = _navigationGeneration;
 
     state = state.copyWith(isRerouting: true);
 
     final waypoints = <Waypoint>[
-      Waypoint(lat: position.latitude, lng: position.longitude, label: 'Aktuelle Position'),
+      Waypoint(
+          lat: position.latitude,
+          lng: position.longitude,
+          label: 'Aktuelle Position'),
       ...route.waypoints.skip(1),
     ];
 
@@ -359,6 +396,7 @@ class NavigationController extends StateNotifier<NavigationState> {
             waypoints: waypoints,
             preference: route.preference,
           );
+      if (!_isCurrentNavigation(generation)) return;
 
       result.fold(
         (failure) {
@@ -372,17 +410,43 @@ class NavigationController extends StateNotifier<NavigationState> {
         (newRoute) {
           final computed = ComputedRoute.fromDomain(newRoute);
           _cumulative = cumulativeDistances(computed.geometry);
-          state = NavigationState(isNavigating: true, route: computed, isRerouting: false);
+          _routeMatcher = RouteMatcher(
+            geometry: computed.geometry,
+            cumulative: _cumulative,
+            offRouteThresholdMeters: kOffRouteThresholdMeters,
+          );
+          _lastPositionIndex = null;
+          state = NavigationState(
+              isNavigating: true, route: computed, isRerouting: false);
           // Off-Route-Reroute: Fahrer weiß sonst nicht, dass die Route neu ist.
           unawaited(_voice?.onReroute());
         },
       );
     } catch (_) {
-      state = state.copyWith(isRerouting: false, error: 'Neuberechnung fehlgeschlagen');
+      if (!_isCurrentNavigation(generation)) return;
+      state = state.copyWith(
+          isRerouting: false, error: 'Neuberechnung fehlgeschlagen');
     }
   }
 
+  bool _canStartReroute() {
+    if (!state.isNavigating || state.isRerouting) return false;
+    final now = DateTime.now();
+    final lastAttempt = _lastRerouteAttemptAt;
+    if (lastAttempt != null &&
+        now.difference(lastAttempt) < rerouteRetryInterval) {
+      return false;
+    }
+    _lastRerouteAttemptAt = now;
+    return true;
+  }
+
+  bool _isCurrentNavigation(int generation) =>
+      generation == _navigationGeneration && state.isNavigating;
+
   void stop() {
+    _navigationGeneration++;
+    _lastRerouteAttemptAt = null;
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _energySaverSub?.cancel();
@@ -393,6 +457,9 @@ class NavigationController extends StateNotifier<NavigationState> {
     // Ansagen stoppen (auch mitten im Satz) + Historie leeren.
     _voice?.stop();
     _voice = null;
+    _routeMatcher = null;
+    _lastPosition = null;
+    _lastPositionIndex = null;
     state = const NavigationState();
   }
 
@@ -417,6 +484,7 @@ class NavigationController extends StateNotifier<NavigationState> {
 
   @override
   void dispose() {
+    _navigationGeneration++;
     _positionSubscription?.cancel();
     _voicePrefSub?.close();
     super.dispose();
@@ -425,5 +493,5 @@ class NavigationController extends StateNotifier<NavigationState> {
 
 final navigationControllerProvider =
     StateNotifierProvider<NavigationController, NavigationState>((ref) {
-  return NavigationController(ref, LocationRepository());
+  return NavigationController(ref, ref.watch(locationRepositoryProvider));
 });
