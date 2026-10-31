@@ -38,13 +38,14 @@ RecordedTour recordedTourFromPlan({
   required List<TrackPoint> track,
   required double distanceMeters,
   required double durationSeconds,
+  double? elevationGainMeters,
 }) =>
     RecordedTour(
       title: title,
       startedAt: startedAt,
       endedAt: startedAt.add(Duration(seconds: durationSeconds.round())),
       distanceMeters: distanceMeters,
-      elevationGainMeters: 0,
+      elevationGainMeters: elevationGainMeters ?? 0,
       durationSeconds: durationSeconds,
       track: track,
     );

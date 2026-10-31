@@ -1,5 +1,7 @@
 import asyncio
 
+import httpx2
+
 from app.api.routing import (
     Avoidance,
     Coordinate,
@@ -8,6 +10,7 @@ from app.api.routing import (
     RoundtripRequest,
     RouteRequest,
     Vehicle,
+    _elevation_gain_for_shape,
     _roundtrip_request,
     _segments_from_trip,
     _valhalla_payload,
@@ -132,3 +135,75 @@ def test_without_towns_avoidance_no_polygons_in_payload() -> None:
 
     payload = _payload(request)
     assert "avoid_polygons" not in payload
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeHeightClient:
+    """Ersetzt httpx2.AsyncClient für den Valhalla-/height-Call."""
+
+    def __init__(self, heights: list | None = None, error: Exception | None = None) -> None:
+        self._heights = heights
+        self._error = error
+        self.calls: list[tuple[str, dict]] = []
+
+    async def __aenter__(self) -> "_FakeHeightClient":
+        return self
+
+    async def __aexit__(self, *_exc) -> None:
+        return None
+
+    async def post(self, url: str, json: dict) -> _FakeResponse:
+        self.calls.append((url, json))
+        if self._error is not None:
+            raise self._error
+        return _FakeResponse({"height": self._heights})
+
+
+def _mock_height_client(monkeypatch, client: _FakeHeightClient) -> None:
+    monkeypatch.setattr("app.api.routing.httpx2.AsyncClient", lambda **_kw: client)
+
+
+def test_elevation_gain_sums_only_the_climbs(monkeypatch) -> None:
+    client = _FakeHeightClient(heights=[100.0, 150.0, 120.0, 200.0])
+    _mock_height_client(monkeypatch, client)
+
+    gain = asyncio.run(_elevation_gain_for_shape("_p~iF~ps|U_ulLnnqC_mqNvxq`@"))
+
+    # 50 m Anstieg + 80 m Anstieg; der Abstieg 150 -> 120 zählt nicht.
+    assert gain == 130
+    url, body = client.calls[0]
+    assert url.endswith("/height")
+    assert body["shape_format"] == "polyline6"
+    assert body["resample_distance"] == 50
+
+
+def test_elevation_gain_is_none_without_shape(monkeypatch) -> None:
+    client = _FakeHeightClient(heights=[100.0, 200.0])
+    _mock_height_client(monkeypatch, client)
+
+    assert asyncio.run(_elevation_gain_for_shape(None)) is None
+    assert client.calls == []
+
+
+def test_elevation_gain_is_none_when_valhalla_has_no_height_data(monkeypatch) -> None:
+    client = _FakeHeightClient(heights=[100.0, None, 120.0])
+    _mock_height_client(monkeypatch, client)
+
+    assert asyncio.run(_elevation_gain_for_shape("_p~iF~ps|U")) is None
+
+
+def test_elevation_gain_fails_open_on_http_error(monkeypatch) -> None:
+    client = _FakeHeightClient(error=httpx2.HTTPError("boom"))
+    _mock_height_client(monkeypatch, client)
+
+    assert asyncio.run(_elevation_gain_for_shape("_p~iF~ps|U")) is None

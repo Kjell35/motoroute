@@ -41,11 +41,12 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
   }
 
   /// Speichert eine geplante Rundtour als Tour im Tagebuch. Eine Planung
-  /// hat keine echten Zeitstempel: Start ist der Speicherzeitpunkt, die
+  /// hat keine echten Zeitstempel: Start ist die gewählte Startzeit (sonst
+  /// der Speicherzeitpunkt), die
   /// Zeitachse der Spur wird proportional zur Strecke verteilt.
   Future<void> _saveAsTour(ComputedRoute route) async {
     final i18n = ref.read(i18nProvider);
-    final now = DateTime.now();
+    final now = route.plannedStart ?? DateTime.now();
     final cumulative = route.cumulativeDistances();
     final total = cumulative.last;
     final track = [
@@ -64,6 +65,7 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
       track: track,
       distanceMeters: route.distanceMeters,
       durationSeconds: route.durationSeconds,
+      elevationGainMeters: route.elevationGainMeters,
     );
 
     setState(() => _saving = true);

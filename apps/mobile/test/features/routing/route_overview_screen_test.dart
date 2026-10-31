@@ -33,7 +33,8 @@ Future<Database> _openInMemoryDb() async {
   return db;
 }
 
-ComputedRoute _route({required bool isRoundTrip}) => ComputedRoute(
+ComputedRoute _route({required bool isRoundTrip, DateTime? plannedStart}) =>
+    ComputedRoute(
       id: 'route-1',
       waypoints: const [
         Waypoint(lat: 47.561, lng: 10.746, label: 'Start'),
@@ -51,6 +52,7 @@ ComputedRoute _route({required bool isRoundTrip}) => ComputedRoute(
       durationSeconds: 1800,
       segments: const [],
       isRoundTrip: isRoundTrip,
+      plannedStart: plannedStart,
     );
 
 void main() {
@@ -124,5 +126,32 @@ void main() {
     expect(rows!.single['title'], 'Geplante Rundtour');
     expect(rows.single['distance_meters'], 12000);
     expect(rows.single['duration_seconds'], 1800);
+  });
+
+  testWidgets('übernimmt die gewählte Startzeit als Tourbeginn',
+      (tester) async {
+    final plannedStart = DateTime(2026, 11, 1, 8, 30);
+    final (_, db) = await pumpOverview(
+      tester,
+      route: _route(isRoundTrip: true, plannedStart: plannedStart),
+    );
+
+    await tester.tap(find.text('Als Tour speichern'));
+    for (var i = 0;
+        i < 50 && find.text('Tour gespeichert').evaluate().isEmpty;
+        i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
+
+    expect(find.text('Tour gespeichert'), findsOneWidget);
+
+    final rows = await tester.runAsync(() => db.query(TourDatabase.table));
+    expect(rows, hasLength(1));
+    expect(
+      DateTime.parse(rows!.single['started_at'] as String),
+      plannedStart,
+    );
   });
 }

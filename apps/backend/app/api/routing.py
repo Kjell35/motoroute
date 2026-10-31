@@ -77,6 +77,8 @@ class RouteCandidate(BaseModel):
     geometry_polyline6: str | None = None
     curve_score: float | None = None  # CurveScorer v2: 0–10 (docs/14 §3.2)
     segments: list[RouteSegment] = Field(default_factory=list)
+    # Summe aller Anstiege (m) entlang der Route; None, wenn keine Höhendaten da sind.
+    elevation_gain_meters: int | None = None
 
 
 class RouteResponse(BaseModel):
@@ -252,6 +254,7 @@ async def _compute_route(request: RouteRequest) -> RouteResponse:
     summary: dict[str, Any] = trip["summary"]
     shape = next((leg.get("shape") for leg in trip.get("legs", []) if leg.get("shape")), None)
     curve = _curve_score_for_shape(shape)
+    elevation_gain = await _elevation_gain_for_shape(shape)
     return RouteResponse(
         candidates=[
             RouteCandidate(
@@ -260,9 +263,40 @@ async def _compute_route(request: RouteRequest) -> RouteResponse:
                 geometry_polyline6=shape,
                 curve_score=curve,
                 segments=_segments_from_trip(trip),
+                elevation_gain_meters=elevation_gain,
             )
         ]
     )
+
+
+async def _elevation_gain_for_shape(shape: str | None) -> int | None:
+    """Höhenmeter (Summe aller Anstiege) der Route über Valhalla /height.
+
+    Die Geometrie wird in 50-m-Abständen abgetastet, damit Rauschen der
+    Höhenkacheln nicht jeden Meter als Anstieg zählt. Fail-open: ohne Shape,
+    bei Fehler oder fehlenden Höhendaten (null) gibt es None statt einer falschen 0.
+    """
+    if not shape:
+        return None
+    settings = get_settings()
+    try:
+        async with httpx2.AsyncClient(timeout=12.0) as client:
+            response = await client.post(
+                f"{settings.valhalla_url.rstrip('/')}/height",
+                json={
+                    "encoded_polyline": shape,
+                    "shape_format": "polyline6",
+                    "resample_distance": 50,
+                },
+            )
+            response.raise_for_status()
+        heights: list[float | None] = response.json()["height"]
+    except (httpx2.HTTPError, KeyError, TypeError, ValueError):
+        return None
+    if not heights or any(height is None for height in heights):
+        return None
+    gain = sum(max(after - before, 0.0) for before, after in zip(heights, heights[1:]))
+    return round(gain)
 
 
 def _segments_from_trip(trip: dict[str, Any]) -> list[RouteSegment]:

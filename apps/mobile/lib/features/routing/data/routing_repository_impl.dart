@@ -117,6 +117,7 @@ class RoutingRepositoryImpl implements RoutingRepository {
         segments: (candidate['segments'] as List? ?? const [])
             .map((s) => RouteSegment.fromJson(s as Map<String, dynamic>))
             .toList(),
+        elevationGainMeters: (candidate['elevation_gain_meters'] as num?)?.toDouble(),
       ),
     );
   }

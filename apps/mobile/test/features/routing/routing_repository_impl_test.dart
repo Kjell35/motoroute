@@ -76,6 +76,45 @@ void main() {
         ],
       };
 
+  test('elevation_gain_meters wird geparst, fehlt es, bleibt es null', () async {
+    when(() => dio.post(any(), data: any(named: 'data'))).thenAnswer(
+      (_) async => Response(
+        requestOptions: RequestOptions(path: '/api/v1/route'),
+        statusCode: 200,
+        data: {
+          'candidates': [
+            {
+              'distance_m': 95000,
+              'duration_s': 5400,
+              'geometry_polyline6': _polyline6Example,
+              'segments': <dynamic>[],
+              'elevation_gain_meters': 1234,
+            },
+          ],
+        },
+      ),
+    );
+    final withHeights = await repository.createRoute(waypoints: waypoints, preference: preference);
+    withHeights.fold(
+      (failure) => fail('Erwartete Right, bekam Left: $failure'),
+      (route) => expect(route.elevationGainMeters, 1234),
+    );
+
+    when(() => dio.post(any(), data: any(named: 'data'))).thenAnswer(
+      (_) async => Response(
+        requestOptions: RequestOptions(path: '/api/v1/route'),
+        statusCode: 200,
+        data: backendRoute(),
+      ),
+    );
+    final withoutHeights =
+        await repository.createRoute(waypoints: waypoints, preference: preference);
+    withoutHeights.fold(
+      (failure) => fail('Erwartete Right, bekam Left: $failure'),
+      (route) => expect(route.elevationGainMeters, isNull),
+    );
+  });
+
   test('POST /api/v1/route sendet snake_case-Payload und mappt die Antwort', () async {
     when(() => dio.post(any(), data: any(named: 'data'))).thenAnswer(
       (_) async => Response(

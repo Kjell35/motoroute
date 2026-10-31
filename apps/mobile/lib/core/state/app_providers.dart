@@ -187,10 +187,15 @@ class ComputedRoute {
   final double distanceMeters;
   final double durationSeconds;
   final List<RouteSegment> segments;
+  final double? elevationGainMeters;
 
   /// true, wenn die Route über den Rundtour-Planer entstanden ist
   /// (Übersicht bietet dann "Als Tour speichern" an).
   final bool isRoundTrip;
+
+  /// Vom Nutzer im Rundtour-Planer gewählter Tourbeginn (null = beim
+  /// Speichern übernehmen).
+  final DateTime? plannedStart;
 
   const ComputedRoute({
     required this.id,
@@ -200,10 +205,13 @@ class ComputedRoute {
     required this.distanceMeters,
     required this.durationSeconds,
     required this.segments,
+    this.elevationGainMeters,
     this.isRoundTrip = false,
+    this.plannedStart,
   });
 
-  factory ComputedRoute.fromDomain(dynamic route, {bool isRoundTrip = false}) =>
+  factory ComputedRoute.fromDomain(dynamic route,
+          {bool isRoundTrip = false, DateTime? plannedStart}) =>
       ComputedRoute(
         id: route.id as String,
         waypoints: List<Waypoint>.from(route.waypoints as List),
@@ -212,7 +220,9 @@ class ComputedRoute {
         distanceMeters: route.distanceMeters as double,
         durationSeconds: route.durationSeconds as double,
         segments: List<RouteSegment>.from(route.segments as List),
+        elevationGainMeters: route.elevationGainMeters as double?,
         isRoundTrip: isRoundTrip,
+        plannedStart: plannedStart,
       );
 
   /// Kumulierte Distanzen entlang der Geometrie (Meter). Index 0 ist 0;

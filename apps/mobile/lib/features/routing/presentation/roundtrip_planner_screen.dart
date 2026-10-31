@@ -34,6 +34,7 @@ class _RoundTripPlannerScreenState
   bool _creating = false;
   bool _locating = false;
   Waypoint? _start;
+  DateTime? _startTime;
 
   /// Styles passend zum gewaehlten Fahrzeug (wie im Punkt-zu-Punkt-Flow).
   List<RouteStyle> get _supportedStyles =>
@@ -102,6 +103,31 @@ class _RoundTripPlannerScreenState
     });
   }
 
+  /// Tourbeginn wählen (Datum, dann Uhrzeit). Abbrechen lässt die Auswahl
+  /// unverändert.
+  Future<void> _pickStartTime() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _startTime ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (!mounted || date == null) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_startTime ?? now),
+    );
+    if (!mounted || time == null) return;
+    setState(() => _startTime = DateTime(
+        date.year, date.month, date.day, time.hour, time.minute));
+  }
+
+  String _formatStartTime(DateTime d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(d.day)}.${two(d.month)}. ${two(d.hour)}:${two(d.minute)}';
+  }
+
   Future<void> _create() async {
     if (_creating) return;
 
@@ -147,7 +173,8 @@ class _RoundTripPlannerScreenState
       },
       (route) {
         final computed =
-            ComputedRoute.fromDomain(route, isRoundTrip: true);
+            ComputedRoute.fromDomain(route,
+                isRoundTrip: true, plannedStart: _startTime);
         ref.read(activeRouteProvider.notifier).state = computed;
         Navigator.of(context).pushReplacementNamed('/route-overview');
       },
@@ -224,6 +251,15 @@ class _RoundTripPlannerScreenState
                                   if (!mounted || _start != null) return;
                                   await _pickStartViaSearch();
                                 },
+                        ),
+                        _Divider(),
+                        _Row(
+                          icon: Icons.schedule,
+                          label: i18n.tr('roundtrip.startTime'),
+                          value: _startTime == null
+                              ? i18n.tr('roundtrip.startNow')
+                              : _formatStartTime(_startTime!),
+                          onTap: _pickStartTime,
                         ),
                         _Divider(),
                         // Routingprofil: zyklisch durch die unterstuetzten

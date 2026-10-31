@@ -116,6 +116,25 @@ void main() {
     expect(t.track.last.secondsSinceStart, closeTo(3600, 0.01));
   });
 
+  test('geplante Rundtour speichert die vom Backend gelieferten Höhenmeter', () async {
+    final repo = await freshDb();
+    final planned = recordedTourFromPlan(
+      title: 'Geplante Rundtour',
+      startedAt: DateTime.utc(2026, 10, 1, 9),
+      track: const [
+        TrackPoint(lat: 47.5, lng: 10.7, secondsSinceStart: 0),
+        TrackPoint(lat: 47.6, lng: 10.8, secondsSinceStart: 1800),
+      ],
+      distanceMeters: 50000,
+      durationSeconds: 3600,
+      elevationGainMeters: 742,
+    );
+    await repo.insertTour(planned);
+
+    final t = (await repo.getAllTours()).single;
+    expect(t.elevationGainMeters, closeTo(742, 0.01));
+  });
+
   test('getTour: null bei unbekannter ID', () async {
     final repo = await freshDb();
     expect(await repo.getTour(999), isNull);

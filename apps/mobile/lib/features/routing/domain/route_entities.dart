@@ -63,6 +63,9 @@ class NavigationRoute {
   final double durationSeconds;
   final List<RouteSegment> segments;
 
+  /// Summe der Anstiege (Meter) laut Backend; null, wenn keine Höhendaten da sind.
+  final double? elevationGainMeters;
+
   const NavigationRoute({
     required this.id,
     required this.waypoints,
@@ -71,5 +74,6 @@ class NavigationRoute {
     required this.distanceMeters,
     required this.durationSeconds,
     required this.segments,
+    this.elevationGainMeters,
   });
 }
