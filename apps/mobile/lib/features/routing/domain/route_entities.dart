@@ -49,8 +49,8 @@ class RouteSegment {
 
   factory RouteSegment.fromJson(Map<String, dynamic> json) => RouteSegment(
         instruction: json['instruction'] as String,
-        distanceMeters: (json['distanceMeters'] as num).toDouble(),
-        durationSeconds: (json['durationSeconds'] as num).toDouble(),
+        distanceMeters: (json['distance_m'] as num).toDouble(),
+        durationSeconds: (json['duration_s'] as num).toDouble(),
       );
 }
 
@@ -72,24 +72,4 @@ class NavigationRoute {
     required this.durationSeconds,
     required this.segments,
   });
-
-  factory NavigationRoute.fromJson(
-    Map<String, dynamic> json, {
-    required RoutePreference requestedPreference,
-    required List<Waypoint> requestedWaypoints,
-  }) {
-    return NavigationRoute(
-      id: json['id'] as String,
-      waypoints: requestedWaypoints,
-      preference: requestedPreference,
-      geometry: (json['geometry'] as List)
-          .map<List<double>>((p) => (p as List).map((v) => (v as num).toDouble()).toList())
-          .toList(),
-      distanceMeters: (json['distanceMeters'] as num).toDouble(),
-      durationSeconds: (json['durationSeconds'] as num).toDouble(),
-      segments: (json['segments'] as List)
-          .map((s) => RouteSegment.fromJson(s as Map<String, dynamic>))
-          .toList(),
-    );
-  }
 }

@@ -8,14 +8,13 @@ import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
 import 'package:motoroute_app/features/chat/presentation/chat_hub_screen.dart';
 import 'package:motoroute_app/features/map/presentation/map_screen.dart';
+import 'package:motoroute_app/features/tour_diary/presentation/tour_diary_screen.dart';
 import 'package:motoroute_app/features/garage/garage_screen.dart';
 import 'package:motoroute_app/features/marketplace/marketplace_screen.dart';
 import 'package:motoroute_app/features/settings/settings_screen.dart';
-import 'package:motoroute_app/features/waypoints/waypoint_management_screen.dart';
 
-/// Tab-Shell: 4 Navigationspunkte - Home (Karte), Garage, "Mehr" (Sheet
-/// mit Marktplatz/Touren/Chat) und Einstellungen. IndexedStack hält alle
-/// Screens alive - Karten- und Chat-Verbindungen überleben Tab-Wechsel.
+/// Tab-Shell: Karte, Touren, Garage, Community und Einstellungen.
+/// IndexedStack hält die Hauptbereiche beim Tab-Wechsel.
 class HomeShell extends ConsumerStatefulWidget {
   final int initialTab;
 
@@ -28,15 +27,16 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   late int _tab;
 
-  /// Index in der 4-Punkt-Navigationsleiste für den aktuellen Stack-Tab.
+  /// Index in der Hauptnavigation für den aktuellen Bereich.
   int get _navIndex => switch (_tab) {
-        0 => 0, // Karte -> Home
-        2 => 1, // Garage
-        1 || 3 || 4 => 2, // Marktplatz/Touren/Chat -> "Mehr"
-        _ => 3, // Einstellungen
+        0 => 0, // Karte
+        3 => 1, // Touren
+        2 => 2, // Garage
+        1 || 4 => 3, // Community
+        _ => 4, // Einstellungen
       };
 
-  /// "Mehr"-Sheet: Marktplatz, Touren und Chat als große Touch-Ziele.
+  /// Community-Menü: Marktplatz, Chat, Routenplanung und Badges.
   void _openMoreSheet() {
     final i18n = ref.read(i18nProvider);
     final notif = ref.read(notificationsEnabledProvider);
@@ -45,68 +45,109 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.bgSurfaceDark,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            for (final entry in [
-              (1, Icons.storefront, i18n.marketplaceTab),
-              (3, Icons.route, i18n.toursTab),
-              (4, Icons.forum, i18n.chatTab),
-              (6, Icons.emoji_events, i18n.tr('badges.shelfEntry')),
-            ])
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.textMutedDark,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Deine Community',
+                    style: TextStyle(
+                        color: AppColors.textPrimaryDark,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(height: 8),
+              for (final entry in [
+                (1, Icons.storefront, i18n.marketplaceTab),
+                (4, Icons.forum, i18n.chatTab),
+                (6, Icons.emoji_events, i18n.tr('badges.shelfEntry')),
+              ])
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color:
+                          AppColors.accentPrimaryDark.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(entry.$2,
+                        color: AppColors.accentPrimaryDark, size: 24),
+                  ),
+                  title: Text(
+                    entry.$3,
+                    style: const TextStyle(
+                      color: AppColors.textPrimaryDark,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 17,
+                    ),
+                  ),
+                  trailing: entry.$1 == 4 && chatBadge
+                      ? Badge(
+                          label: Text('$unread'),
+                          backgroundColor: AppColors.statusDanger,
+                        )
+                      : const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 16, color: AppColors.textSecondaryDark),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    if (entry.$1 == 6) {
+                      Navigator.of(this.context).pushNamed('/badges');
+                    } else if (_tab != entry.$1) {
+                      setState(() => _tab = entry.$1);
+                    }
+                  },
+                ),
+              // M3-Feature, dezenter Zugang: Route von anderer App scannen.
               ListTile(
-                leading: Icon(entry.$2,
-                    color: AppColors.accentPrimaryDark, size: 28),
-                title: Text(
-                  entry.$3,
-                  style: const TextStyle(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSecondary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.qr_code_scanner,
+                      color: AppColors.accentSecondary, size: 24),
+                ),
+                title: const Text(
+                  'Route scannen',
+                  style: TextStyle(
                     color: AppColors.textPrimaryDark,
                     fontWeight: FontWeight.w600,
                     fontSize: 17,
                   ),
                 ),
-                trailing: entry.$1 == 4 && chatBadge
-                    ? Badge(
-                        label: Text('$unread'),
-                        backgroundColor: AppColors.statusDanger,
-                      )
-                    : const Icon(Icons.chevron_right,
-                        color: AppColors.textSecondaryDark),
+                trailing: const Icon(Icons.chevron_right,
+                    color: AppColors.textSecondaryDark),
                 onTap: () {
                   Navigator.of(context).pop();
-                  if (entry.$1 == 6) {
-                    Navigator.of(this.context).pushNamed('/badges');
-                  } else if (_tab != entry.$1) {
-                    setState(() => _tab = entry.$1);
-                  }
+                  Navigator.of(context).pushNamed('/scan');
                 },
               ),
-            // M3-Feature, dezenter Zugang: Route von anderer App scannen.
-            ListTile(
-              leading: const Icon(Icons.qr_code_scanner,
-                  color: AppColors.accentSecondary, size: 28),
-              title: const Text(
-                'Route scannen',
-                style: TextStyle(
-                  color: AppColors.textPrimaryDark,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 17,
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right,
-                  color: AppColors.textSecondaryDark),
-              onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).pushNamed('/scan');
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -141,8 +182,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Auth-Chat-Brücke am Leben halten (schreibt den Token in den Chat).
+    // Auth-Chat-Brücke bereits am Shell-Start aktivieren, bevor ein Chat-
+    // oder Marktplatz-Tab im IndexedStack seinen Auth-State auswertet.
     ref.watch(authChatBridgeProvider);
+    final auth = ref.watch(authControllerProvider);
+    final token = ref.watch(chatSessionTokenProvider);
+    if (auth.isAuthenticated && token == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final current = ref.read(authControllerProvider);
+        ref.read(chatSessionTokenProvider.notifier).state =
+            current.isAuthenticated
+                ? ref.read(authControllerProvider.notifier).accessToken
+                : null;
+      });
+    }
 
     // In-App-"Benachrichtigung": Ungelesen-Badge am Chat-Tab. Der
     // Nutzer kann ihn in den Einstellungen abschalten - es gibt bewusst
@@ -160,74 +214,75 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           MapScreen(),
           MarketplaceScreen(),
           GarageScreen(),
-          WaypointManagementScreen(),
+          TourDiaryScreen(),
           ChatHubScreen(),
           SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(
-            top: BorderSide(color: AppColors.borderHairlineDark),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.bgSurfaceDark.withValues(alpha: 0.98),
+            border: const Border(
+              top: BorderSide(color: AppColors.borderHairlineDark),
+            ),
           ),
-        ),
-        child: NavigationBar(
-          backgroundColor: AppColors.bgSurfaceDark,
-          indicatorColor: AppColors.accentPrimaryDark.withValues(alpha: 0.22),
-          height: 64,
-          // Navigationsleiste hat 4 Punkte; die Stack-Indizes 1 (Markt-
-          // platz), 3 (Touren) und 4 (Chat) werden über das "Mehr"-Sheet
-          // erreicht und highlighten ebenfalls den "Mehr"-Punkt.
-          selectedIndex: _navIndex,
-          onDestinationSelected: (index) {
-            HapticFeedback.selectionClick();
-            if (index == 2) {
-              _openMoreSheet();
-              return;
-            }
-            final target = switch (index) {
-              0 => 0, // Home -> Karte
-              1 => 2, // Garage
-              _ => 5, // Einstellungen
-            };
-            if (target != _tab) setState(() => _tab = target);
-          },
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.map_outlined,
-                  color: AppColors.textSecondaryDark),
-              selectedIcon:
-                  const Icon(Icons.map, color: AppColors.accentPrimaryDark),
-              label: i18n.mapTab,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.garage_outlined,
-                  color: AppColors.textSecondaryDark),
-              selectedIcon:
-                  const Icon(Icons.garage, color: AppColors.accentPrimaryDark),
-              label: i18n.garageTab,
-            ),
-            NavigationDestination(
-              icon: showChatBadge
-                  ? Badge(
-                      label: Text('$totalUnread'),
-                      backgroundColor: AppColors.statusDanger,
-                      child: const Icon(Icons.apps,
-                          color: AppColors.textSecondaryDark),
-                    )
-                  : const Icon(Icons.apps, color: AppColors.textSecondaryDark),
-              selectedIcon:
-                  const Icon(Icons.apps, color: AppColors.accentPrimaryDark),
-              label: i18n.moreTab,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.settings_outlined,
-                  color: AppColors.textSecondaryDark),
-              selectedIcon: const Icon(Icons.settings,
-                  color: AppColors.accentPrimaryDark),
-              label: i18n.settingsTab,
-            ),
-          ],
+          child: NavigationBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            indicatorColor: AppColors.accentPrimaryDark.withValues(alpha: 0.16),
+            height: 70,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            selectedIndex: _navIndex,
+            onDestinationSelected: (index) {
+              HapticFeedback.selectionClick();
+              if (index == 3) {
+                _openMoreSheet();
+                return;
+              }
+              final target = switch (index) {
+                0 => 0,
+                1 => 3,
+                2 => 2,
+                _ => 5,
+              };
+              if (target != _tab) setState(() => _tab = target);
+            },
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(Icons.explore_outlined),
+                selectedIcon: const Icon(Icons.explore),
+                label: i18n.mapTab,
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.route_outlined),
+                selectedIcon: const Icon(Icons.route),
+                label: i18n.toursTab,
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.two_wheeler_outlined),
+                selectedIcon: const Icon(Icons.two_wheeler),
+                label: i18n.garageTab,
+              ),
+              NavigationDestination(
+                icon: showChatBadge
+                    ? Badge(
+                        label: Text('$totalUnread'),
+                        backgroundColor: AppColors.statusDanger,
+                        child: const Icon(Icons.grid_view_rounded),
+                      )
+                    : const Icon(Icons.grid_view_rounded),
+                selectedIcon: const Icon(Icons.grid_view_rounded),
+                label: i18n.moreTab,
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.tune_rounded),
+                selectedIcon: Icon(Icons.tune_rounded),
+                label: 'Konto',
+              ),
+            ],
+          ),
         ),
       ),
     );

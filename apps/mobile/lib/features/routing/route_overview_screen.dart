@@ -8,6 +8,8 @@ import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
+import 'package:motoroute_app/features/tour_diary/domain/tour_entities.dart';
+import 'package:motoroute_app/features/tour_diary/tour_diary_providers.dart';
 
 /// Screen 7: Routenübersicht - zeigt die tatsächlich berechnete Route
 /// AUF DER KARTE (Linie + Start-/Ziel-/Wegpunkt-Marker, automatisch
@@ -24,6 +26,7 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
   MapLibreMapController? _mapController;
   String? _styleString;
   bool _drawn = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -35,6 +38,45 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
     final choice = ref.read(mapStyleChoiceProvider);
     final style = await loadMapStyle(choice);
     if (mounted) setState(() => _styleString = style);
+  }
+
+  /// Speichert eine geplante Rundtour als Tour im Tagebuch. Eine Planung
+  /// hat keine echten Zeitstempel: Start ist der Speicherzeitpunkt, die
+  /// Zeitachse der Spur wird proportional zur Strecke verteilt.
+  Future<void> _saveAsTour(ComputedRoute route) async {
+    final i18n = ref.read(i18nProvider);
+    final now = DateTime.now();
+    final cumulative = route.cumulativeDistances();
+    final total = cumulative.last;
+    final track = [
+      for (var i = 0; i < route.geometry.length; i++)
+        TrackPoint(
+          lat: route.geometry[i][1],
+          lng: route.geometry[i][0],
+          secondsSinceStart: total > 0
+              ? route.durationSeconds * cumulative[i] / total
+              : 0,
+        ),
+    ];
+    final tour = recordedTourFromPlan(
+      title: i18n.tr('tour.plannedTitle'),
+      startedAt: now,
+      track: track,
+      distanceMeters: route.distanceMeters,
+      durationSeconds: route.durationSeconds,
+    );
+
+    setState(() => _saving = true);
+    try {
+      await ref.read(tourDatabaseProvider).insertTour(tour);
+      await ref.read(tourDiaryProvider.notifier).refresh();
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(i18n.tr('tour.saved'))),
+    );
   }
 
   /// Route + Markierungen zeichnen und den Ausschnitt so wählen, dass
@@ -236,6 +278,19 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
                 ),
               ),
             ),
+            if (route.isRoundTrip)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: AppSpacing.touchTargetPlanning,
+                  child: OutlinedButton(
+                    onPressed: _saving ? null : () => _saveAsTour(route),
+                    child: Text(i18n.tr('tour.saveAsTour')),
+                  ),
+                ),
+              ),
             const SizedBox(height: AppSpacing.xl),
           ],
         ),

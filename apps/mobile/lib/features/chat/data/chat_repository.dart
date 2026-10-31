@@ -324,14 +324,22 @@ class ChatRepository {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/chat/conversations/$conversationId/messages',
       options: _authOptions(token),
-      queryParameters: {'limit': limit, if (before != null) 'before': before},
+      queryParameters: {
+        'limit': limit,
+        if (before != null)
+          'before': before.length > 10
+              ? DateTime.parse(before).toUtc().toIso8601String()
+              : before,
+      },
     );
     final list = (res.data?['messages'] as List<dynamic>? ?? []);
+    final messages = list
+        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
+    final hasMore = (res.data?['hasMore'] ?? false) as bool;
     return MessagePage(
-      messages: list
-          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-          .toList(growable: false),
-      hasMore: (res.data?['hasMore'] ?? false) as bool,
+      messages: messages,
+      hasMore: messages.isNotEmpty && hasMore,
     );
   }
 

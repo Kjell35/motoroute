@@ -35,7 +35,11 @@ class _MpFilter {
   String sort = 'newest';
 
   bool get isActive =>
-      category != null || subcategory != null || condition != null || shipping == true || maxPrice != null;
+      category != null ||
+      subcategory != null ||
+      condition != null ||
+      shipping == true ||
+      maxPrice != null;
 }
 
 class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
@@ -44,19 +48,33 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   List<MpListing> _listings = const [];
   bool _loading = true;
   String? _error;
+  int _loadGeneration = 0;
   final _filter = _MpFilter();
 
   // ---- Autocomplete (Suggest + Tippfehler-Toleranz) -----------------------
   final _focusNode = FocusNode();
   List<MpSuggestion> _suggestions = const [];
   Timer? _suggestDebounce;
+  int _suggestGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
     _focusNode.addListener(() {
-      if (!_focusNode.hasFocus) setState(() => _suggestions = const []);
+      if (!_focusNode.hasFocus && mounted) {
+        setState(() => _suggestions = const []);
+      }
+    });
+    ref.listenManual<String?>(marketplaceTokenProvider, (previous, next) {
+      if (previous != next) {
+        _suggestGeneration++;
+        if (mounted) setState(() => _suggestions = const []);
+        _load();
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
     });
   }
 
@@ -64,8 +82,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   /// zuletzt geladenen Katalog (Damerau-Levenshtein <= 2), damit "BMW "
   /// auch bei "BWM" noch "BMW" findet.
   Future<void> _onSearchChanged() async {
+    if (!mounted) return;
     setState(() {}); // Clear-Button sichtbar halten
     final term = _searchController.text.trim();
+    final generation = ++_suggestGeneration;
     _suggestDebounce?.cancel();
     if (term.length < 2) {
       if (_suggestions.isNotEmpty) setState(() => _suggestions = const []);
@@ -78,7 +98,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         final server = await ref
             .read(marketplaceRepositoryProvider)
             .suggest(token: token, q: term);
-        var merged = [...server.brands, ...server.models];        // Fuzzy-Erweiterung: schon bekannte Marken/Modelle aus dem Katalog
+        var merged = [
+          ...server.brands,
+          ...server.models
+        ]; // Fuzzy-Erweiterung: schon bekannte Marken/Modelle aus dem Katalog
         // des Screens (aktuelles Listing-Set) per Edit-Distanz ergänzen.
         final known = <String>{
           for (final l in _listings) ...[
@@ -94,7 +117,12 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             merged = [...merged, MpSuggestion(label: candidate, count: 0)];
           }
         }
-        if (!mounted) return;
+        if (!mounted ||
+            generation != _suggestGeneration ||
+            term != _searchController.text.trim() ||
+            token != ref.read(marketplaceTokenProvider)) {
+          return;
+        }
         setState(() {
           _suggestions = merged.take(8).toList(growable: false);
         });
@@ -123,7 +151,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           d[i - 1][j - 1] + cost, // ersetzen
         ].reduce((x, y) => x < y ? x : y);
         if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) {
-          d[i][j] = d[i][j] < d[i - 2][j - 2] + 1 ? d[i][j] : d[i - 2][j - 2] + 1;
+          d[i][j] =
+              d[i][j] < d[i - 2][j - 2] + 1 ? d[i][j] : d[i - 2][j - 2] + 1;
         }
       }
     }
@@ -140,10 +169,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     final token = ref.read(marketplaceTokenProvider);
+    if (!mounted) return;
     if (token == null) {
       setState(() {
         _loading = false;
+        _catalog = null;
+        _listings = const [];
         _error = ref.read(i18nProvider).mpNotLoggedIn;
       });
       return;
@@ -165,7 +198,11 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         maxPrice: _filter.maxPrice,
         sort: _filter.sort,
       );
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _loadGeneration ||
+          token != ref.read(marketplaceTokenProvider)) {
+        return;
+      }
       setState(() {
         _catalog = catalog;
         _listings = listings;
@@ -173,7 +210,11 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       });
     } catch (e) {
       ErrorReporter.instance.report('mp.load', e);
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _loadGeneration ||
+          token != ref.read(marketplaceTokenProvider)) {
+        return;
+      }
       setState(() {
         _loading = false;
         _error = friendlyErrorMessage(e, ref.read(i18nProvider));
@@ -183,6 +224,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
 
   @override
   void dispose() {
+    _loadGeneration++;
+    _suggestGeneration++;
     _suggestDebounce?.cancel();
     _searchController.dispose();
     _focusNode.dispose();
@@ -199,7 +242,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       backgroundColor: scheme.surface,
       appBar: AppBar(
         backgroundColor: scheme.surface,
-        title: Text('🛒 ${i18n.mpTitle}', style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text('🛒 ${i18n.mpTitle}',
+            style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           if (isAdmin)
             IconButton(
@@ -207,7 +251,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               icon: const Icon(Icons.admin_panel_settings_outlined),
               onPressed: () async {
                 await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const MarketplaceAdminScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const MarketplaceAdminScreen()),
                 );
               },
             ),
@@ -222,7 +267,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             ),
             onPressed: () async {
               await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MarketplaceInboxScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const MarketplaceInboxScreen()),
               );
             },
           ),
@@ -231,7 +277,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             icon: const Icon(Icons.favorite_outline),
             onPressed: () async {
               await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MarketplaceFavoritesScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const MarketplaceFavoritesScreen()),
               );
             },
           ),
@@ -240,7 +287,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             icon: const Icon(Icons.inventory_2_outlined),
             onPressed: () async {
               await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MarketplaceMyListingsScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const MarketplaceMyListingsScreen()),
               );
               _load();
             },
@@ -292,7 +340,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                   _load();
                                 },
                               ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14)),
                         isDense: true,
                       ),
                     ),
@@ -311,20 +360,28 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                               borderRadius: BorderRadius.circular(12),
                               onTap: () => _applySuggestion(s.label),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 11),
                                 child: Row(
                                   children: [
                                     Icon(
-                                      isBrand ? Icons.directions_car_outlined : Icons.settings_outlined,
+                                      isBrand
+                                          ? Icons.directions_car_outlined
+                                          : Icons.settings_outlined,
                                       size: 18,
                                       color: scheme.onSurfaceVariant,
                                     ),
                                     const SizedBox(width: 10),
-                                    Expanded(child: Text(s.label, style: const TextStyle(fontSize: 15))),
+                                    Expanded(
+                                        child: Text(s.label,
+                                            style:
+                                                const TextStyle(fontSize: 15))),
                                     if (isBrand)
                                       Text(
                                         '${s.count} Treffer',
-                                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: scheme.onSurfaceVariant),
                                       ),
                                   ],
                                 ),
@@ -353,7 +410,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                           tooltip: c.label,
                           selectedColor: AppColors.accentPrimaryDark,
                           labelStyle: TextStyle(
-                            color: selected ? AppColors.textPrimaryDark : scheme.onSurface,
+                            color: selected
+                                ? AppColors.textPrimaryDark
+                                : scheme.onSurface,
                           ),
                           backgroundColor: scheme.surfaceContainerHighest,
                           onSelected: (sel) {
@@ -380,7 +439,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                     runSpacing: 4,
                     children: [
                       _FilterChip(
-                        label: '${i18n.mpFilterCondition}: ${_filter.condition ?? ''}',
+                        label:
+                            '${i18n.mpFilterCondition}: ${_filter.condition ?? ''}',
                         visible: _filter.condition != null,
                         onRemove: () {
                           setState(() => _filter.condition = null);
@@ -388,7 +448,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                         },
                       ),
                       _FilterChip(
-                        label: '${i18n.mpMaxPrice}: ${(_filter.maxPrice ?? 0) / 100} €',
+                        label:
+                            '${i18n.mpMaxPrice}: ${(_filter.maxPrice ?? 0) / 100} €',
                         visible: _filter.maxPrice != null,
                         onRemove: () {
                           setState(() => _filter.maxPrice = null);
@@ -469,7 +530,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text(_error!, textAlign: TextAlign.center,
+                    child: Text(_error!,
+                        textAlign: TextAlign.center,
                         style: const TextStyle(color: AppColors.statusDanger)),
                   ),
                 ),
@@ -478,7 +540,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
-                  child: Text(i18n.mpEmpty, style: TextStyle(color: scheme.onSurfaceVariant)),
+                  child: Text(i18n.mpEmpty,
+                      style: TextStyle(color: scheme.onSurfaceVariant)),
                 ),
               )
             else
@@ -492,7 +555,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                     onOpen: () async {
                       await Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => MarketplaceDetailScreen(listingId: _listings[index].id),
+                          builder: (_) => MarketplaceDetailScreen(
+                              listingId: _listings[index].id),
                         ),
                       );
                       _load();
@@ -514,7 +578,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         var condition = _filter.condition;
         var shipping = _filter.shipping == true;
         final maxPriceController = TextEditingController(
-          text: _filter.maxPrice != null ? (_filter.maxPrice! / 100).toStringAsFixed(0) : '',
+          text: _filter.maxPrice != null
+              ? (_filter.maxPrice! / 100).toStringAsFixed(0)
+              : '',
         );
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
@@ -529,17 +595,24 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(i18n.mpFilters, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text(i18n.mpFilters,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 16),
                   // Unterkategorie
                   if (subcategories.isNotEmpty)
                     DropdownButtonFormField<String>(
                       initialValue: _filter.subcategory,
-                      decoration: InputDecoration(labelText: i18n.mpSubcategory, border: const OutlineInputBorder(), isDense: true),
+                      decoration: InputDecoration(
+                          labelText: i18n.mpSubcategory,
+                          border: const OutlineInputBorder(),
+                          isDense: true),
                       items: subcategories
-                          .map((s) => DropdownMenuItem(value: s.key, child: Text(s.labelDe)))
+                          .map((s) => DropdownMenuItem(
+                              value: s.key, child: Text(s.labelDe)))
                           .toList(),
-                      onChanged: (v) => setSheetState(() => _filter.subcategory = v),
+                      onChanged: (v) =>
+                          setSheetState(() => _filter.subcategory = v),
                     ),
                   const SizedBox(height: 12),
                   // Zustand
@@ -551,8 +624,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                         label: Text('${c.emoji} ${c.label}'),
                         selected: condition == c.apiValue,
                         selectedColor: AppColors.accentPrimaryDark,
-                        onSelected: (sel) =>
-                            setSheetState(() => condition = sel ? c.apiValue : null),
+                        onSelected: (sel) => setSheetState(
+                            () => condition = sel ? c.apiValue : null),
                       );
                     }).toList(),
                   ),
@@ -577,7 +650,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
-                      final parsed = int.tryParse(maxPriceController.text.trim());
+                      final parsed =
+                          int.tryParse(maxPriceController.text.trim());
                       setState(() {
                         _filter.condition = condition;
                         _filter.shipping = shipping ? true : null;
@@ -603,7 +677,8 @@ class _FilterChip extends StatelessWidget {
   final bool visible;
   final VoidCallback onRemove;
 
-  const _FilterChip({required this.label, required this.visible, required this.onRemove});
+  const _FilterChip(
+      {required this.label, required this.visible, required this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -644,7 +719,8 @@ class _ListingCard extends StatelessWidget {
                   ? Image.network(
                       image,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Center(child: Text('🛠️', style: TextStyle(fontSize: 32))),
+                      errorBuilder: (_, __, ___) => const Center(
+                          child: Text('🛠️', style: TextStyle(fontSize: 32))),
                     )
                   : Center(
                       child: Text(
@@ -674,7 +750,8 @@ class _ListingCard extends StatelessWidget {
                       '${listing.brand ?? ''} ${listing.model ?? ''}'.trim(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant, fontSize: 12),
                     ),
                     const Spacer(),
                     Row(
@@ -688,18 +765,24 @@ class _ListingCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text('${listing.condition.emoji} ${listing.condition.label}',
-                            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                        Text(
+                            '${listing.condition.emoji} ${listing.condition.label}',
+                            style: TextStyle(
+                                fontSize: 11, color: scheme.onSurfaceVariant)),
                         const Spacer(),
                         if (listing.shipping)
                           Padding(
                             padding: const EdgeInsets.only(left: 4),
-                            child: Text('📦', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                            child: Text('📦',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant)),
                           ),
                         Text('📍 ${listing.locationLabel}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                            style: TextStyle(
+                                fontSize: 11, color: scheme.onSurfaceVariant)),
                       ],
                     ),
                   ],

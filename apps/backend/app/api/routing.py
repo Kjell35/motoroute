@@ -5,7 +5,7 @@ noch für ein Bewegungsprofil verwendet.
 """
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 import httpx2
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -28,6 +28,7 @@ class RideStyle(StrEnum):
     curvy = "curvy"
     extra_curvy = "extra_curvy"
     fast_and_curvy = "fast_and_curvy"
+    unpaved = "unpaved"  # Schotter & Natur: Wege/Pisten bevorzugt
 
 
 class Avoidance(StrEnum):
@@ -55,11 +56,27 @@ class RouteRequest(BaseModel):
     preferences: Preferences
 
 
+class RoundtripRequest(BaseModel):
+    start: Coordinate
+    target_distance_km: float = Field(gt=0, le=500)
+    direction: Literal["NORTH", "EAST", "SOUTH", "WEST", "RANDOM"] = "RANDOM"
+    preferences: Preferences
+
+
+class RouteSegment(BaseModel):
+    """Ein Abbiegehinweis (Valhalla-Maneuver) mit Strecke bis zum nächsten Hinweis."""
+
+    instruction: str
+    distance_m: int
+    duration_s: int
+
+
 class RouteCandidate(BaseModel):
     distance_m: int
     duration_s: int
     geometry_polyline6: str | None = None
     curve_score: float | None = None  # CurveScorer v2: 0–10 (docs/14 §3.2)
+    segments: list[RouteSegment] = Field(default_factory=list)
 
 
 class RouteResponse(BaseModel):
@@ -125,6 +142,7 @@ async def _valhalla_payload(request: RouteRequest) -> dict[str, Any]:
         RideStyle.fast_and_curvy: 0.4,
         RideStyle.curvy: 0.15,
         RideStyle.extra_curvy: 0.0,
+        RideStyle.unpaved: 0.0,
     }[style]
     if Avoidance.highway in avoid:
         highway_use = 0.0
@@ -133,6 +151,8 @@ async def _valhalla_payload(request: RouteRequest) -> dict[str, Any]:
         "use_tolls": 0.0 if Avoidance.toll in avoid else 0.5,
         "use_ferry": 0.0 if Avoidance.ferry in avoid else 0.5,
     }
+    if style is RideStyle.unpaved:
+        options["use_trails"] = 1.0
     if Avoidance.unpaved in avoid:
         options["use_trails"] = 0.0
     if Avoidance.cycleway in avoid:
@@ -163,6 +183,55 @@ router = APIRouter(prefix="/api/v1", tags=["routing"], dependencies=[Depends(req
 
 @router.post("/route", response_model=RouteResponse)
 async def route(request: RouteRequest) -> RouteResponse:
+    return await _compute_route(request)
+
+
+@router.post("/roundtrips", response_model=RouteResponse)
+async def roundtrip(request: RoundtripRequest) -> RouteResponse:
+    """Rundtour: Start -> zwei Punkte auf einem Kreis -> Start.
+
+    Der Kreisradius ist eine Näherung (Straßen sind länger als die Luftlinie);
+    Valhalla liefert die reale Strecke, die Länge wird dort gemessen.
+    """
+    return await _compute_route(_roundtrip_request(request))
+
+
+def _roundtrip_request(request: RoundtripRequest) -> RouteRequest:
+    import math
+    import random
+
+    bearings = {"NORTH": 0.0, "EAST": 90.0, "SOUTH": 180.0, "WEST": 270.0}
+    bearing = (
+        random.uniform(0.0, 360.0)
+        if request.direction == "RANDOM"
+        else bearings[request.direction]
+    )
+    # Kreisradius so, dass ein Kreis ~ Zielstrecke / 1.3 (Umweg-Faktor) ergibt.
+    radius_m = request.target_distance_km * 1000.0 / (2.0 * math.pi * 1.3)
+    lat0, lon0 = request.start.lat, request.start.lon
+    # Mittelpunkt des Kreises liegt in Fahrtrichtung vom Start aus.
+    center_north = radius_m * math.cos(math.radians(bearing))
+    center_east = radius_m * math.sin(math.radians(bearing))
+    lat_per_m = 1.0 / 111_320.0
+    lon_per_m = 1.0 / (111_320.0 * max(math.cos(math.radians(lat0)), 1e-6))
+    waypoints = [request.start]
+    # Start liegt auf dem Kreis bei Winkel bearing+180; zwei weitere Punkte
+    # auf 120° und 240° versetzt ergeben eine geschlossene Schleife.
+    for offset in (120.0, 240.0):
+        angle = math.radians(bearing + 180.0 + offset)
+        north = center_north + radius_m * math.cos(angle)
+        east = center_east + radius_m * math.sin(angle)
+        waypoints.append(
+            Coordinate(
+                lat=lat0 + north * lat_per_m,
+                lon=lon0 + east * lon_per_m,
+            )
+        )
+    waypoints.append(request.start)
+    return RouteRequest(waypoints=waypoints, preferences=request.preferences)
+
+
+async def _compute_route(request: RouteRequest) -> RouteResponse:
     settings = get_settings()
     try:
         async with httpx2.AsyncClient(timeout=12.0) as client:
@@ -190,9 +259,31 @@ async def route(request: RouteRequest) -> RouteResponse:
                 duration_s=round(float(summary["time"])),
                 geometry_polyline6=shape,
                 curve_score=curve,
+                segments=_segments_from_trip(trip),
             )
         ]
     )
+
+
+def _segments_from_trip(trip: dict[str, Any]) -> list[RouteSegment]:
+    """Valhalla-Maneuver aller Legs in Abbiegehinweise umwandeln.
+
+    Maneuver ohne Text (z. B. reine Fortsetzungen) werden übersprungen.
+    """
+    segments: list[RouteSegment] = []
+    for leg in trip.get("legs", []):
+        for maneuver in leg.get("maneuvers", []):
+            instruction = maneuver.get("instruction")
+            if not instruction:
+                continue
+            segments.append(
+                RouteSegment(
+                    instruction=str(instruction),
+                    distance_m=round(float(maneuver.get("length", 0.0)) * 1000),
+                    duration_s=round(float(maneuver.get("time", 0.0))),
+                )
+            )
+    return segments
 
 
 def _curve_score_for_shape(shape: str | None) -> float | None:

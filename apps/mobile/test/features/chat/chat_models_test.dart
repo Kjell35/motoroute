@@ -42,7 +42,31 @@ void main() {
     expect(requests.first.queryParameters['limit'], 30);
     expect(requests.last.data, {'content': 'Hallo'});
     expect(dio.options.headers.containsKey('Authorization'), isFalse);
-    expect(dio.options.headers.containsKey('Authorization'), isFalse);
+  });
+
+  test(
+      'Nachrichten-Cursor wird auf UTC normalisiert und leere Seite beendet Pagination',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://chat.test'))
+      ..httpClientAdapter = _ChatAdapter((options) {
+        requests.add(options);
+        return _jsonResponse({'messages': [], 'hasMore': true});
+      });
+    final repository = ChatRepository(dio);
+
+    final page = await repository.messages(
+      'token-one',
+      'conversation-1',
+      before: '2026-10-20T12:00:00+02:00',
+    );
+
+    expect(
+      requests.single.queryParameters['before'],
+      '2026-10-20T10:00:00.000Z',
+    );
+    expect(page.messages, isEmpty);
+    expect(page.hasMore, isFalse);
   });
 
   group('ChatUser.fromJson', () {

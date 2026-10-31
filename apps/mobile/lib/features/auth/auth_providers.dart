@@ -261,14 +261,12 @@ class AuthController extends StateNotifier<AuthState> {
     // The Dio instance from ApiClient owns the cold-start/deploy retry policy.
     // Do not wrap it in a second retry loop: that multiplied the delay on
     // failed refresh attempts just as it did for login.
-    return _refreshInFlight ??= _dioFactory()
-        .post<Map<String, dynamic>>(
-          '/v1/auth/refresh',
-          data: {'refreshToken': refresh},
-        )
-        .whenComplete(() {
-          _refreshInFlight = null;
-        });
+    return _refreshInFlight ??= _dioFactory().post<Map<String, dynamic>>(
+      '/v1/auth/refresh',
+      data: {'refreshToken': refresh},
+    ).whenComplete(() {
+      _refreshInFlight = null;
+    });
   }
 
   /// Rolle aus users/me nachladen und in den State schreiben.
@@ -718,7 +716,10 @@ final authChatBridgeProvider = Provider<void>((ref) {
   // Provider-Modifikationen während der eigenen Initialisierung - der
   // Mikrotask läuft unmittelbar nach der Aktivierung, vor dem ersten
   // Frame.
-  final restored = ref.read(authControllerProvider);
-  Future.microtask(() => mirror(restored));
+  // Read the latest state when the microtask runs: restore may complete
+  // between provider creation and this callback, otherwise a stale null
+  // could overwrite the token already mirrored by the listener.
+  ref.read(authControllerProvider);
+  Future.microtask(() => mirror(ref.read(authControllerProvider)));
   ref.listen<AuthState>(authControllerProvider, (_, next) => mirror(next));
 });

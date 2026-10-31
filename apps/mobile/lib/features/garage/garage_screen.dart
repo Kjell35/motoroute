@@ -20,13 +20,12 @@ class GarageScreen extends ConsumerStatefulWidget {
 
 class _GarageScreenState extends ConsumerState<GarageScreen> {
   bool _busy = false;
-  int _autoRetries = 0;
-  static const _maxAutoRetries = 6;
 
   String _friendly(Object? e) {
     final msg = e.toString();
     if (msg.contains('GarageApiException')) {
-      if (msg.contains('401') || msg.contains('AUTH')) return ref.read(i18nProvider).gLoginFailed;
+      if (msg.contains('401') || msg.contains('AUTH'))
+        return ref.read(i18nProvider).gLoginFailed;
     }
     return '${ref.read(i18nProvider).gServerUnreachable}: ${e.toString().split('\n').first}';
   }
@@ -36,7 +35,8 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.bgSurfaceDark,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => const _CreateVehicleSheet(),
     );
     ref.invalidate(garageListProvider);
@@ -52,12 +52,14 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
         elevation: 0,
-        title: Text(i18n.gTitle, style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(i18n.gTitle,
+            style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           session.value != null
               ? IconButton(
                   tooltip: i18n.gLogout,
-                  icon: const Icon(Icons.logout, color: AppColors.textSecondaryDark),
+                  icon: const Icon(Icons.logout,
+                      color: AppColors.textSecondaryDark),
                   onPressed: () async {
                     await ref.read(garageSessionProvider.notifier).logout();
                     ref.invalidate(garageListProvider);
@@ -68,7 +70,9 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
       ),
       body: session.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(_friendly(e), style: const TextStyle(color: AppColors.textSecondaryDark))),
+        error: (e, _) => Center(
+            child: Text(_friendly(e),
+                style: const TextStyle(color: AppColors.textSecondaryDark))),
         data: (s) {
           if (s == null) return _buildNeedsAccount(i18n);
           return _buildGarage(i18n, s);
@@ -80,27 +84,10 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
   // -- Login-Karte -----------------------------------------------------------
 
   Widget _buildNeedsAccount(I18n i18n) {
-    // KEIN Login-Formular mehr: Die Garage verbindet sich automatisch
-    // mit dem MotoRoute-Konto. Diese Karte erscheint nur, wenn das
-    // Provisioning gerade nicht klappt (offline / Kaltstart / nicht
-    // angemeldet) - mit ehrlichem Hinweis und Retry-Knopf.
+    // Die Garage verbindet sich automatisch mit dem MotoRoute-Konto; bei
+    // kalter API bleibt die Oberfläche bedienbar und bietet einen Retry.
     final auth = ref.watch(authControllerProvider);
     final signedIn = auth.isAuthenticated;
-    // Selbstheilung: Angemeldet, aber keine Garage-Session? Wir probieren
-    // es wiederholt im Hintergrund (Render-Kaltstart dauert bis zu 60 s) -
-    // der Nutzer sieht eine Ladeanzeige statt eines Knopfes. Loop-sicher:
-    // max. Versuche + nur wenn gerade kein Versuch läuft.
-    if (signedIn && !_busy && _autoRetries < _maxAutoRetries) {
-      _autoRetries += 1;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        setState(() => _busy = true);
-        await ref.read(garageSessionProvider.notifier).provisionFromAuth();
-        if (!mounted) return;
-        setState(() => _busy = false);
-        ref.invalidate(garageListProvider);
-      });
-    }
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -108,25 +95,31 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
           constraints: const BoxConstraints(maxWidth: 420),
           child: Card(
             color: AppColors.bgSurfaceDark,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             child: Padding(
               padding: const EdgeInsets.all(22),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.garage_outlined, size: 44, color: AppColors.accentPrimaryDark),
+                  const Icon(Icons.garage_outlined,
+                      size: 44, color: AppColors.accentPrimaryDark),
                   const SizedBox(height: 12),
                   Text(
                     signedIn ? i18n.gConnectTitle : i18n.gConnectNeedLogin,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 20, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                        color: AppColors.textPrimaryDark,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     signedIn ? i18n.gConnectHint : i18n.gConnectNeedLoginHint,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13),
+                    style: const TextStyle(
+                        color: AppColors.textSecondaryDark, fontSize: 13),
                   ),
                   const SizedBox(height: 18),
                   if (signedIn)
@@ -134,21 +127,30 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.accentPrimaryDark,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: _busy ? null : () async {
-                        setState(() {
-                          _busy = true;
-                          _autoRetries = 0; // Knopfdruck eröffnet neues Auto-Retry-Budget.
-                        });
-                        await ref.read(garageSessionProvider.notifier).provisionFromAuth();
-                        if (mounted) setState(() => _busy = false);
-                        ref.invalidate(garageListProvider);
-                      },
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              setState(() {
+                                _busy = true;
+                              });
+                              await ref
+                                  .read(garageSessionProvider.notifier)
+                                  .provisionFromAuth();
+                              if (mounted) setState(() => _busy = false);
+                              ref.invalidate(garageListProvider);
+                            },
                       icon: _busy
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.sync),
-                      label: Text(i18n.gConnectRetry, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      label: Text(i18n.gConnectRetry,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                 ],
               ),
@@ -170,7 +172,8 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
         error: (e, _) => ListView(
           children: [
             const SizedBox(height: 80),
-            const Icon(Icons.cloud_off, color: AppColors.textMutedDark, size: 44),
+            const Icon(Icons.cloud_off,
+                color: AppColors.textMutedDark, size: 44),
             const SizedBox(height: 10),
             Center(
               child: Text(
@@ -182,14 +185,18 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
           ],
         ),
         data: (vehicles) {
-          final motos = vehicles.where((v) => v.category == GarageCategory.motorcycle).toList();
-          final cars = vehicles.where((v) => v.category == GarageCategory.car).toList();
+          final motos = vehicles
+              .where((v) => v.category == GarageCategory.motorcycle)
+              .toList();
+          final cars =
+              vehicles.where((v) => v.category == GarageCategory.car).toList();
           if (vehicles.isEmpty) {
             return ListView(
               padding: const EdgeInsets.all(24),
               children: [
                 const SizedBox(height: 60),
-                const Icon(Icons.garage_outlined, size: 48, color: AppColors.textSecondaryDark),
+                const Icon(Icons.garage_outlined,
+                    size: 48, color: AppColors.textSecondaryDark),
                 const SizedBox(height: 14),
                 Text(
                   i18n.gEmpty,
@@ -198,7 +205,8 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                 ),
                 const SizedBox(height: 20),
                 FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accentPrimaryDark),
                   onPressed: _openCreateDialog,
                   icon: const Icon(Icons.add),
                   label: Text(i18n.gAddVehicle),
@@ -216,7 +224,8 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                 ),
                 onPressed: _openCreateDialog,
                 icon: const Icon(Icons.add),
-                label: Text(i18n.gAddVehicle, style: const TextStyle(fontWeight: FontWeight.w700)),
+                label: Text(i18n.gAddVehicle,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
               if (motos.isNotEmpty) ...[
                 const SizedBox(height: 18),
@@ -251,14 +260,17 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
         padding: const EdgeInsets.only(bottom: 8, left: 4),
         child: Text(text,
             style: const TextStyle(
-                color: AppColors.textSecondaryDark, fontWeight: FontWeight.w700, fontSize: 15)),
+                color: AppColors.textSecondaryDark,
+                fontWeight: FontWeight.w700,
+                fontSize: 15)),
       );
 }
 
 // -- Fahrzeug-Karte -------------------------------------------------------------
 
 class _VehicleCard extends StatelessWidget {
-  const _VehicleCard({required this.vehicle, required this.i18n, required this.onTap});
+  const _VehicleCard(
+      {required this.vehicle, required this.i18n, required this.onTap});
 
   final GarageVehicle vehicle;
   final I18n i18n;
@@ -308,7 +320,8 @@ class _VehicleCard extends StatelessWidget {
                   color: AppColors.bgSurfaceRaisedDark,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Text(vehicle.category.emoji, style: const TextStyle(fontSize: 26)),
+                child: Text(vehicle.category.emoji,
+                    style: const TextStyle(fontSize: 26)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -317,15 +330,20 @@ class _VehicleCard extends StatelessWidget {
                   children: [
                     Text(vehicle.title,
                         style: const TextStyle(
-                            color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 16),
+                            color: AppColors.textPrimaryDark,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16),
                         overflow: TextOverflow.ellipsis),
                     if (vehicle.subtitle.isNotEmpty)
                       Text(vehicle.subtitle,
-                          style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+                          style: const TextStyle(
+                              color: AppColors.textSecondaryDark,
+                              fontSize: 13)),
                     const SizedBox(height: 4),
                     Text(
                       '${_fmtKm(vehicle.odometerKm)} km',
-                      style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13),
+                      style: const TextStyle(
+                          color: AppColors.textSecondaryDark, fontSize: 13),
                     ),
                   ],
                 ),
@@ -341,7 +359,10 @@ class _VehicleCard extends StatelessWidget {
                     child: Text(
                       _statusText(i18n),
                       textAlign: TextAlign.right,
-                      style: TextStyle(color: _statusColor, fontSize: 11, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                          color: _statusColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -371,7 +392,8 @@ class _CreateVehicleSheet extends ConsumerStatefulWidget {
   const _CreateVehicleSheet();
 
   @override
-  ConsumerState<_CreateVehicleSheet> createState() => _CreateVehicleSheetState();
+  ConsumerState<_CreateVehicleSheet> createState() =>
+      _CreateVehicleSheetState();
 }
 
 class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
@@ -407,9 +429,9 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
     final baseUrl = await ref.read(garageBaseUrlProvider.future);
     if (session == null) return;
     try {
-      final list = await ref
-          .read(garageRepositoryProvider)
-          .manufacturers(baseUrl, session.token, motorcycle: _category == GarageCategory.motorcycle);
+      final list = await ref.read(garageRepositoryProvider).manufacturers(
+          baseUrl, session.token,
+          motorcycle: _category == GarageCategory.motorcycle);
       setState(() => _manufacturers = list);
     } catch (e) {
       ErrorReporter.instance.report('garage.load', e);
@@ -442,7 +464,9 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
     final session = ref.read(garageSessionProvider).value;
     final baseUrl = await ref.read(garageBaseUrlProvider.future);
     if (session == null) return;
-    final list = await ref.read(garageRepositoryProvider).models(baseUrl, session.token, m.id);
+    final list = await ref
+        .read(garageRepositoryProvider)
+        .models(baseUrl, session.token, m.id);
     setState(() => _models = list);
   }
 
@@ -456,7 +480,9 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
     final session = ref.read(garageSessionProvider).value;
     final baseUrl = await ref.read(garageBaseUrlProvider.future);
     if (session == null) return;
-    final list = await ref.read(garageRepositoryProvider).variants(baseUrl, session.token, m.id);
+    final list = await ref
+        .read(garageRepositoryProvider)
+        .variants(baseUrl, session.token, m.id);
     setState(() => _variants = list);
   }
 
@@ -482,8 +508,11 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             variantId: _variant?.id,
             variantName: _variant?.name,
             odometerKm: int.tryParse(_kmCtrl.text.trim().replaceAll('.', '')),
-            nickname: _nicknameCtrl.text.trim().isEmpty ? null : _nicknameCtrl.text.trim(),
-            color: _colorCtrl.text.trim().isEmpty ? null : _colorCtrl.text.trim(),
+            nickname: _nicknameCtrl.text.trim().isEmpty
+                ? null
+                : _nicknameCtrl.text.trim(),
+            color:
+                _colorCtrl.text.trim().isEmpty ? null : _colorCtrl.text.trim(),
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -511,12 +540,17 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(i18n.gAddVehicle,
-                style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 18, fontWeight: FontWeight.w700)),
+                style: const TextStyle(
+                    color: AppColors.textPrimaryDark,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
             const SizedBox(height: 14),
             SegmentedButton<GarageCategory>(
               segments: [
-                ButtonSegment(value: GarageCategory.motorcycle, label: Text(i18n.gMoto)),
-                ButtonSegment(value: GarageCategory.car, label: Text(i18n.gCar)),
+                ButtonSegment(
+                    value: GarageCategory.motorcycle, label: Text(i18n.gMoto)),
+                ButtonSegment(
+                    value: GarageCategory.car, label: Text(i18n.gCar)),
               ],
               selected: {_category},
               onSelectionChanged: (s) => _pickCategory(s.first),
@@ -524,9 +558,14 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             const SizedBox(height: 14),
             DropdownButtonFormField<GarageCatalogEntry>(
               initialValue: _manufacturer,
-              hint: Text(_manufacturers == null ? i18n.gLoading : i18n.gManufacturer),
+              hint: Text(
+                  _manufacturers == null ? i18n.gLoading : i18n.gManufacturer),
               items: (_manufacturers ?? [])
-                  .map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(color: AppColors.textPrimaryDark))))
+                  .map((m) => DropdownMenuItem(
+                      value: m,
+                      child: Text(m.name,
+                          style: const TextStyle(
+                              color: AppColors.textPrimaryDark))))
                   .toList(),
               onChanged: _pickManufacturer,
               dropdownColor: AppColors.bgSurfaceRaisedDark,
@@ -535,9 +574,17 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             const SizedBox(height: 10),
             DropdownButtonFormField<GarageCatalogEntry>(
               initialValue: _model,
-              hint: Text(_models == null ? ( _manufacturer == null ? i18n.gFirstManufacturer : i18n.gLoading) : i18n.gModel),
+              hint: Text(_models == null
+                  ? (_manufacturer == null
+                      ? i18n.gFirstManufacturer
+                      : i18n.gLoading)
+                  : i18n.gModel),
               items: (_models ?? [])
-                  .map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(color: AppColors.textPrimaryDark))))
+                  .map((m) => DropdownMenuItem(
+                      value: m,
+                      child: Text(m.name,
+                          style: const TextStyle(
+                              color: AppColors.textPrimaryDark))))
                   .toList(),
               onChanged: _pickModel,
               dropdownColor: AppColors.bgSurfaceRaisedDark,
@@ -549,7 +596,11 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
                 initialValue: _variant,
                 hint: Text(i18n.gVariant),
                 items: _variants!
-                    .map((v) => DropdownMenuItem(value: v, child: Text(v.name, style: const TextStyle(color: AppColors.textPrimaryDark))))
+                    .map((v) => DropdownMenuItem(
+                        value: v,
+                        child: Text(v.name,
+                            style: const TextStyle(
+                                color: AppColors.textPrimaryDark))))
                     .toList(),
                 onChanged: (v) => setState(() => _variant = v),
                 dropdownColor: AppColors.bgSurfaceRaisedDark,
@@ -580,7 +631,9 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             ]),
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(_error!, style: const TextStyle(color: AppColors.statusDanger, fontSize: 13)),
+              Text(_error!,
+                  style: const TextStyle(
+                      color: AppColors.statusDanger, fontSize: 13)),
             ],
             const SizedBox(height: 16),
             FilledButton(
@@ -590,8 +643,12 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
               ),
               onPressed: _busy ? null : _submit,
               child: _busy
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(i18n.gSave, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(i18n.gSave,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
           ],
         ),

@@ -42,6 +42,15 @@ void main() {
       expect(tour.pois.first.lat, closeTo(47.5584, 0.0001));
     });
 
+    test('Importvorschau kann Distanz und Höhengewinn auswerten', () {
+      final tour = GpxParser().parse(sampleGpx);
+
+      expect(tour.distanceMeters / 1000, greaterThan(0.4));
+      expect(tour.distanceMeters / 1000, lessThan(1));
+      expect(tour.track.length, 3);
+      expect(tour.elevationGainMeters, closeTo(20.5, 0.1));
+    });
+
     test('fallback auf rte/rtept (Kurviger-Style Route)', () {
       const routeGpx = '''<gpx version="1.1" creator="Kurviger">
   <rte><name>Schwarzwald</name>
@@ -55,18 +64,42 @@ void main() {
       expect(tour.durationSeconds, 0);
     });
 
+    test('lehnt Routen mit nur einem gültigen Punkt mit Hinweis ab', () {
+      const oneTrackPoint = '''<gpx version="1.1">
+  <trk><trkseg><trkpt lat="47.5" lon="10.7"/></trkseg></trk>
+</gpx>''';
+      const oneWaypoint = '''<gpx version="1.1">
+  <wpt lat="47.5" lon="10.7"/>
+</gpx>''';
+
+      for (final xml in [oneTrackPoint, oneWaypoint]) {
+        expect(
+          () => GpxParser().parse(xml),
+          throwsA(
+            isA<GpxException>().having(
+              (error) => error.message,
+              'message',
+              contains('mindestens zwei Punkte'),
+            ),
+          ),
+        );
+      }
+    });
+
     test('fehlerhafte Koordinaten werden übersprungen', () {
       const mixed = '''<gpx version="1.1">
   <trk><trkseg>
     <trkpt lat="99.0" lon="10.0"/>
     <trkpt lat="47.5" lon="200.0"/>
     <trkpt lat="47.561" lon="10.746"/>
+    <trkpt lat="47.562" lon="10.747"/>
     <trkpt lat="n/a" lon="10.7"/>
   </trkseg></trk>
 </gpx>''';
       final tour = GpxParser().parse(mixed);
-      expect(tour.track.length, 1);
+      expect(tour.track.length, 2);
       expect(tour.track.first.lat, closeTo(47.561, 0.0001));
+      expect(tour.track.last.lat, closeTo(47.562, 0.0001));
     });
 
     test('GpxException bei keinem XML', () {
@@ -82,9 +115,21 @@ void main() {
   group('GpxGenerator', () {
     test('Round-Trip: Export -> Import erhält Kern-Daten', () {
       const points = [
-        TrackPoint(lat: 47.561, lng: 10.746, elevationMeters: 1100, secondsSinceStart: 0),
-        TrackPoint(lat: 47.5625, lng: 10.7485, elevationMeters: 1120, secondsSinceStart: 60),
-        TrackPoint(lat: 47.564, lng: 10.751, elevationMeters: 1115, secondsSinceStart: 120),
+        TrackPoint(
+            lat: 47.561,
+            lng: 10.746,
+            elevationMeters: 1100,
+            secondsSinceStart: 0),
+        TrackPoint(
+            lat: 47.5625,
+            lng: 10.7485,
+            elevationMeters: 1120,
+            secondsSinceStart: 60),
+        TrackPoint(
+            lat: 47.564,
+            lng: 10.751,
+            elevationMeters: 1115,
+            secondsSinceStart: 120),
       ];
       final original = RecordedTour(
         title: 'Meine Tour',

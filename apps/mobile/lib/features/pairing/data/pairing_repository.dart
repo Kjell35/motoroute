@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../core/network/api_client.dart';
+
 /// „Route am Computer planen“ (M3-Feature) — Repository-Port des
 /// neuen Backend-Vertrags in die alte App-Struktur. Die geplanten
 /// Punkte werden als [PairingPoint] geliefert; die alten Screens
@@ -44,42 +46,91 @@ class PairingStart {
 class PairingConfig {
   const PairingConfig._();
 
-  /// Basis des Pairing-Backends (das neue FastAPI-Backend liefert
-  /// /api/v1/pairing/*) — via --dart-define steerbar.
+  /// Nur ein explizit konfiguriertes Backend verwenden. Die frühere
+  /// Emulator-Loopback-URL war in Release-APKs auf realen Geräten und am
+  /// Desktop unerreichbar.
   static const String apiBaseUrl = String.fromEnvironment(
     'MOTOROUTE_API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000',
+    defaultValue: '',
+  );
+
+  static const String publicBaseUrl = String.fromEnvironment(
+    'MOTOROUTE_PAIRING_PUBLIC_BASE_URL',
   );
 }
 
 class PairingRepository {
-  PairingRepository({http.Client? client}) : _client = client ?? http.Client();
+  PairingRepository({
+    http.Client? client,
+    String? apiBaseUrl,
+    String? publicBaseUrl,
+  })  : _client = client ?? http.Client(),
+        _apiBaseUrl = _normalizeOrigin(
+          apiBaseUrl ??
+              (PairingConfig.apiBaseUrl.isNotEmpty
+                  ? PairingConfig.apiBaseUrl
+                  : ApiClient.baseUrl),
+        ),
+        _publicBaseUrl =
+            _normalizeOrigin(publicBaseUrl ?? PairingConfig.publicBaseUrl);
+
   final http.Client _client;
+  final String _apiBaseUrl;
+  final String? _publicBaseUrl;
+
+  static String _normalizeOrigin(String? value) =>
+      (value ?? '').trim().replaceFirst(RegExp(r'/+$'), '');
 
   Future<PairingStart> start() async {
-    final Uri uri = Uri.parse('${PairingConfig.apiBaseUrl}/api/v1/pairing/start');
+    if (_apiBaseUrl.isEmpty) {
+      throw const PairingException(
+          'Routenplanung ist nicht erreichbar: Backend-URL fehlt.');
+    }
+    final Uri uri = Uri.parse('$_apiBaseUrl/api/v1/pairing/start');
     final http.Response response;
     try {
-      response = await _client.post(uri).timeout(const Duration(seconds: 10));
+      response = await _client.post(uri).timeout(const Duration(seconds: 25));
     } catch (_) {
       throw const PairingException('Backend nicht erreichbar.');
     }
     if (response.statusCode != 200) {
       throw const PairingException('Pairing konnte nicht gestartet werden.');
     }
-    final Map<String, dynamic> body =
-        jsonDecode(response.body) as Map<String, dynamic>;
-    return _parseStart(body);
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Expected JSON object');
+      }
+      return _parseStart(decoded);
+    } on Object {
+      throw const PairingException('Ungültige Antwort vom Pairing-Backend.');
+    }
   }
 
   PairingStart _parseStart(Map<String, dynamic> body) {
-    final List<String> urls = (body['plan_urls'] as List<dynamic>?)
+    final token = body['token'] as String;
+    final rawUrls = (body['plan_urls'] as List<dynamic>?)
             ?.map((url) => url as String)
             .toList(growable: false) ??
         <String>[body['plan_url'] as String];
+    final apiOrigin = Uri.parse(_apiBaseUrl).origin;
+    final publicOrigin = _publicBaseUrl ?? apiOrigin;
+    final urls = rawUrls.map((url) {
+      final uri = Uri.parse(url);
+      if (uri.path.endsWith('/plan/$token') &&
+          (uri.host.isEmpty ||
+              uri.host == 'localhost' ||
+              uri.host == '127.0.0.1')) {
+        return '$publicOrigin${uri.path}';
+      }
+      return url;
+    }).toList(growable: false);
+    if (urls.isEmpty || token.isEmpty || body['expires_in_seconds'] is! int) {
+      throw const FormatException('Incomplete pairing response');
+    }
     return PairingStart(
-      token: body['token'] as String,
-      planUrl: body['plan_url'] as String,
+      token: token,
+      planUrl: urls.first,
       planUrls: urls,
       expiresInSeconds: body['expires_in_seconds'] as int,
     );
@@ -90,14 +141,17 @@ class PairingRepository {
   /// `PairingConfig.apiBaseUrl`.
   Future<List<PairingPoint>?> fetchPlan(String token, {String? baseUrl}) async {
     String origin = (baseUrl == null || baseUrl.trim().isEmpty)
-        ? PairingConfig.apiBaseUrl
+        ? _apiBaseUrl
         : baseUrl.trim();
+    if (origin.isEmpty) {
+      throw const PairingException('Pairing-Backend ist nicht konfiguriert.');
+    }
     if (origin.endsWith('/')) origin = origin.substring(0, origin.length - 1);
-    final Uri uri =
-        Uri.parse('$origin/api/v1/pairing/${Uri.encodeComponent(token.toUpperCase())}');
+    final Uri uri = Uri.parse(
+        '$origin/api/v1/pairing/${Uri.encodeComponent(token.toUpperCase())}');
     final http.Response response;
     try {
-      response = await _client.get(uri).timeout(const Duration(seconds: 10));
+      response = await _client.get(uri).timeout(const Duration(seconds: 25));
     } catch (_) {
       throw const PairingException('Backend nicht erreichbar.');
     }
@@ -105,8 +159,11 @@ class PairingRepository {
     if (response.statusCode != 200) {
       throw const PairingException('Plan konnte nicht abgerufen werden.');
     }
-    final Map<String, dynamic> body =
-        jsonDecode(response.body) as Map<String, dynamic>;
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const PairingException('Ungültige Plan-Antwort.');
+    }
+    final body = decoded;
     return (body['points'] as List<dynamic>? ?? const [])
         .map((point) => PairingPoint(
               label: point['label'] as String,
@@ -127,7 +184,7 @@ class PairingRepository {
       throw const PairingException('Das ist kein MotoRoute-Plan-QR-Code.');
     }
     final String? origin = planOriginFromUrl(scannedUrl);
-    if (origin != null && origin != PairingConfig.apiBaseUrl) {
+    if (origin != null && origin != _apiBaseUrl) {
       try {
         return await fetchPlan(token, baseUrl: origin);
       } on PairingException {
@@ -149,7 +206,8 @@ class PairingRepository {
   /// Ursprung (Scheme+Host+Port) einer Plan-URL; `null` ohne Host.
   static String? planOriginFromUrl(String value) {
     final Uri? uri = Uri.tryParse(value.trim());
-    if (uri == null || uri.host.isEmpty || !uri.path.contains('/plan/')) return null;
+    if (uri == null || uri.host.isEmpty || !uri.path.contains('/plan/'))
+      return null;
     return uri.hasPort
         ? '${uri.scheme}://${uri.host}:${uri.port}'
         : '${uri.scheme}://${uri.host}';

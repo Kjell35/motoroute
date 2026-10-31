@@ -87,6 +87,35 @@ void main() {
     expect(await repo.getAllTours(), isEmpty);
   });
 
+  test('geplante Rundtour wird als Tour gespeichert und geladen', () async {
+    final repo = await freshDb();
+    final start = DateTime.utc(2026, 10, 1, 9);
+    final planned = recordedTourFromPlan(
+      title: 'Geplante Rundtour',
+      startedAt: start,
+      track: const [
+        TrackPoint(lat: 47.5, lng: 10.7, secondsSinceStart: 0),
+        TrackPoint(lat: 47.6, lng: 10.8, secondsSinceStart: 1800),
+        TrackPoint(lat: 47.5, lng: 10.7, secondsSinceStart: 3600),
+      ],
+      distanceMeters: 50000,
+      durationSeconds: 3600,
+    );
+    await repo.insertTour(planned);
+
+    final tours = await repo.getAllTours();
+    expect(tours.length, 1);
+    final t = tours.first;
+    expect(t.title, 'Geplante Rundtour');
+    expect(t.startedAt, start);
+    expect(t.endedAt, start.add(const Duration(hours: 1)));
+    expect(t.distanceMeters, closeTo(50000, 0.01));
+    expect(t.durationSeconds, closeTo(3600, 0.01));
+    expect(t.elevationGainMeters, 0);
+    expect(t.track.length, 3);
+    expect(t.track.last.secondsSinceStart, closeTo(3600, 0.01));
+  });
+
   test('getTour: null bei unbekannter ID', () async {
     final repo = await freshDb();
     expect(await repo.getTour(999), isNull);

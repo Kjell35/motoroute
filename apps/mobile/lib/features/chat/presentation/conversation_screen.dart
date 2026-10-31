@@ -69,6 +69,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Timer? _fallbackPollTimer;
   bool _polling = false;
   String? _loadedForToken;
+  int _loadGeneration = 0;
+  int _loadMoreGeneration = 0;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Timer? _readTimer;
 
@@ -83,6 +85,34 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     _wireRealtime();
     // Lesen markieren (Abschnitt 17) nach kurzem Verweilen.
     _readTimer = Timer(const Duration(seconds: 2), _markRead);
+    ref.listenManual<String?>(chatSessionTokenProvider, (previous, next) {
+      if (previous == next) return;
+      _loadGeneration++;
+      _loadMoreGeneration++;
+      _loadedForToken = null;
+      _polling = false;
+      if (next == null) {
+        ref.read(chatRealtimeProvider).unsubscribe(widget.conversationId);
+        setState(() {
+          _isLoadingMore = false;
+          _messages = [];
+          _hasMore = false;
+          _isLoading = false;
+          _error = null;
+        });
+      } else {
+        final realtime = ref.read(chatRealtimeProvider);
+        realtime.connect(next);
+        setState(() {
+          _isLoadingMore = false;
+          _messages = [];
+          _hasMore = false;
+          _isLoading = true;
+          _error = null;
+        });
+        _loadInitial();
+      }
+    });
     // REST-Fallback: Solange der WebSocket nicht verbunden ist (Funkloch,
     // Render-Kaltstart), holt ein Poller neue Nachrichten - der Chat
     // funktioniert dann verzögert, aber zuverlässig (Vater-tauglich).
@@ -97,6 +127,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
+    _loadGeneration++;
+    _loadMoreGeneration++;
     ref.read(chatRealtimeProvider).unsubscribe(widget.conversationId);
     _scrollController.dispose();
     _inputController.dispose();
@@ -112,11 +144,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Future<void> _pollNewMessages() async {
     final token = _token;
     if (token == null || _polling) return;
+    final generation = _loadGeneration;
     _polling = true;
     try {
       final page =
           await _repo.messages(token, widget.conversationId, limit: 30);
-      if (!mounted || _token != token) return;
+      if (!mounted || _token != token || generation != _loadGeneration) {
+        return;
+      }
       final knownIds = _messages.map((m) => m.id).toSet();
       final fresh =
           page.messages.where((m) => !knownIds.contains(m.id)).toList();
@@ -129,7 +164,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     } catch (_) {
       // Offline: nächster Versuch im nächsten Intervall.
     } finally {
-      _polling = false;
+      if (generation == _loadGeneration) {
+        _polling = false;
+      }
     }
   }
 
@@ -139,15 +176,24 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
+    final generation = ++_loadGeneration;
     _loadedForToken = token;
     ref.read(chatRealtimeProvider).subscribe(widget.conversationId);
     try {
       final page = await _repo.messages(token, widget.conversationId);
-      if (!mounted || _token != token || _loadedForToken != token) return;
+      if (!mounted ||
+          _token != token ||
+          _loadedForToken != token ||
+          generation != _loadGeneration) {
+        return;
+      }
       setState(() {
-        _messages
-          ..clear()
-          ..addAll(page.messages);
+        final mergedById = <String, ChatMessage>{
+          for (final message in page.messages) message.id: message,
+          for (final message in _messages) message.id: message,
+        };
+        _messages = mergedById.values.toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
         _hasMore = page.hasMore;
         _isLoading = false;
         _error = null;
@@ -155,7 +201,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       _jumpToBottom();
     } catch (e) {
       ErrorReporter.instance.report('chat.load', e);
-      if (!mounted || _token != token || _loadedForToken != token) return;
+      if (!mounted ||
+          _token != token ||
+          _loadedForToken != token ||
+          generation != _loadGeneration) {
+        return;
+      }
       setState(() {
         _isLoading = false;
         _error =
@@ -177,24 +228,42 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     if (_isLoadingMore || !_hasMore || _messages.isEmpty) return;
     final token = _token;
     if (token == null) return;
+    final generation = ++_loadMoreGeneration;
+    final firstMessageId = _messages.first.id;
     setState(() => _isLoadingMore = true);
     try {
       final page = await _repo.messages(token, widget.conversationId,
           before: _messages.first.createdAt);
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _loadMoreGeneration ||
+          token != _token ||
+          _messages.isEmpty ||
+          _messages.first.id != firstMessageId) {
+        return;
+      }
       setState(() {
-        _messages.insertAll(0, page.messages);
-        _hasMore = page.hasMore;
+        final existingIds = _messages.map((message) => message.id).toSet();
+        final older = page.messages
+            .where((message) => !existingIds.contains(message.id))
+            .toList(growable: false);
+        _messages.insertAll(0, older);
+        _hasMore =
+            page.messages.isEmpty || older.isEmpty ? false : page.hasMore;
         _isLoadingMore = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _isLoadingMore = false);
+      if (mounted && generation == _loadMoreGeneration) {
+        setState(() => _isLoadingMore = false);
+      }
     }
   }
 
   void _onScroll() {
     // Lazy Loading: knapp über dem Listenanfang ältere Nachrichten holen.
-    if (_scrollController.position.pixels < 200) _loadMore();
+    if (_scrollController.hasClients &&
+        _scrollController.position.pixels < 200) {
+      _loadMore();
+    }
   }
 
   void _wireRealtime() {
@@ -415,11 +484,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             ),
           ),
         Expanded(
-          child: _isLoading
+          child: _isLoading && _messages.isEmpty
               ? const Center(
                   child: CircularProgressIndicator(
                       color: AppColors.accentPrimaryDark))
-              : _error != null
+              : _error != null && _messages.isEmpty
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -573,7 +642,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   }
 
   Widget _buildComposer() {
-    final disabled = _token == null || _isLoading || _error != null;
+    final disabled = _token == null || _isLoading;
     return SafeArea(
       top: false,
       child: Container(
@@ -607,9 +676,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 onChanged: _onComposerChanged,
                 style: const TextStyle(color: AppColors.textPrimaryDark),
                 decoration: InputDecoration(
-                  hintText: disabled
+                  hintText: _token == null
                       ? 'Zum Chatten anmelden'
-                      : 'Nachricht schreiben ...',
+                      : _isLoading
+                          ? 'Nachrichten werden geladen …'
+                          : 'Nachricht schreiben ...',
                   hintStyle: const TextStyle(color: AppColors.textMutedDark),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),

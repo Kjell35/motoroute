@@ -831,6 +831,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
                 _buildTopBar(context, vehicleType),
                 _buildSideButtons(context),
+                _buildRoutePlanningEntry(context),
                 if (tapMode) _buildTapModeBanner(context),
               ],
             ),
@@ -840,34 +841,102 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget _buildTopBar(BuildContext context, VehicleType vehicleType) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pushNamed('/search'),
-                child: Container(
-                  height: AppSpacing.touchTargetPlanning,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: AppColors.bgSurfaceDark,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.borderHairlineDark),
                   ),
+                  child: const Icon(Icons.two_wheeler,
+                      size: 20, color: AppColors.accentPrimaryDark),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                const Text(
+                  'MOTOROUTE',
+                  style: TextStyle(
+                    color: AppColors.textPrimaryDark,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSurfaceDark.withValues(alpha: 0.94),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: AppColors.borderHairlineDark),
+                  ),
                   child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.search, color: AppColors.textSecondaryDark),
-                      SizedBox(width: AppSpacing.sm),
-                      Text('Ziel suchen',
-                          style: TextStyle(color: AppColors.textSecondaryDark)),
+                      Icon(Icons.near_me_outlined,
+                          size: 14, color: AppColors.accentSecondary),
+                      SizedBox(width: AppSpacing.xs),
+                      Text('FAHRSPASS STATT STRECKE',
+                          style: TextStyle(
+                              color: AppColors.textSecondaryDark,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6)),
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.sm),
-            _VehicleSwitcher(current: vehicleType),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).pushNamed('/search'),
+                    child: Container(
+                      height: AppSpacing.touchTargetPlanning,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSurfaceDark.withValues(alpha: 0.97),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.borderHairlineDark),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 16,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.search,
+                              color: AppColors.accentPrimaryDark),
+                          SizedBox(width: AppSpacing.sm),
+                          Text('Ziel suchen',
+                              style: TextStyle(
+                                  color: AppColors.textSecondaryDark)),
+                          Spacer(),
+                          Icon(Icons.arrow_forward_rounded,
+                              size: 18, color: AppColors.textMutedDark),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                _VehicleSwitcher(current: vehicleType),
+              ],
+            ),
           ],
         ),
       ),
@@ -970,6 +1039,66 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRoutePlanningEntry(BuildContext context) {
+    return Positioned(
+      left: AppSpacing.lg,
+      bottom: AppSpacing.xxxl,
+      child: Material(
+        color: AppColors.bgSurfaceDark.withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            Navigator.of(context).pushNamed('/search');
+          },
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 172),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.borderHairlineDark),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.24),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_road_rounded,
+                    color: AppColors.accentPrimaryDark, size: 24),
+                SizedBox(width: AppSpacing.md),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Route planen',
+                        style: TextStyle(
+                            color: AppColors.textPrimaryDark,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800)),
+                    SizedBox(height: 2),
+                    Text('Ziel und Fahrstil wählen',
+                        style: TextStyle(
+                            color: AppColors.textSecondaryDark, fontSize: 11)),
+                  ],
+                ),
+                SizedBox(width: AppSpacing.md),
+                Icon(Icons.arrow_forward_rounded,
+                    color: AppColors.textSecondaryDark, size: 18),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

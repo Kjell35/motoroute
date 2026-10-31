@@ -29,10 +29,12 @@ class ChatRealtimeClient {
 
   final _messagesController = StreamController<ChatMessage>.broadcast();
   final _deletionsController = StreamController<String>.broadcast();
-  final _typingController = StreamController<({String userId, bool isTyping})>.broadcast();
+  final _typingController =
+      StreamController<({String userId, bool isTyping})>.broadcast();
   final _connectionState = StreamController<bool>.broadcast();
   final _grouprouteEvents = StreamController<GroupRouteWsEvent>.broadcast();
-  final _bikerPoiChanges = StreamController<List<({String id, String action})>>.broadcast();
+  final _bikerPoiChanges =
+      StreamController<List<({String id, String action})>>.broadcast();
   final _radarEvents = StreamController<RadarEvent>.broadcast();
 
   /// Neue Nachrichten (aus dem WS-Strom).
@@ -42,7 +44,8 @@ class ChatRealtimeClient {
   Stream<String> get deletions => _deletionsController.stream;
 
   /// „Max schreibt gerade …“-Ereignisse (Abschnitt 19).
-  Stream<({String userId, bool isTyping})> get typing => _typingController.stream;
+  Stream<({String userId, bool isTyping})> get typing =>
+      _typingController.stream;
 
   /// Kollaborative Routen-Änderungen (grouproute.*-Events des Backends).
   Stream<GroupRouteWsEvent> get grouprouteEvents => _grouprouteEvents.stream;
@@ -52,7 +55,8 @@ class ChatRealtimeClient {
   /// Enthält bewusst nur IDs + Aktionen - die Daten zieht der Sync-
   /// Controller per Delta-Sync (server-autoritativ, wie bei den
   /// Gruppenrouten), damit der Karten-Zustand nie vom WS-Strom abweicht.
-  Stream<List<({String id, String action})>> get bikerPoiChanges => _bikerPoiChanges.stream;
+  Stream<List<({String id, String action})>> get bikerPoiChanges =>
+      _bikerPoiChanges.stream;
 
   /// Ride-Radar (Live-Gruppenfahrt + Radar): Positionen der eigenen
   /// Route unabhängig vom Umkreis. Nur nach subscribe_ride (server-
@@ -79,9 +83,26 @@ class ChatRealtimeClient {
   final Set<String> _rideRooms = {};
 
   void connect(String token) {
-    if (_disposed) return;
+    if (_disposed || (_token == token && _channel != null)) return;
+    final tokenChanged = _token != token;
     _token = token;
+    if (tokenChanged) _reconnectAttempts = 0;
     _openSocket();
+  }
+
+  /// Stops chat transport after sign-out without disposing shared app streams.
+  void disconnect() {
+    if (_disposed) return;
+    _token = null;
+    _reconnectAttempts = 0;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _heartbeat?.cancel();
+    _heartbeat = null;
+    _rooms.clear();
+    _rideRooms.clear();
+    _closeChannel(quiet: true);
+    _connectionState.add(false);
   }
 
   void _openSocket() {
@@ -261,12 +282,13 @@ class ChatRealtimeClient {
       send('typing', {'conversationId': conversationId, 'isTyping': isTyping});
 
   void _scheduleReconnect() {
-    if (_disposed) return;
+    if (_disposed || _token == null) return;
     _connectionState.add(false);
     _heartbeat?.cancel();
     // Exponentielles Backoff, gedeckelt bei 30 s (Mobilfunk: häufige
     // kurze Funklöcher, kein Grund für langen Stillstand).
-    final delay = Duration(seconds: (1 << _reconnectAttempts.clamp(0, 5)).clamp(1, 30));
+    final delay =
+        Duration(seconds: (1 << _reconnectAttempts.clamp(0, 5)).clamp(1, 30));
     _reconnectAttempts += 1;
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(delay, _openSocket);

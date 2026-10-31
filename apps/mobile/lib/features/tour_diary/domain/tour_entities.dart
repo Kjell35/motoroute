@@ -29,6 +29,26 @@ class TrackPoint {
   });
 }
 
+/// Baut aus einer geplanten Rundtour eine speicherbare Tour. Eine Planung
+/// hat keine echten Zeitstempel: Start ist [startedAt], die Spur wird mit
+/// [track] übernommen (Sekunden bereits proportional verteilt).
+RecordedTour recordedTourFromPlan({
+  required String title,
+  required DateTime startedAt,
+  required List<TrackPoint> track,
+  required double distanceMeters,
+  required double durationSeconds,
+}) =>
+    RecordedTour(
+      title: title,
+      startedAt: startedAt,
+      endedAt: startedAt.add(Duration(seconds: durationSeconds.round())),
+      distanceMeters: distanceMeters,
+      elevationGainMeters: 0,
+      durationSeconds: durationSeconds,
+      track: track,
+    );
+
 /// Ein verknüpfter POI (Stopp unterwegs - Tankstelle, Bikertreff ...).
 class TourPoiRef {
   final String label;

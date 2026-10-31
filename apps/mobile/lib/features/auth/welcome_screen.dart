@@ -178,172 +178,205 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Begruessungs-Emblem (wie Splash, aber interaktiv).
-                Container(
-                  width: 88,
-                  height: 88,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.accentPrimaryDark.withValues(alpha: 0.12),
-                    border: Border.all(
-                      color:
-                          AppColors.accentPrimaryDark.withValues(alpha: 0.35),
-                      width: 2,
-                    ),
-                  ),
-                  child: const Icon(Icons.two_wheeler,
-                      size: 48, color: AppColors.accentPrimaryDark),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  _isRegister
-                      ? i18n.tr('auth.welcomeRegister')
-                      : i18n.tr('auth.welcomeLogin'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimaryDark,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  _isRegister
-                      ? i18n.tr('auth.welcomeRegisterSub')
-                      : i18n.tr('auth.welcomeLoginSub'),
-                  textAlign: TextAlign.center,
-                  style: AppTypography.caption,
-                ),
-                const SizedBox(height: AppSpacing.xxl),
-                if (_isRegister) ...[
-                  TextField(
-                    controller: _nameController,
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.name],
-                    enabled: !_submitting,
-                    decoration: _inputDecoration(i18n.tr('auth.yourName')),
-                    onChanged: (_) {
-                      if (_error != null) setState(() => _error = null);
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [
-                    AutofillHints.username,
-                    AutofillHints.email
-                  ],
-                  autocorrect: false,
-                  enabled: !_submitting,
-                  decoration: _inputDecoration(i18n.email).copyWith(
-                    errorText: _emailController.text.isNotEmpty &&
-                            !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-                                .hasMatch(_emailController.text.trim())
-                        ? 'E-Mail-Adresse prüfen'
-                        : null,
-                  ),
-                  onChanged: (_) => setState(() {
-                    _error = null;
-                  }),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscure,
-                  textInputAction: TextInputAction.done,
-                  autofillHints: [
-                    _isRegister
-                        ? AutofillHints.newPassword
-                        : AutofillHints.password
-                  ],
-                  enabled: !_submitting,
-                  onSubmitted: (_) => _submit(),
-                  onChanged: (_) {
-                    if (_error != null) setState(() => _error = null);
-                  },
-                  decoration: _inputDecoration(i18n.password).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscure ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.textSecondaryDark,
+                    color: AppColors.bgSurfaceDark,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: AppColors.borderHairlineDark),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: 28,
+                        offset: const Offset(0, 12),
                       ),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
+                    ],
                   ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: AppColors.statusDanger.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppColors.statusDanger.withValues(alpha: 0.4)),
-                    ),
-                    child: Text(_error!,
-                        style: const TextStyle(color: AppColors.statusDanger)),
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.xl),
-                SizedBox(
-                  height: AppSpacing.touchTargetPlanning,
-                  child: FilledButton(
-                    onPressed: auth.isBusy || _submitting ? null : _submit,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accentPrimaryDark,
-                      foregroundColor: AppColors.textPrimaryDark,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: auth.isBusy || _submitting
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            _isRegister ? i18n.register : i18n.login,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w800, fontSize: 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Begruessungs-Emblem (wie Splash, aber interaktiv).
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.accentPrimaryDark
+                              .withValues(alpha: 0.12),
+                          border: Border.all(
+                            color: AppColors.accentPrimaryDark
+                                .withValues(alpha: 0.35),
+                            width: 2,
                           ),
+                        ),
+                        child: const Icon(Icons.two_wheeler,
+                            size: 48, color: AppColors.accentPrimaryDark),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        _isRegister
+                            ? i18n.tr('auth.welcomeRegister')
+                            : i18n.tr('auth.welcomeLogin'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimaryDark,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        _isRegister
+                            ? i18n.tr('auth.welcomeRegisterSub')
+                            : i18n.tr('auth.welcomeLoginSub'),
+                        textAlign: TextAlign.center,
+                        style: AppTypography.caption,
+                      ),
+                      const SizedBox(height: AppSpacing.xxl),
+                      if (_isRegister) ...[
+                        TextField(
+                          controller: _nameController,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.name],
+                          enabled: !_submitting,
+                          decoration:
+                              _inputDecoration(i18n.tr('auth.yourName')),
+                          onChanged: (_) {
+                            if (_error != null) setState(() => _error = null);
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
+                      TextField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [
+                          AutofillHints.username,
+                          AutofillHints.email
+                        ],
+                        autocorrect: false,
+                        enabled: !_submitting,
+                        decoration: _inputDecoration(i18n.email).copyWith(
+                          errorText: _emailController.text.isNotEmpty &&
+                                  !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+                                      .hasMatch(_emailController.text.trim())
+                              ? 'E-Mail-Adresse prüfen'
+                              : null,
+                        ),
+                        onChanged: (_) => setState(() {
+                          _error = null;
+                        }),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      TextField(
+                        controller: _passwordController,
+                        obscureText: _obscure,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: [
+                          _isRegister
+                              ? AutofillHints.newPassword
+                              : AutofillHints.password
+                        ],
+                        enabled: !_submitting,
+                        onSubmitted: (_) => _submit(),
+                        onChanged: (_) {
+                          if (_error != null) setState(() => _error = null);
+                        },
+                        decoration: _inputDecoration(i18n.password).copyWith(
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscure
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              color: AppColors.textSecondaryDark,
+                            ),
+                            onPressed: () =>
+                                setState(() => _obscure = !_obscure),
+                          ),
+                        ),
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.statusDanger.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: AppColors.statusDanger
+                                    .withValues(alpha: 0.4)),
+                          ),
+                          child: Text(_error!,
+                              style: const TextStyle(
+                                  color: AppColors.statusDanger)),
+                        ),
+                      ],
+                      const SizedBox(height: AppSpacing.xl),
+                      SizedBox(
+                        height: AppSpacing.touchTargetPlanning,
+                        child: FilledButton(
+                          onPressed:
+                              auth.isBusy || _submitting ? null : _submit,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.accentPrimaryDark,
+                            foregroundColor: AppColors.textPrimaryDark,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: auth.isBusy || _submitting
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Text(
+                                  _isRegister ? i18n.register : i18n.login,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      TextButton(
+                        onPressed: auth.isBusy || _submitting
+                            ? null
+                            : () => setState(() {
+                                  _isRegister = !_isRegister;
+                                  _error = null;
+                                }),
+                        child: Text(
+                          _isRegister
+                              ? i18n.tr('auth.hasAccount')
+                              : i18n.tr('auth.newHere'),
+                          style:
+                              const TextStyle(color: AppColors.accentSecondary),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      TextButton(
+                        onPressed: auth.isBusy || _submitting
+                            ? null
+                            : () => Navigator.of(context)
+                                .pushReplacementNamed('/home'),
+                        child: Text(
+                          i18n.tr('auth.browseWithoutAccount'),
+                          style:
+                              const TextStyle(color: AppColors.textMutedDark),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                TextButton(
-                  onPressed: auth.isBusy || _submitting
-                      ? null
-                      : () => setState(() {
-                            _isRegister = !_isRegister;
-                            _error = null;
-                          }),
-                  child: Text(
-                    _isRegister
-                        ? i18n.tr('auth.hasAccount')
-                        : i18n.tr('auth.newHere'),
-                    style: const TextStyle(color: AppColors.accentSecondary),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                TextButton(
-                  onPressed: auth.isBusy || _submitting
-                      ? null
-                      : () =>
-                          Navigator.of(context).pushReplacementNamed('/home'),
-                  child: Text(
-                    i18n.tr('auth.browseWithoutAccount'),
-                    style: const TextStyle(color: AppColors.textMutedDark),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -355,7 +388,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
         labelText: label,
         labelStyle: const TextStyle(color: AppColors.textSecondaryDark),
         filled: true,
-        fillColor: AppColors.bgSurfaceDark,
+        fillColor: AppColors.bgSurfaceRaisedDark,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.borderHairlineDark),

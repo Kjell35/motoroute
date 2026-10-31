@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:motoroute_app/features/marketplace/marketplace_repository.dart';
@@ -7,6 +11,51 @@ import 'package:motoroute_app/features/marketplace/marketplace_repository.dart';
 /// images-Join) korrekt geparst wird und die Review-Entscheidungen
 /// korrekt durchschlagen.
 void main() {
+  test('Marketplace-Liste verwendet Query-Filter und antwortet mit Serverdaten',
+      () async {
+    late RequestOptions request;
+    final dio = Dio(BaseOptions(baseUrl: 'https://marketplace.test'))
+      ..httpClientAdapter = _MarketplaceAdapter((options) {
+        request = options;
+        return ResponseBody.fromString(
+          jsonEncode({
+            'listings': [
+              {
+                'id': 'listing-1',
+                'title': 'BMW R1250 Auspuff',
+                'price_cents': 45900,
+                'category': 'motorradteile',
+                'condition': 'sehr_gut',
+                'created_at': '2026-09-23T10:00:00.000Z',
+              }
+            ]
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+    final repository = MarketplaceRepository(dio);
+
+    final listings = await repository.list(
+      token: 'market-token',
+      q: 'BMW',
+      category: 'motorradteile',
+      maxPrice: 50000,
+      sort: 'price_asc',
+    );
+
+    expect(request.path, '/v1/marketplace/listings');
+    expect(request.headers['Authorization'], 'Bearer market-token');
+    expect(request.queryParameters['q'], 'BMW');
+    expect(request.queryParameters['category'], 'motorradteile');
+    expect(request.queryParameters['maxPrice'], 50000);
+    expect(request.queryParameters['sort'], 'price_asc');
+    expect(listings.single.id, 'listing-1');
+    expect(listings.single.title, 'BMW R1250 Auspuff');
+  });
+
   group('MpListing.fromJson', () {
     test('parst eine echte listings-Zeile mit Bildern', () {
       final json = {
@@ -66,7 +115,8 @@ void main() {
       expect(listing.reviewStatus.isPubliclyVisible, isFalse);
     });
 
-    test('image_urls (fertige Supabase-URLs vom Server) schlägt Legacy-Shape', () {
+    test('image_urls (fertige Supabase-URLs vom Server) schlägt Legacy-Shape',
+        () {
       final listing = MpListing.fromJson({
         'id': 'z',
         'title': 'Mit Server-URLs',
@@ -81,7 +131,9 @@ void main() {
         'images': [
           {'storage_path': 'seller/listing/0.jpg', 'position': 0},
         ],
-        'image_urls': ['https://supabase.example/storage/v1/object/public/marketplace-photos/seller/listing/0.jpg'],
+        'image_urls': [
+          'https://supabase.example/storage/v1/object/public/marketplace-photos/seller/listing/0.jpg'
+        ],
       });
 
       expect(listing.imageUrls, [
@@ -125,4 +177,21 @@ void main() {
       expect(MpCategory.from('toaster'), MpCategory.motorradteile);
     });
   });
+}
+
+class _MarketplaceAdapter implements HttpClientAdapter {
+  _MarketplaceAdapter(this.handle);
+
+  final ResponseBody Function(RequestOptions options) handle;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async =>
+      handle(options);
+
+  @override
+  void close({bool force = false}) {}
 }

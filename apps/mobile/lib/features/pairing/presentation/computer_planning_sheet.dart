@@ -30,7 +30,10 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
   PairingStart? _start;
   String? _error;
   bool _busy = false;
+  bool _fetching = false;
   Timer? _poll;
+  Timer? _expiry;
+  DateTime? _expiresAt;
 
   @override
   void initState() {
@@ -41,20 +44,45 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
   @override
   void dispose() {
     _poll?.cancel();
+    _expiry?.cancel();
     super.dispose();
   }
 
   Future<void> _startPairing() async {
-    setState(() => _busy = true);
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final PairingStart start = await widget.repository.start();
       if (!mounted) return;
-      setState(() => _start = start);
-      // Auto-Poll alle 5 Sekunden, bis der Plan da ist oder das Dialog zuläuft.
+      setState(() {
+        _start = start;
+        _expiresAt = DateTime.now().add(
+          Duration(seconds: start.expiresInSeconds),
+        );
+        _error = null;
+      });
+      _poll?.cancel();
+      _expiry?.cancel();
+      // Poll mit geschützter Einzelflug-Sperre bis Ablauf der Session.
       _poll = Timer.periodic(
-          const Duration(seconds: 5), (_) => _fetchPlan(auto: true));
+          const Duration(seconds: 4), (_) => _fetchPlan(auto: true));
+      _expiry = Timer(
+        Duration(seconds: start.expiresInSeconds),
+        () {
+          if (!mounted) return;
+          _poll?.cancel();
+          setState(() =>
+              _error = 'Der Plan-Link ist abgelaufen. Bitte neu starten.');
+        },
+      );
     } on PairingException catch (error) {
       if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted)
+        setState(() => _error = 'Pairing konnte nicht gestartet werden.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -62,21 +90,33 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
 
   Future<void> _fetchPlan({bool auto = false}) async {
     final PairingStart? start = _start;
-    if (start == null || _busy) return;
-    setState(() => _busy = true);
+    if (start == null || _fetching) return;
+    if (_expiresAt != null && !DateTime.now().isBefore(_expiresAt!)) {
+      _poll?.cancel();
+      if (mounted)
+        setState(
+            () => _error = 'Der Plan-Link ist abgelaufen. Bitte neu starten.');
+      return;
+    }
+    _fetching = true;
+    if (!auto && mounted) setState(() => _busy = true);
     try {
       final List<PairingPoint>? points =
           await widget.repository.fetchPlan(start.token);
       if (!mounted) return;
       if (points == null) {
+        _poll?.cancel();
         if (!auto) setState(() => _error = 'Token unbekannt oder abgelaufen.');
         return;
       }
       if (points.isEmpty) {
-        if (!auto) setState(() => _error = 'Am Computer wurde noch nichts geplant.');
+        if (!auto && mounted) {
+          setState(() => _error = 'Am Computer wurde noch nichts geplant.');
+        }
         return;
       }
       _poll?.cancel();
+      _expiry?.cancel();
       // Brücke in die alte App: die echten Wegpunkte der Touren-Liste.
       ref.read(waypointListProvider.notifier).state = points
           .map((p) => Waypoint(lat: p.lat, lng: p.lng, label: p.label))
@@ -93,7 +133,8 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
     } on PairingException catch (error) {
       if (mounted && !auto) setState(() => _error = error.message);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _fetching = false;
+      if (mounted && !auto) setState(() => _busy = false);
     }
   }
 
@@ -161,7 +202,7 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
                         .copyWith(color: AppColors.statusDanger)),
               const SizedBox(height: AppSpacing.sm),
               FilledButton.icon(
-                onPressed: _busy ? null : () => _fetchPlan(),
+                onPressed: _busy || start == null ? null : () => _fetchPlan(),
                 icon: _busy
                     ? const SizedBox(
                         width: 16,
@@ -183,6 +224,15 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
                 label: const Text('Route von anderer App scannen'),
               ),
               const SizedBox(height: AppSpacing.sm),
+              TextButton(
+                onPressed: !_busy &&
+                        (_start == null ||
+                            _expiresAt == null ||
+                            !DateTime.now().isBefore(_expiresAt!))
+                    ? _startPairing
+                    : null,
+                child: const Text('Neuen Plan-Link erstellen'),
+              ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Schließen'),

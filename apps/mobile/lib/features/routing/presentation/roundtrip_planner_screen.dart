@@ -146,7 +146,8 @@ class _RoundTripPlannerScreenState
             .showSnackBar(SnackBar(content: Text(message)));
       },
       (route) {
-        final computed = ComputedRoute.fromDomain(route);
+        final computed =
+            ComputedRoute.fromDomain(route, isRoundTrip: true);
         ref.read(activeRouteProvider.notifier).state = computed;
         Navigator.of(context).pushReplacementNamed('/route-overview');
       },

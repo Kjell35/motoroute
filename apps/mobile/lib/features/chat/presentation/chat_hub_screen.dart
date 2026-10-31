@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
-import 'package:motoroute_app/core/network/error_message.dart' show technicalCause;
+import 'package:motoroute_app/core/network/error_message.dart'
+    show technicalCause;
 import 'package:motoroute_app/core/network/error_reporter.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
@@ -26,11 +27,20 @@ class ChatHubScreen extends ConsumerStatefulWidget {
 
 class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
     with SingleTickerProviderStateMixin {
+  ProviderSubscription<String?>? _tokenSubscription;
   late final TabController _tabs = TabController(length: 3, vsync: this);
 
   @override
   void initState() {
     super.initState();
+    _tokenSubscription = ref.listenManual<String?>(
+      chatSessionTokenProvider,
+      (previous, next) {
+        if (next != null) {
+          ref.read(chatOverviewProvider.notifier).load();
+        }
+      },
+    );
     _tabs.addListener(_onTabChanged);
     // Nach dem ersten Frame laden (Provider-Zugriff im State).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -44,6 +54,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
 
   @override
   void dispose() {
+    _tokenSubscription?.close();
     _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     super.dispose();
@@ -53,10 +64,14 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
   Widget build(BuildContext context) {
     final state = ref.watch(chatOverviewProvider);
     final token = ref.watch(chatSessionTokenProvider);
+    final auth = ref.watch(authControllerProvider);
     final i18n = ref.watch(i18nProvider);
 
     if (token == null) {
-      return const _NotSignedIn();
+      return _NotSignedIn(
+        signedIn: auth.isAuthenticated,
+        i18n: i18n,
+      );
     }
 
     return Scaffold(
@@ -71,7 +86,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
           if (ref.watch(authControllerProvider).user?.isAdmin ?? false)
             IconButton(
               tooltip: 'Meldungen',
-              icon: const Icon(Icons.shield_outlined, color: AppColors.textSecondaryDark),
+              icon: const Icon(Icons.shield_outlined,
+                  color: AppColors.textSecondaryDark),
               onPressed: () => _showAdminReports(context),
             ),
         ],
@@ -89,26 +105,38 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
       ),
       floatingActionButton: _fabFor(context, state),
       body: state.isLoading && state.conversations.isEmpty
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+          ? const Center(
+              child:
+                  CircularProgressIndicator(color: AppColors.accentPrimaryDark))
           : state.error != null && state.conversations.isEmpty
-              ? _ErrorView(message: state.error!, onRetry: () => ref.read(chatOverviewProvider.notifier).load())
+              ? _ErrorView(
+                  message: state.error!,
+                  onRetry: () => ref.read(chatOverviewProvider.notifier).load())
               : TabBarView(
                   controller: _tabs,
                   children: [
                     _PublicTab(connected: state.connected),
                     _ConversationListTab(
-                      conversations: state.conversations.where((c) => c.type == ConversationType.private).toList(),
-                      emptyText: 'Noch keine privaten Chats.\nSuche einen Biker und starte ein Gespräch!',
+                      conversations: state.conversations
+                          .where((c) => c.type == ConversationType.private)
+                          .toList(),
+                      emptyText:
+                          'Noch keine privaten Chats.\nSuche einen Biker und starte ein Gespräch!',
                       actionLabel: 'Biker suchen',
                       onNew: () => Navigator.of(context).pushNamed('/chat/new'),
-                      onRefresh: () => ref.read(chatOverviewProvider.notifier).load(),
+                      onRefresh: () =>
+                          ref.read(chatOverviewProvider.notifier).load(),
                     ),
                     _ConversationListTab(
-                      conversations: state.conversations.where((c) => c.type == ConversationType.group).toList(),
-                      emptyText: 'Noch keine Gruppen.\nErstelle eine oder tritt per Einladungscode bei!',
+                      conversations: state.conversations
+                          .where((c) => c.type == ConversationType.group)
+                          .toList(),
+                      emptyText:
+                          'Noch keine Gruppen.\nErstelle eine oder tritt per Einladungscode bei!',
                       actionLabel: 'Gruppe erstellen oder beitreten',
                       onNew: () => _showGroupActions(context),
-                      onRefresh: () => ref.read(chatOverviewProvider.notifier).load(),
+                      onRefresh: () =>
+                          ref.read(chatOverviewProvider.notifier).load(),
                     ),
                   ],
                 ),
@@ -137,7 +165,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
       context: context,
       backgroundColor: AppColors.bgSurfaceDark,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.6,
@@ -145,8 +174,11 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
         builder: (_, scrollCtrl) => _AdminReportsSheet(
           token: token,
           scrollCtrl: scrollCtrl,
-          loadReports: () => ref.read(chatRepositoryProvider).adminReports(token),
-          resolveReport: (id, st) => ref.read(chatRepositoryProvider).adminResolveReport(token, id, st),
+          loadReports: () =>
+              ref.read(chatRepositoryProvider).adminReports(token),
+          resolveReport: (id, st) => ref
+              .read(chatRepositoryProvider)
+              .adminResolveReport(token, id, st),
         ),
       ),
     );
@@ -164,16 +196,20 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.group_add, color: AppColors.accentPrimaryDark),
-              title: const Text('Gruppe erstellen', style: TextStyle(color: AppColors.textPrimaryDark)),
+              leading: const Icon(Icons.group_add,
+                  color: AppColors.accentPrimaryDark),
+              title: const Text('Gruppe erstellen',
+                  style: TextStyle(color: AppColors.textPrimaryDark)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushNamed('/chat/group-create');
               },
             ),
             ListTile(
-              leading: const Icon(Icons.vpn_key_outlined, color: AppColors.accentSecondary),
-              title: const Text('Gruppe beitreten (Einladungscode)', style: TextStyle(color: AppColors.textPrimaryDark)),
+              leading: const Icon(Icons.vpn_key_outlined,
+                  color: AppColors.accentSecondary),
+              title: const Text('Gruppe beitreten (Einladungscode)',
+                  style: TextStyle(color: AppColors.textPrimaryDark)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushNamed('/chat/group-join');
@@ -265,7 +301,8 @@ class _ConversationListTab extends StatelessWidget {
                       Text(
                         emptyText,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textSecondaryDark),
+                        style:
+                            const TextStyle(color: AppColors.textSecondaryDark),
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       FilledButton.icon(
@@ -330,7 +367,8 @@ class _ConversationTile extends ConsumerWidget {
     final hasUnread = unread > 0;
 
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+      contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
       leading: isGroup
           ? CircleAvatar(
               backgroundColor: AppColors.bgSurfaceRaisedDark,
@@ -348,7 +386,9 @@ class _ConversationTile extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: hasUnread ? AppColors.textPrimaryDark : AppColors.textPrimaryDark,
+                color: hasUnread
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryDark,
                 fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
@@ -358,7 +398,9 @@ class _ConversationTile extends ConsumerWidget {
               formatRelativeTime(last['created_at'] as String),
               style: TextStyle(
                 fontSize: 12,
-                color: hasUnread ? AppColors.accentPrimaryDark : AppColors.textMutedDark,
+                color: hasUnread
+                    ? AppColors.accentPrimaryDark
+                    : AppColors.textMutedDark,
               ),
             ),
         ],
@@ -371,7 +413,9 @@ class _ConversationTile extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: hasUnread ? AppColors.textPrimaryDark : AppColors.textSecondaryDark,
+                color: hasUnread
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textSecondaryDark,
                 fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -396,8 +440,11 @@ class _ConversationTile extends ConsumerWidget {
         ],
       ),
       onTap: () async {
-        await Navigator.of(context).pushNamed('/chat/conversation',
-            arguments: {'conversationId': c.id, 'type': c.type.name, 'group': c.group});
+        await Navigator.of(context).pushNamed('/chat/conversation', arguments: {
+          'conversationId': c.id,
+          'type': c.type.name,
+          'group': c.group
+        });
         // Nach Rückkehr: gelesen markieren (Abschnitt 17).
         ref.read(chatOverviewProvider.notifier).markRead(c.id);
       },
@@ -424,7 +471,8 @@ class _ErrorView extends StatelessWidget {
         children: [
           const Icon(Icons.cloud_off, size: 48, color: AppColors.textMutedDark),
           const SizedBox(height: AppSpacing.md),
-          Text(message, style: const TextStyle(color: AppColors.textSecondaryDark)),
+          Text(message,
+              style: const TextStyle(color: AppColors.textSecondaryDark)),
           const SizedBox(height: AppSpacing.md),
           TextButton(onPressed: onRetry, child: const Text('Erneut versuchen')),
         ],
@@ -434,7 +482,10 @@ class _ErrorView extends StatelessWidget {
 }
 
 class _NotSignedIn extends StatelessWidget {
-  const _NotSignedIn();
+  const _NotSignedIn({required this.signedIn, required this.i18n});
+
+  final bool signedIn;
+  final I18n i18n;
 
   @override
   Widget build(BuildContext context) {
@@ -450,27 +501,35 @@ class _NotSignedIn extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.lock_outline, size: 56, color: AppColors.textMutedDark),
+              const Icon(Icons.lock_outline,
+                  size: 56, color: AppColors.textMutedDark),
               const SizedBox(height: AppSpacing.lg),
-              const Text(
-                'Zum Chatten anmelden',
-                style: TextStyle(
+              Text(
+                signedIn ? i18n.chatTab : i18n.chatLoginRequired,
+                style: const TextStyle(
                     color: AppColors.textPrimaryDark,
                     fontSize: 18,
                     fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: AppSpacing.sm),
-              const Text(
-                'Der Chat ist exklusiv für MotoRoute-Fahrer.\nMelde dich mit deinem Konto an, um loszulegen.',
+              Text(
+                signedIn
+                    ? 'Deine Sitzung wird mit dem Chat verbunden.'
+                    : i18n.chatLoginRequiredSub,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondaryDark),
+                style: const TextStyle(color: AppColors.textSecondaryDark),
               ),
               const SizedBox(height: AppSpacing.lg),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
-                onPressed: () => Navigator.of(context).pushNamed('/settings'),
-                child: const Text('Zu den Einstellungen'),
-              ),
+              if (signedIn)
+                const CircularProgressIndicator(
+                    color: AppColors.accentPrimaryDark)
+              else
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accentPrimaryDark),
+                  onPressed: () => Navigator.of(context).pushNamed('/welcome'),
+                  child: Text(i18n.login),
+                ),
             ],
           ),
         ),
@@ -526,7 +585,8 @@ class _AdminReportsSheetState extends State<_AdminReportsSheet> {
       ErrorReporter.instance.report('chat.admin', e);
       if (!mounted) return;
       setState(() {
-        _error = 'Meldungen konnten nicht geladen werden · ${technicalCause(e)}';
+        _error =
+            'Meldungen konnten nicht geladen werden · ${technicalCause(e)}';
         _busy = false;
       });
     }
@@ -556,22 +616,30 @@ class _AdminReportsSheetState extends State<_AdminReportsSheet> {
           SizedBox(width: 8),
           Text(
             'Nutzer-Meldungen',
-            style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 18),
+            style: TextStyle(
+                color: AppColors.textPrimaryDark,
+                fontWeight: FontWeight.w700,
+                fontSize: 18),
           ),
         ]),
         const SizedBox(height: 12),
-        if (_busy) const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+        if (_busy)
+          const Center(
+              child:
+                  CircularProgressIndicator(color: AppColors.accentPrimaryDark))
         else if (_error != null)
           Text(_error!, style: const TextStyle(color: AppColors.statusDanger))
         else if (_reports == null || _reports!.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
             child: Center(
-              child: Text('Keine offenen Meldungen.', style: TextStyle(color: AppColors.textSecondaryDark)),
+              child: Text('Keine offenen Meldungen.',
+                  style: TextStyle(color: AppColors.textSecondaryDark)),
             ),
           )
         else
-          for (final r in _reports!) _ReportTile(report: r, onResolve: _resolve),
+          for (final r in _reports!)
+            _ReportTile(report: r, onResolve: _resolve),
       ],
     );
   }
@@ -586,7 +654,11 @@ class _ReportTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reported = report['reported'] as Map<String, dynamic>?;
-    final who = (reported?['display_name'] ?? reported?['username'] ?? reported?['id'] ?? '?').toString();
+    final who = (reported?['display_name'] ??
+            reported?['username'] ??
+            reported?['id'] ??
+            '?')
+        .toString();
     final reason = (report['reason'] ?? '?').toString();
     final details = report['details']?.toString();
     return Container(
@@ -600,23 +672,35 @@ class _ReportTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(who, style: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700)),
+          Text(who,
+              style: const TextStyle(
+                  color: AppColors.textPrimaryDark,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(height: 2),
-          Text('Grund: $reason', style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+          Text('Grund: $reason',
+              style: const TextStyle(
+                  color: AppColors.textSecondaryDark, fontSize: 13)),
           if (details != null && details.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(details, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12)),
+            Text(details,
+                style: const TextStyle(
+                    color: AppColors.textSecondaryDark, fontSize: 12)),
           ],
           const SizedBox(height: 10),
           Row(
             children: [
-              for (final (label, status) in [('Prüfung', 'reviewing'), ('Erledigt', 'resolved'), ('Verwerfen', 'dismissed')])
+              for (final (label, status) in [
+                ('Prüfung', 'reviewing'),
+                ('Erledigt', 'resolved'),
+                ('Verwerfen', 'dismissed')
+              ])
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.accentPrimaryDark,
-                      side: const BorderSide(color: AppColors.accentPrimaryDark),
+                      side:
+                          const BorderSide(color: AppColors.accentPrimaryDark),
                       visualDensity: VisualDensity.compact,
                     ),
                     onPressed: () => onResolve(report['id'].toString(), status),

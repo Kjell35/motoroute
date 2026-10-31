@@ -45,20 +45,43 @@ class _TourDiaryScreenState extends ConsumerState<TourDiaryScreen> {
         elevation: 0,
         title: Text(i18n.toursTab, style: AppTypography.title),
         actions: [
-          // Statistik-Dashboard über alle Touren (Top-Speed, Höhenmeter,
-          // Monatschart) - Konkurrenz-Feature-Parität.
           IconButton(
-            icon: const Icon(Icons.query_stats, color: AppColors.accentPrimaryDark),
-            tooltip: i18n.tr('stats.title'),
-            onPressed: () => Navigator.of(context).pushNamed('/ride-stats'),
+            icon:
+                const Icon(Icons.alt_route, color: AppColors.accentPrimaryDark),
+            tooltip: i18n.tr('tour.planner'),
+            onPressed: () => Navigator.of(context).pushNamed('/waypoints'),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (action) {
+              switch (action) {
+                case 'import':
+                  Navigator.of(context).pushNamed('/tour-import');
+                case 'stats':
+                  Navigator.of(context).pushNamed('/ride-stats');
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'import',
+                child: Text(i18n.tr('tour.import.title')),
+              ),
+              PopupMenuItem(
+                value: 'stats',
+                child: Text(i18n.tr('stats.title')),
+              ),
+            ],
           ),
         ],
       ),
       body: SafeArea(
         child: state.isLoading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+            ? const Center(
+                child: CircularProgressIndicator(
+                    color: AppColors.accentPrimaryDark))
             : state.error != null
-                ? _ErrorView(message: state.error!, onRetry: () => ref.read(tourDiaryProvider.notifier).load())
+                ? _ErrorView(
+                    message: state.error!,
+                    onRetry: () => ref.read(tourDiaryProvider.notifier).load())
                 : state.tours.isEmpty
                     ? _EmptyView(i18n: i18n)
                     : _TourList(tours: state.tours),
@@ -79,7 +102,8 @@ class _EmptyView extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.route_outlined, size: 64, color: AppColors.textMutedDark),
+            const Icon(Icons.route_outlined,
+                size: 64, color: AppColors.textMutedDark),
             const SizedBox(height: AppSpacing.lg),
             Text(
               i18n.tr('tour.empty.title'),
@@ -89,10 +113,31 @@ class _EmptyView extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             Text(
               i18n.tr('tour.empty.sub'),
-              style: AppTypography.body.copyWith(color: AppColors.textSecondaryDark),
+              style: AppTypography.body
+                  .copyWith(color: AppColors.textSecondaryDark),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pushNamed('/search'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accentPrimaryDark,
+                foregroundColor: AppColors.textPrimaryDark,
+              ),
+              icon: const Icon(Icons.search),
+              label: Text(i18n.tr('tour.planDestination')),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pushNamed('/roundtrip'),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.borderHairlineDark),
+                foregroundColor: AppColors.textPrimaryDark,
+              ),
+              icon: const Icon(Icons.loop),
+              label: Text(i18n.tr('tour.planRoundtrip')),
+            ),
+            const SizedBox(height: AppSpacing.sm),
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).pushNamed('/tour-import'),
               style: OutlinedButton.styleFrom(
@@ -122,11 +167,15 @@ class _ErrorView extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.statusDanger),
+            const Icon(Icons.error_outline,
+                size: 48, color: AppColors.statusDanger),
             const SizedBox(height: AppSpacing.md),
-            Text(message, style: AppTypography.caption, textAlign: TextAlign.center),
+            Text(message,
+                style: AppTypography.caption, textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: Text(ref.watch(i18nProvider).tr('common.retry'))),
+            OutlinedButton(
+                onPressed: onRetry,
+                child: Text(ref.watch(i18nProvider).tr('common.retry'))),
           ],
         ),
       ),
@@ -144,8 +193,53 @@ class _TourList extends ConsumerWidget {
     final summary = summarizeTours(tours);
 
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pushNamed('/search'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accentPrimaryDark,
+                  foregroundColor: AppColors.textPrimaryDark,
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: const Icon(Icons.search),
+                label: Text(i18n.tr('tour.planDestination')),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).pushNamed('/roundtrip'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimaryDark,
+                  side: const BorderSide(color: AppColors.borderHairlineDark),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: const Icon(Icons.loop),
+                label: Text(i18n.tr('tour.planRoundtrip')),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).pushNamed('/tour-import'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.accentPrimaryDark,
+              side: const BorderSide(color: AppColors.accentPrimaryDark),
+              minimumSize: const Size.fromHeight(48),
+            ),
+            icon: const Icon(Icons.upload_file),
+            label: Text(i18n.tr('tour.import.title')),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
         // Summen-Kopf: die eigene Fahr-Bilanz auf einen Blick.
         Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -163,8 +257,12 @@ class _TourList extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              _SummaryCell(value: summary.count.toString(), label: i18n.tr('tour.summary.tours')),
-              _SummaryCell(value: summary.totalKm.toStringAsFixed(0), label: i18n.tr('tour.summary.km')),
+              _SummaryCell(
+                  value: summary.count.toString(),
+                  label: i18n.tr('tour.summary.tours')),
+              _SummaryCell(
+                  value: summary.totalKm.toStringAsFixed(0),
+                  label: i18n.tr('tour.summary.km')),
               _SummaryCell(
                   value: summary.totalHours < 10
                       ? summary.totalHours.toStringAsFixed(1)
@@ -197,9 +295,12 @@ class _SummaryCell extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(value, style: AppTypography.title.copyWith(color: AppColors.accentPrimaryDark)),
+          Text(value,
+              style: AppTypography.title
+                  .copyWith(color: AppColors.accentPrimaryDark)),
           const SizedBox(height: 2),
-          Text(label, style: AppTypography.caption, textAlign: TextAlign.center),
+          Text(label,
+              style: AppTypography.caption, textAlign: TextAlign.center),
         ],
       ),
     );
@@ -223,7 +324,8 @@ class _TourCard extends ConsumerWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => Navigator.of(context).pushNamed('/tour-detail', arguments: tour.id),
+          onTap: () => Navigator.of(context)
+              .pushNamed('/tour-detail', arguments: tour.id),
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.md),
             child: Row(
@@ -259,11 +361,13 @@ class _TourCard extends ConsumerWidget {
                               text: formatDistanceMeters(tour.distanceMeters)),
                           _Stat(
                               icon: Icons.schedule,
-                              text: formatDurationSeconds(tour.durationSeconds)),
+                              text:
+                                  formatDurationSeconds(tour.durationSeconds)),
                           if (tour.elevationGainMeters >= 10)
                             _Stat(
                                 icon: Icons.terrain,
-                                text: '↗ ${tour.elevationGainMeters.toStringAsFixed(0)} m'),
+                                text:
+                                    '↗ ${tour.elevationGainMeters.toStringAsFixed(0)} m'),
                         ],
                       ),
                     ],
@@ -317,7 +421,9 @@ class TourDetailScreen extends ConsumerWidget {
       return Scaffold(
         backgroundColor: AppColors.bgBaseDark,
         appBar: AppBar(backgroundColor: AppColors.bgBaseDark),
-        body: const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark)),
+        body: const Center(
+            child:
+                CircularProgressIndicator(color: AppColors.accentPrimaryDark)),
       );
     }
 
@@ -334,15 +440,18 @@ class TourDetailScreen extends ConsumerWidget {
         title: Text(tour.title, style: AppTypography.title),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: AppColors.statusDanger),
+            icon:
+                const Icon(Icons.delete_outline, color: AppColors.statusDanger),
             tooltip: i18n.tr('tour.delete'),
             onPressed: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
                   backgroundColor: AppColors.bgSurfaceDark,
-                  title: Text(i18n.tr('tour.delete'), style: AppTypography.title),
-                  content: Text(i18n.tr('tour.deleteConfirm'), style: AppTypography.caption),
+                  title:
+                      Text(i18n.tr('tour.delete'), style: AppTypography.title),
+                  content: Text(i18n.tr('tour.deleteConfirm'),
+                      style: AppTypography.caption),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -350,7 +459,8 @@ class TourDetailScreen extends ConsumerWidget {
                     ),
                     FilledButton(
                       onPressed: () => Navigator.of(dialogContext).pop(true),
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.statusDanger),
                       child: Text(i18n.tr('tour.delete')),
                     ),
                   ],
@@ -410,7 +520,8 @@ class TourDetailScreen extends ConsumerWidget {
                       const Icon(Icons.location_on_outlined,
                           size: 16, color: AppColors.accentPrimaryDark),
                       const SizedBox(width: AppSpacing.sm),
-                      Expanded(child: Text(poi.label, style: AppTypography.body)),
+                      Expanded(
+                          child: Text(poi.label, style: AppTypography.body)),
                     ],
                   ),
                 ),
@@ -421,7 +532,8 @@ class TourDetailScreen extends ConsumerWidget {
               height: AppSpacing.touchTargetPlanning,
               child: FilledButton.icon(
                 onPressed: () => _exportGpx(context, ref, tour),
-                style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+                style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accentPrimaryDark),
                 icon: const Icon(Icons.ios_share),
                 label: Text(i18n.tr('tour.export')),
               ),
@@ -434,7 +546,8 @@ class TourDetailScreen extends ConsumerWidget {
 
   /// GPX erzeugen und über den System-Share-Sheet teilen (Speichern in
   /// Dateien/Cloud/WhatsApp - was immer der Nutzer will).
-  Future<void> _exportGpx(BuildContext context, WidgetRef ref, RecordedTour tour) async {
+  Future<void> _exportGpx(
+      BuildContext context, WidgetRef ref, RecordedTour tour) async {
     try {
       final gpx = GpxGenerator().generate(tour);
       final safeName = tour.title.replaceAll(RegExp(r'[^\w\- ]'), '').trim();

@@ -77,7 +77,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.text('Mehr').first);
+    await tester.tap(find.text('Community').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Pass-Knacker'), findsOneWidget);

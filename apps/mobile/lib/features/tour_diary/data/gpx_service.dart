@@ -67,7 +67,13 @@ class GpxParser {
     }
 
     if (points.isEmpty) {
-      throw GpxException('GPX enthält keine Punkte (trk/rte/wpt leer)');
+      throw GpxException(
+          'GPX enthält keine gültigen Track-, Routen- oder Wegpunkte.');
+    }
+    if (points.length < 2) {
+      throw GpxException(
+        'Die GPX-Datei enthält nur einen gültigen Punkt. Zum Fahren einer Route werden mindestens zwei Punkte benötigt.',
+      );
     }
 
     // Zeitstempel: aus den Punkten selbst ableiten, wenn vorhanden.

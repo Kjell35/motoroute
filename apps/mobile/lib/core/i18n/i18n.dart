@@ -285,14 +285,16 @@ const _catalog = <String, Map<String, String>>{
     // Tabs
     'settings.languageAndAppearance': 'Sprache & Erscheinungsbild',
     'settings.saved': 'Gespeichert',
-    'errors.saveFailed': 'Speichern fehlgeschlagen - bitte später erneut versuchen',
+    'errors.saveFailed':
+        'Speichern fehlgeschlagen - bitte später erneut versuchen',
     'settings.themeMode': 'Erscheinungsbild (UI)',
     'settings.themeMode.system': 'Auto',
     'settings.themeMode.light': 'Hell',
     'settings.themeMode.dark': 'Dunkel',
     'settings.offlineMaps': 'Offline-Karten',
     'settings.offlineMaps.add': 'Region herunterladen',
-    'settings.offlineMaps.addHint': 'Kartenbereich für offline Navigation speichern',
+    'settings.offlineMaps.addHint':
+        'Kartenbereich für offline Navigation speichern',
     'settings.offlineMaps.dialogTitle': 'Offline-Karte herunterladen',
     'settings.offlineMaps.radius': 'Radius um die aktuelle Position',
     'tab.map': 'Karte',
@@ -306,10 +308,12 @@ const _catalog = <String, Map<String, String>>{
     'badges.checkin': 'Check-in',
     'badges.lockedHint': 'Noch gesperrt',
     'badges.loginRequired': 'Bitte melde dich an, um Badges zu sammeln.',
-    'badges.gpsDenied': 'Standort-Berechtigung fehlt - in den Geräteeinstellungen erteilen.',
+    'badges.gpsDenied':
+        'Standort-Berechtigung fehlt - in den Geräteeinstellungen erteilen.',
     'badges.gpsOff': 'Standort ist ausgeschaltet - bitte aktivieren.',
     'badges.nothingNearby': 'Kein Pass oder Treff in der Nähe. Weiterfahren!',
-    'badges.nothingNearbyNext': 'Kein Pass oder Treff in der Nähe. Nächster Punkt: {title} ({km} km). Weiterfahren!',
+    'badges.nothingNearbyNext':
+        'Kein Pass oder Treff in der Nähe. Nächster Punkt: {title} ({km} km). Weiterfahren!',
     'badges.revisited': 'Schon da: {title} - {count} Badges insgesamt.',
     'badges.checkinFailed': 'Check-in fehlgeschlagen: {cause}',
     'badges.unlockedTitle': 'Badge freigeschaltet!',
@@ -326,28 +330,33 @@ const _catalog = <String, Map<String, String>>{
     'badges.adminIconUrl': 'Bild-URL (optional, https)',
     'badges.adminCancel': 'Abbrechen',
     'badges.adminSave': 'Speichern',
-    'badges.adminInvalid': 'Bitte Titel, Koordinaten und Radius (20-500 m) prüfen.',
+    'badges.adminInvalid':
+        'Bitte Titel, Koordinaten und Radius (20-500 m) prüfen.',
     'badges.adminCreated': 'Badge angelegt.',
     'badges.adminFailed': 'Anlegen fehlgeschlagen: {cause}',
     'badges.nextTarget': 'Nächster Zielort',
-    'tab.more': 'Mehr',
+    'tab.more': 'Community',
     'tab.garage': 'Garage',
     // Garage
     'garage.title': 'Garage',
     'garage.loginTitle': 'Meine Garage',
-    'garage.loginHint': 'Eigenes Garage-Konto (unabhängig vom MotoRoute-Login). Verwaltet Fahrzeuge, Wartung und Kosten.',
+    'garage.loginHint':
+        'Eigenes Garage-Konto (unabhängig vom MotoRoute-Login). Verwaltet Fahrzeuge, Wartung und Kosten.',
     'garage.email': 'E-Mail',
     'garage.password': 'Passwort',
     'garage.loginButton': 'Garage öffnen',
     'garage.loginFailed': 'Anmeldung fehlgeschlagen - E-Mail/Passwort prüfen',
     'garage.serverUnreachable': 'Garage-Server nicht erreichbar',
     'garage.connectTitle': 'Garage verbinden',
-    'garage.connectHint': 'Deine Garage wird mit deinem MotoRoute-Konto verbunden. Kein zweites Passwort nötig.',
+    'garage.connectHint':
+        'Deine Garage wird mit deinem MotoRoute-Konto verbunden. Kein zweites Passwort nötig.',
     'garage.connectRetry': 'Erneut verbinden',
     'garage.connectNeedLogin': 'Melde dich an',
-    'garage.connectNeedLoginHint': 'Melde dich mit deinem MotoRoute-Konto an - danach öffnet sich deine Garage automatisch.',
+    'garage.connectNeedLoginHint':
+        'Melde dich mit deinem MotoRoute-Konto an - danach öffnet sich deine Garage automatisch.',
     'garage.logout': 'Abmelden',
-    'garage.empty': 'Noch keine Fahrzeuge. Lege dein erstes Motorrad oder Auto an!',
+    'garage.empty':
+        'Noch keine Fahrzeuge. Lege dein erstes Motorrad oder Auto an!',
     'garage.addVehicle': '+ Fahrzeug anlegen',
     'garage.myMotos': 'Meine Motorräder',
     'garage.myCars': 'Meine Autos',
@@ -448,12 +457,16 @@ const _catalog = <String, Map<String, String>>{
     'route.eta': 'Ankunft',
     'route.startNavigation': 'Navigation starten',
     'route.overview': 'Routenübersicht',
+    'tour.saveAsTour': 'Als Tour speichern',
+    'tour.saved': 'Tour gespeichert',
+    'tour.plannedTitle': 'Geplante Rundtour',
     'route.chooseStart.title': 'Wo startest du?',
     'route.chooseStart.gps': 'Aktueller Standort',
     'route.chooseStart.gpsSub': 'GPS-Position des Geräts verwenden',
     'route.chooseStart.address': 'Adresse eingeben',
     'route.chooseStart.addressSub': 'Ort, PLZ oder POI als Startpunkt',
-    'route.chooseStart.noFix': 'Kein GPS-Fix - bitte Adresse wählen oder später erneut',
+    'route.chooseStart.noFix':
+        'Kein GPS-Fix - bitte Adresse wählen oder später erneut',
     'route.waypoints': 'Wegpunkte',
     // Rundtour
     'roundtrip.title': 'Rundtour planen',
@@ -480,7 +493,8 @@ const _catalog = <String, Map<String, String>>{
     'stats.totalTime': 'Gesamtzeit',
     'stats.monthlyKm': 'Kilometer pro Monat',
     'stats.noData': 'Noch keine Fahrten in den letzten Monaten',
-    'stats.empty': 'Zeichne deine erste Fahrt auf - dann erscheinen hier Statistiken.',
+    'stats.empty':
+        'Zeichne deine erste Fahrt auf - dann erscheinen hier Statistiken.',
     'route.style.fast': 'Schnell',
     'route.style.curvy': 'Kurvig',
     'route.style.extraCurvy': 'Extra kurvig',
@@ -521,7 +535,8 @@ const _catalog = <String, Map<String, String>>{
     'chat.loginRequiredSub': 'Nach dem Login ist der Chat sofort verfügbar.',
     // Karte
     'map.attribution': '© OpenStreetMap-Mitwirkende © CARTO',
-    'map.offlineNote': 'Karte offline - POIs, Routing und Navigation funktionieren weiter',
+    'map.offlineNote':
+        'Karte offline - POIs, Routing und Navigation funktionieren weiter',
     // Navigation
     'nav.voiceOn': 'Sprachansagen an',
     'nav.voiceOff': 'Sprachansagen aus',
@@ -529,36 +544,47 @@ const _catalog = <String, Map<String, String>>{
     'settings.voiceAnnouncements.desc':
         'Manöver, Ziel und Umleitungen werden angesagt - live auch am Fahrbildschirm schaltbar.',
     // Tour-Tagebuch
+    'tour.plan': 'Tour planen',
+    'tour.planDestination': 'Ziel suchen',
+    'tour.planRoundtrip': 'Rundtour planen',
+    'tour.planner': 'Routenplanung',
     'tour.saveTitle': 'Tour speichern',
     'tour.saveHint': 'z. B. Alpenrunde mit Vati',
     'tour.discard': 'Verwerfen',
     'tour.empty.title': 'Noch keine Touren',
-    'tour.empty.sub': 'Jede Navigation wird automatisch aufgezeichnet. Oder importiere eine GPX-Route von Calimoto oder Kurviger.',
+    'tour.empty.sub':
+        'Jede Navigation wird automatisch aufgezeichnet. Oder importiere eine GPX-Route von Calimoto oder Kurviger.',
     'tour.import.title': 'GPX importieren',
-    'tour.import.intro': 'Wähle eine GPX-Datei - z. B. eine geplante Tour aus Calimoto oder Kurviger.',
+    'tour.import.intro':
+        'Wähle eine GPX-Datei - z. B. eine geplante Tour aus Calimoto oder Kurviger.',
     'tour.import.pick': 'GPX-Datei wählen',
     'tour.import.points': 'Punkte',
     'tour.import.ride': 'Diese Tour fahren',
     'tour.import.failed': 'Datei konnte nicht gelesen werden',
+    'tour.import.invalid': 'Die Datei enthält keine lesbare GPX-Route.',
     'tour.summary.tours': 'Touren',
     'tour.summary.km': 'km',
     'tour.summary.hours': 'h',
     'tour.summary.elevation': 'Höhenmeter',
     // Fahrhistorie (Profil)
     'settings.rideHistory': 'Fahrhistorie & Privatsphäre',
-    'rideHistory.requiresLogin': 'Melde dich an, um die Fahrhistorie zu nutzen. Bis dahin bleiben alle Daten privat.',
+    'rideHistory.requiresLogin':
+        'Melde dich an, um die Fahrhistorie zu nutzen. Bis dahin bleiben alle Daten privat.',
     'rideHistory.enabled': 'Fahrhistorie aufzeichnen',
     'rideHistory.publicProfile': 'Fahrhistorie öffentlich anzeigen',
     'rideHistory.shareRides': 'Gefahrene Strecken öffentlich anzeigen',
     'rideHistory.sharePlaces': 'Besuchte Orte öffentlich anzeigen',
     'rideHistory.hideStartEnd': 'Genaue Start-/Zielposition verbergen',
-    'rideHistory.hintPrivate': 'Privat: Niemand sieht deine Touren oder Orte. Freigabe erfolgt nur per Schalter.',
-    'rideHistory.hintPublic': 'Öffentlich: Andere sehen nur, was du oben freigibst. Profil komplett privat = Hauptschalter aus.',
+    'rideHistory.hintPrivate':
+        'Privat: Niemand sieht deine Touren oder Orte. Freigabe erfolgt nur per Schalter.',
+    'rideHistory.hintPublic':
+        'Öffentlich: Andere sehen nur, was du oben freigibst. Profil komplett privat = Hauptschalter aus.',
     'rideHistory.title': 'Fahrhistorie',
     'rideHistory.loadError': 'Historie konnte nicht geladen werden',
     'rideHistory.retry': 'Erneut versuchen',
     'rideHistory.private': 'Privates Profil',
-    'rideHistory.privateHint': 'Diese Person teilt ihre Fahrhistorie nicht. Nur freigegebene Daten wären hier sichtbar.',
+    'rideHistory.privateHint':
+        'Diese Person teilt ihre Fahrhistorie nicht. Nur freigegebene Daten wären hier sichtbar.',
     'rideHistory.regions': 'Gefahrene Regionen',
     'rideHistory.rides': 'Gefahrene Strecken',
     'rideHistory.noRides': 'Noch keine Touren geteilt.',
@@ -579,7 +605,8 @@ const _catalog = <String, Map<String, String>>{
     'mp.title': 'Marktplatz',
     'mp.notLoggedIn': 'Bitte melde dich an, um den Marktplatz zu nutzen.',
     'mp.loadFailed': 'Laden fehlgeschlagen',
-    'err.network': 'Server gerade nicht erreichbar - einen Moment später erneut versuchen',
+    'err.network':
+        'Server gerade nicht erreichbar - einen Moment später erneut versuchen',
     'err.unauthorized': 'Sitzung abgelaufen - bitte neu anmelden',
     'err.forbidden': 'Kein Zugriff',
     'err.notFound': 'Nicht gefunden',
@@ -622,7 +649,8 @@ const _catalog = <String, Map<String, String>>{
     'mp.shippingHint': 'Versand an den Käufer ist möglich',
     'mp.price': 'Preis',
     'mp.priceInvalid': 'Ungültiger Preis',
-    'mp.aiCheckNote': 'Jedes Angebot wird vor der Veröffentlichung automatisch geprüft (KI). Nur Fahrzeugteile und Fahrzeugzubehör sind erlaubt. Unklare Fälle werden manuell geprüft.',
+    'mp.aiCheckNote':
+        'Jedes Angebot wird vor der Veröffentlichung automatisch geprüft (KI). Nur Fahrzeugteile und Fahrzeugzubehör sind erlaubt. Unklare Fälle werden manuell geprüft.',
     'mp.submitForReview': 'Zur KI-Prüfung einreichen',
     'mp.submitFailed': 'Einreichen fehlgeschlagen',
   },
@@ -651,10 +679,12 @@ const _catalog = <String, Map<String, String>>{
     'badges.checkin': 'Check in',
     'badges.lockedHint': 'Still locked',
     'badges.loginRequired': 'Please sign in to collect badges.',
-    'badges.gpsDenied': 'Location permission missing - grant it in device settings.',
+    'badges.gpsDenied':
+        'Location permission missing - grant it in device settings.',
     'badges.gpsOff': 'Location services are off - please enable them.',
     'badges.nothingNearby': 'No pass or meeting spot nearby. Keep riding!',
-    'badges.nothingNearbyNext': 'No pass or meeting spot nearby. Nearest: {title} ({km} km). Keep riding!',
+    'badges.nothingNearbyNext':
+        'No pass or meeting spot nearby. Nearest: {title} ({km} km). Keep riding!',
     'badges.revisited': 'Back at {title} - {count} badges in total.',
     'badges.checkinFailed': 'Check-in failed: {cause}',
     'badges.unlockedTitle': 'Badge unlocked!',
@@ -671,26 +701,30 @@ const _catalog = <String, Map<String, String>>{
     'badges.adminIconUrl': 'Image URL (optional, https)',
     'badges.adminCancel': 'Cancel',
     'badges.adminSave': 'Save',
-    'badges.adminInvalid': 'Please check title, coordinates and radius (20-500 m).',
+    'badges.adminInvalid':
+        'Please check title, coordinates and radius (20-500 m).',
     'badges.adminCreated': 'Badge created.',
     'badges.adminFailed': 'Could not create badge: {cause}',
     'badges.nextTarget': 'Nearest target',
-    'tab.more': 'More',
+    'tab.more': 'Community',
     'tab.garage': 'Garage',
     // Garage
     'garage.title': 'Garage',
     'garage.loginTitle': 'My garage',
-    'garage.loginHint': 'Separate garage account (independent of your MotoRoute login). Manages vehicles, maintenance and costs.',
+    'garage.loginHint':
+        'Separate garage account (independent of your MotoRoute login). Manages vehicles, maintenance and costs.',
     'garage.email': 'Email',
     'garage.password': 'Password',
     'garage.loginButton': 'Open garage',
     'garage.loginFailed': 'Login failed - check email/password',
     'garage.serverUnreachable': 'Garage server unreachable',
     'garage.connectTitle': 'Connect garage',
-    'garage.connectHint': 'Your garage is linked to your MotoRoute account. No second password needed.',
+    'garage.connectHint':
+        'Your garage is linked to your MotoRoute account. No second password needed.',
     'garage.connectRetry': 'Try again',
     'garage.connectNeedLogin': 'Sign in',
-    'garage.connectNeedLoginHint': 'Sign in with your MotoRoute account - your garage opens automatically afterwards.',
+    'garage.connectNeedLoginHint':
+        'Sign in with your MotoRoute account - your garage opens automatically afterwards.',
     'garage.logout': 'Log out',
     'garage.empty': 'No vehicles yet. Add your first motorcycle or car!',
     'garage.addVehicle': '+ Add vehicle',
@@ -792,12 +826,16 @@ const _catalog = <String, Map<String, String>>{
     'route.eta': 'Arrival',
     'route.startNavigation': 'Start navigation',
     'route.overview': 'Route overview',
+    'tour.saveAsTour': 'Save as tour',
+    'tour.saved': 'Tour saved',
+    'tour.plannedTitle': 'Planned round trip',
     'route.chooseStart.title': 'Where do you start?',
     'route.chooseStart.gps': 'Current location',
     'route.chooseStart.gpsSub': 'Use the device GPS position',
     'route.chooseStart.address': 'Enter an address',
     'route.chooseStart.addressSub': 'Place, postcode or POI as start',
-    'route.chooseStart.noFix': 'No GPS fix - pick an address or try again later',
+    'route.chooseStart.noFix':
+        'No GPS fix - pick an address or try again later',
     'route.waypoints': 'Waypoints',
     // Round trip
     'roundtrip.title': 'Plan a round trip',
@@ -865,7 +903,8 @@ const _catalog = <String, Map<String, String>>{
     'chat.loginRequiredSub': 'After signing in, chat is available instantly.',
     // Karte
     'map.attribution': '© OpenStreetMap contributors © CARTO',
-    'map.offlineNote': 'Map offline - POIs, routing and navigation keep working',
+    'map.offlineNote':
+        'Map offline - POIs, routing and navigation keep working',
     // Navigation
     'nav.voiceOn': 'Voice announcements on',
     'nav.voiceOff': 'Voice announcements off',
@@ -873,36 +912,47 @@ const _catalog = <String, Map<String, String>>{
     'settings.voiceAnnouncements.desc':
         'Turns, destination and reroutes are announced - also switchable live on the ride screen.',
     // Tour diary
+    'tour.plan': 'Plan a ride',
+    'tour.planDestination': 'Choose destination',
+    'tour.planRoundtrip': 'Plan a round trip',
+    'tour.planner': 'Route planner',
     'tour.saveTitle': 'Save tour',
     'tour.saveHint': 'e.g. Alpine loop with dad',
     'tour.discard': 'Discard',
     'tour.empty.title': 'No tours yet',
-    'tour.empty.sub': 'Every navigation is recorded automatically. Or import a GPX route from Calimoto or Kurviger.',
+    'tour.empty.sub':
+        'Every navigation is recorded automatically. Or import a GPX route from Calimoto or Kurviger.',
     'tour.import.title': 'Import GPX',
-    'tour.import.intro': 'Pick a GPX file - e.g. a planned tour from Calimoto or Kurviger.',
+    'tour.import.intro':
+        'Pick a GPX file - e.g. a planned tour from Calimoto or Kurviger.',
     'tour.import.pick': 'Choose GPX file',
     'tour.import.points': 'points',
     'tour.import.ride': 'Ride this tour',
     'tour.import.failed': 'Could not read the file',
+    'tour.import.invalid': 'The file does not contain a readable GPX route.',
     'tour.summary.tours': 'Tours',
     'tour.summary.km': 'km',
     'tour.summary.hours': 'h',
     'tour.summary.elevation': 'Elevation',
     // Ride history (profile)
     'settings.rideHistory': 'Ride history & privacy',
-    'rideHistory.requiresLogin': 'Sign in to use ride history. Until then all data stays private.',
+    'rideHistory.requiresLogin':
+        'Sign in to use ride history. Until then all data stays private.',
     'rideHistory.enabled': 'Record ride history',
     'rideHistory.publicProfile': 'Show ride history publicly',
     'rideHistory.shareRides': 'Share ridden routes publicly',
     'rideHistory.sharePlaces': 'Share visited places publicly',
     'rideHistory.hideStartEnd': 'Hide exact start/destination position',
-    'rideHistory.hintPrivate': 'Private: nobody sees your tours or places. Sharing only via the switches above.',
-    'rideHistory.hintPublic': 'Public: others see only what you shared above. Fully private profile = main switch off.',
+    'rideHistory.hintPrivate':
+        'Private: nobody sees your tours or places. Sharing only via the switches above.',
+    'rideHistory.hintPublic':
+        'Public: others see only what you shared above. Fully private profile = main switch off.',
     'rideHistory.title': 'Ride history',
     'rideHistory.loadError': 'Could not load history',
     'rideHistory.retry': 'Retry',
     'rideHistory.private': 'Private profile',
-    'rideHistory.privateHint': 'This person does not share their ride history. Only explicitly shared data would appear here.',
+    'rideHistory.privateHint':
+        'This person does not share their ride history. Only explicitly shared data would appear here.',
     'rideHistory.regions': 'Regions ridden',
     'rideHistory.rides': 'Ridden routes',
     'rideHistory.noRides': 'No shared tours yet.',
@@ -966,7 +1016,8 @@ const _catalog = <String, Map<String, String>>{
     'mp.shippingHint': 'Shipping to the buyer is possible',
     'mp.price': 'Price',
     'mp.priceInvalid': 'Invalid price',
-    'mp.aiCheckNote': 'Every listing is checked automatically (AI) before publication. Only vehicle parts and accessories are allowed. Unclear cases go to manual review.',
+    'mp.aiCheckNote':
+        'Every listing is checked automatically (AI) before publication. Only vehicle parts and accessories are allowed. Unclear cases go to manual review.',
     'mp.submitForReview': 'Submit for AI review',
     'mp.submitFailed': 'Submission failed',
   },

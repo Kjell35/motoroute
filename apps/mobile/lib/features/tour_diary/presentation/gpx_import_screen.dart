@@ -1,10 +1,12 @@
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
-import 'package:motoroute_app/features/routing/domain/route_entities.dart' show Waypoint;
+import 'package:motoroute_app/features/routing/domain/route_entities.dart'
+    show Waypoint;
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
@@ -27,11 +29,13 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
   RecordedTour? _parsed;
   bool _parsing = false;
   String? _error;
+  String? _errorHint;
 
   Future<void> _pickAndParse() async {
     setState(() {
       _parsing = true;
       _error = null;
+      _errorHint = null;
       _parsed = null;
     });
     try {
@@ -43,15 +47,19 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
         compressionQuality: 0,
       );
       if (files.isEmpty) {
-        setState(() => _parsing = false);
+        if (mounted) setState(() => _parsing = false);
         return;
       }
       final file = files.single;
       // v13-Plattform-API: Inhalt über readAsBytes() (Pfad kann entfallen,
       // je nach Anbieter - deshalb kein hartes !).
       final bytes = await file.readAsBytes();
-      final content = String.fromCharCodes(bytes);
-      final tour = GpxParser().parse(content, fallbackTitle: file.name.replaceAll('.gpx', '').replaceAll('.xml', ''));
+      final content = utf8.decode(bytes, allowMalformed: true);
+      final tour = GpxParser().parse(
+        content,
+        fallbackTitle: file.name
+            .replaceFirst(RegExp(r'\.(gpx|xml)$', caseSensitive: false), ''),
+      );
       if (!mounted) return;
       setState(() {
         _parsed = tour;
@@ -60,7 +68,8 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
     } on GpxException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.message;
+        _error = ref.read(i18nProvider).tr('tour.import.invalid');
+        _errorHint = e.message;
         _parsing = false;
       });
     } catch (_) {
@@ -94,12 +103,25 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
                 _IntroCard(onPick: _pickAndParse, i18n: i18n),
               if (_parsing)
                 const Expanded(
-                  child: Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark)),
+                  child: Center(
+                      child: CircularProgressIndicator(
+                          color: AppColors.accentPrimaryDark)),
                 ),
               if (_error != null) ...[
-                const Icon(Icons.error_outline, size: 48, color: AppColors.statusDanger),
+                const Icon(Icons.error_outline,
+                    size: 48, color: AppColors.statusDanger),
                 const SizedBox(height: AppSpacing.md),
-                Text(_error!, style: AppTypography.body, textAlign: TextAlign.center),
+                Text(_error!,
+                    style: AppTypography.body, textAlign: TextAlign.center),
+                if (_errorHint != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    _errorHint!,
+                    style: AppTypography.caption
+                        .copyWith(color: AppColors.textSecondaryDark),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.lg),
                 OutlinedButton(
                   onPressed: _pickAndParse,
@@ -112,18 +134,38 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
                   child: TrackThumbnail(track: tour.track, large: true),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text(tour.title, style: AppTypography.title, textAlign: TextAlign.center),
+                Text(tour.title,
+                    style: AppTypography.title, textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.sm),
-                Text(
-                  '${tour.track.length} ${i18n.tr('tour.import.points')}',
-                  style: AppTypography.caption,
-                  textAlign: TextAlign.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    _PreviewMetric(
+                      icon: Icons.route,
+                      label:
+                          '${(tour.distanceMeters / 1000).toStringAsFixed(1)} ${i18n.tr('tour.summary.km')}',
+                    ),
+                    _PreviewMetric(
+                      icon: Icons.place_outlined,
+                      label:
+                          '${tour.track.length} ${i18n.tr('tour.import.points')}',
+                    ),
+                    if (tour.elevationGainMeters > 0)
+                      _PreviewMetric(
+                        icon: Icons.terrain,
+                        label:
+                            '${tour.elevationGainMeters.toStringAsFixed(0)} ${i18n.tr('tour.summary.elevation')}',
+                      ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 SizedBox(
                   height: AppSpacing.touchTargetPlanning,
                   child: FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.accentPrimaryDark),
                     onPressed: () => _startNavigation(context),
                     icon: const Icon(Icons.navigation),
                     label: Text(i18n.tr('tour.import.ride')),
@@ -148,13 +190,15 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
     // Zur Routenübersicht: Start ist das letzte Element? Nein - der
     // Flow erwartet [Ziel]; Start wählt der Nutzer im /route-start.
     final destination = waypoints.last;
-    Navigator.of(context).pushNamed('/route-start', arguments: {'destination': destination});
+    Navigator.of(context)
+        .pushNamed('/route-start', arguments: {'destination': destination});
   }
 
   /// GPX-Spur (ggf. tausende Punkte) auf <= maxPoints siginifikante
   /// Wegpunkte verdünnen - gleichmäßig verteilt, Start und Ziel bleiben
   /// immer erhalten. Das Backend routet sauber darüber.
-  List<Waypoint> _thinToWaypoints(List<TrackPoint> track, {int maxPoints = 12}) {
+  List<Waypoint> _thinToWaypoints(List<TrackPoint> track,
+      {int maxPoints = 12}) {
     if (track.length <= maxPoints) {
       return track
           .map((p) => Waypoint(lat: p.lat, lng: p.lng))
@@ -170,6 +214,23 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
   }
 }
 
+class _PreviewMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _PreviewMetric({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Chip(
+        avatar: Icon(icon, size: 18, color: AppColors.accentSecondary),
+        label: Text(label),
+        backgroundColor: AppColors.bgSurfaceDark,
+        side: const BorderSide(color: AppColors.borderHairlineDark),
+        labelStyle:
+            AppTypography.caption.copyWith(color: AppColors.textPrimaryDark),
+      );
+}
+
 class _IntroCard extends StatelessWidget {
   final VoidCallback onPick;
   final I18n i18n;
@@ -182,16 +243,19 @@ class _IntroCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.upload_file, size: 64, color: AppColors.textMutedDark),
+            const Icon(Icons.upload_file,
+                size: 64, color: AppColors.textMutedDark),
             const SizedBox(height: AppSpacing.lg),
             Text(
               i18n.tr('tour.import.intro'),
-              style: AppTypography.body.copyWith(color: AppColors.textSecondaryDark),
+              style: AppTypography.body
+                  .copyWith(color: AppColors.textSecondaryDark),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),
             FilledButton.icon(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+              style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accentPrimaryDark),
               onPressed: onPick,
               icon: const Icon(Icons.folder_open),
               label: Text(i18n.tr('tour.import.pick')),

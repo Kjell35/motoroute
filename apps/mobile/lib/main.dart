@@ -136,6 +136,7 @@ class _MotoRouteAppBody extends ConsumerWidget {
         // dem jeweiligen Start-Tab.
         '/map': (context) => const HomeShell(initialTab: 0),
         '/tours': (context) => const HomeShell(initialTab: 3),
+        '/tour-planner': (context) => const HomeShell(initialTab: 4),
         '/chat': (context) => const HomeShell(initialTab: 4),
         '/settings': (context) => const HomeShell(initialTab: 5),
         '/onboarding': (context) => const OnboardingScreen(),

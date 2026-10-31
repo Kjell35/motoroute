@@ -182,7 +182,8 @@ class MpListing {
       status: json['status'] as String? ?? 'active',
       reviewStatus: MpReviewStatus.from(json['review_status'] as String?),
       reviewReason: json['review_reason'] as String?,
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.now(),
       imageUrls: images,
     );
   }
@@ -235,9 +236,11 @@ class MpSubcategoryDef {
   final String labelDe;
   final String labelEn;
 
-  const MpSubcategoryDef({required this.key, required this.labelDe, required this.labelEn});
+  const MpSubcategoryDef(
+      {required this.key, required this.labelDe, required this.labelEn});
 
-  factory MpSubcategoryDef.fromJson(Map<String, dynamic> json) => MpSubcategoryDef(
+  factory MpSubcategoryDef.fromJson(Map<String, dynamic> json) =>
+      MpSubcategoryDef(
         key: json['key'] as String,
         labelDe: json['labelDe'] as String? ?? '',
         labelEn: json['labelEn'] as String? ?? '',
@@ -249,12 +252,15 @@ class MarketplaceRepository {
   final Dio _dio;
   MarketplaceRepository(this._dio);
 
-  void _auth(String token) => _dio.options.headers['Authorization'] = 'Bearer $token';
+  Options _authOptions(String token) =>
+      Options(headers: {'Authorization': 'Bearer $token'});
 
   /// Kategorien-Katalog für das Erstell-Formular.
   Future<MpCatalog> catalog({required String token}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/categories');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/categories',
+      options: _authOptions(token),
+    );
     return MpCatalog.fromJson(res.data ?? const {});
   }
 
@@ -273,9 +279,9 @@ class MarketplaceRepository {
     String sort = 'newest',
     int limit = 30,
   }) async {
-    _auth(token);
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/marketplace/listings',
+      options: _authOptions(token),
       queryParameters: {
         if (q != null && q.isNotEmpty) 'q': q,
         if (category != null) 'category': category,
@@ -291,13 +297,17 @@ class MarketplaceRepository {
       },
     );
     final rows = (res.data ?? const {})['listings'] as List? ?? const [];
-    return rows.map((e) => MpListing.fromJson(e as Map<String, dynamic>)).toList(growable: false);
+    return rows
+        .map((e) => MpListing.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   /// Öffentliches Detail.
   Future<MpListing> get({required String token, required String id}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/listings/$id');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/listings/$id',
+      options: _authOptions(token),
+    );
     return MpListing.fromJson(res.data ?? const {});
   }
 
@@ -308,9 +318,9 @@ class MarketplaceRepository {
     required Map<String, dynamic> fields,
     List<String> imagePaths = const [],
   }) async {
-    _auth(token);
     final formData = FormData();
-    fields.forEach((key, value) => formData.fields.add(MapEntry(key, value.toString())));
+    fields.forEach(
+        (key, value) => formData.fields.add(MapEntry(key, value.toString())));
     for (final path in imagePaths) {
       final multipart = await MultipartFile.fromFile(path);
       formData.files.add(MapEntry('images', multipart));
@@ -318,9 +328,11 @@ class MarketplaceRepository {
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/marketplace/listings',
       data: formData,
+      options: _authOptions(token),
     );
     final body = res.data ?? const {};
-    return MpListing.fromJson((body['listing'] ?? body) as Map<String, dynamic>);
+    return MpListing.fromJson(
+        (body['listing'] ?? body) as Map<String, dynamic>);
   }
 
   /// Abgelehntes Angebot bearbeiten und ERNEUT einreichen (Punkt 6).
@@ -331,9 +343,9 @@ class MarketplaceRepository {
     required Map<String, dynamic> fields,
     List<String> imagePaths = const [],
   }) async {
-    _auth(token);
     final formData = FormData();
-    fields.forEach((key, value) => formData.fields.add(MapEntry(key, value.toString())));
+    fields.forEach(
+        (key, value) => formData.fields.add(MapEntry(key, value.toString())));
     for (final path in imagePaths) {
       final multipart = await MultipartFile.fromFile(path);
       formData.files.add(MapEntry('images', multipart));
@@ -341,17 +353,23 @@ class MarketplaceRepository {
     final res = await _dio.put<Map<String, dynamic>>(
       '/v1/marketplace/listings/$id',
       data: formData,
+      options: _authOptions(token),
     );
     final body = res.data ?? const {};
-    return MpListing.fromJson((body['listing'] ?? body) as Map<String, dynamic>);
+    return MpListing.fromJson(
+        (body['listing'] ?? body) as Map<String, dynamic>);
   }
 
   /// Eigene Angebote (Verwaltung im Profil).
   Future<List<MpListing>> mine({required String token}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/me/listings');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/me/listings',
+      options: _authOptions(token),
+    );
     final rows = (res.data ?? const {})['listings'] as List? ?? const [];
-    return rows.map((e) => MpListing.fromJson(e as Map<String, dynamic>)).toList(growable: false);
+    return rows
+        .map((e) => MpListing.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   Future<MpListing> setStatus({
@@ -359,35 +377,46 @@ class MarketplaceRepository {
     required String id,
     required String status,
   }) async {
-    _auth(token);
     final res = await _dio.put<Map<String, dynamic>>(
       '/v1/marketplace/me/listings/$id/status',
       data: {'status': status},
+      options: _authOptions(token),
     );
     return MpListing.fromJson(res.data ?? const {});
   }
 
   Future<void> delete({required String token, required String id}) async {
-    _auth(token);
-    await _dio.delete<void>('/v1/marketplace/me/listings/$id');
+    await _dio.delete<void>(
+      '/v1/marketplace/me/listings/$id',
+      options: _authOptions(token),
+    );
   }
 
   // Favoriten
   Future<List<MpListing>> favorites({required String token}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/me/favorites');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/me/favorites',
+      options: _authOptions(token),
+    );
     final rows = (res.data ?? const {})['listings'] as List? ?? const [];
-    return rows.map((e) => MpListing.fromJson(e as Map<String, dynamic>)).toList(growable: false);
+    return rows
+        .map((e) => MpListing.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   Future<void> addFavorite({required String token, required String id}) async {
-    _auth(token);
-    await _dio.post<void>('/v1/marketplace/me/favorites/$id');
+    await _dio.post<void>(
+      '/v1/marketplace/me/favorites/$id',
+      options: _authOptions(token),
+    );
   }
 
-  Future<void> removeFavorite({required String token, required String id}) async {
-    _auth(token);
-    await _dio.delete<void>('/v1/marketplace/me/favorites/$id');
+  Future<void> removeFavorite(
+      {required String token, required String id}) async {
+    await _dio.delete<void>(
+      '/v1/marketplace/me/favorites/$id',
+      options: _authOptions(token),
+    );
   }
 
   // Meldung
@@ -397,11 +426,12 @@ class MarketplaceRepository {
     required String reason,
     String? details,
   }) async {
-    _auth(token);
-    await _dio.post<void>('/v1/marketplace/listings/$id/report', data: {
-      'reason': reason,
-      if (details != null && details.isNotEmpty) 'details': details,
-    });
+    await _dio.post<void>('/v1/marketplace/listings/$id/report',
+        options: _authOptions(token),
+        data: {
+          'reason': reason,
+          if (details != null && details.isNotEmpty) 'details': details,
+        });
   }
 
   // Verkäufer kontaktieren -> privater Chat wird erstellt/geöffnet.
@@ -410,29 +440,37 @@ class MarketplaceRepository {
     required String id,
     String? message,
   }) async {
-    _auth(token);
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/marketplace/listings/$id/contact',
       data: {'message': message},
+      options: _authOptions(token),
     );
     return (res.data ?? const {})['conversationId'] as String? ?? '';
   }
 
   // Admin
   Future<List<MpListing>> adminPending({required String token}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/admin/pending');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/admin/pending',
+      options: _authOptions(token),
+    );
     final rows = (res.data ?? const {})['listings'] as List? ?? const [];
-    return rows.map((e) => MpListing.fromJson(e as Map<String, dynamic>)).toList(growable: false);
+    return rows
+        .map((e) => MpListing.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   /// Offene Meldungen für den Admin (Id, Grund, Details, Angebotstitel).
   Future<List<({int id, String reason, String details, String listingTitle})>>
       adminReports({required String token}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/admin/reports');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/admin/reports',
+      options: _authOptions(token),
+    );
     final rows = (res.data ?? const {})['reports'] as List? ?? const [];
-    return rows.map<({int id, String reason, String details, String listingTitle})>((row) {
+    return rows
+        .map<({int id, String reason, String details, String listingTitle})>(
+            (row) {
       final r = row as Map<String, dynamic>;
       final listing = r['listing'] as Map<String, dynamic>? ?? const {};
       return (
@@ -451,17 +489,21 @@ class MarketplaceRepository {
     String? reviewStatus,
     String? reason,
   }) async {
-    _auth(token);
-    await _dio.put<void>('/v1/marketplace/admin/listings/$id', data: {
-      if (status != null) 'status': status,
-      if (reviewStatus != null) 'reviewStatus': reviewStatus,
-      if (reason != null) 'reason': reason,
-    });
+    await _dio.put<void>('/v1/marketplace/admin/listings/$id',
+        options: _authOptions(token),
+        data: {
+          if (status != null) 'status': status,
+          if (reviewStatus != null) 'reviewStatus': reviewStatus,
+          if (reason != null) 'reason': reason,
+        });
   }
 
-  Future<void> adminResolveReport({required String token, required int reportId}) async {
-    _auth(token);
-    await _dio.put<void>('/v1/marketplace/admin/reports/$reportId/resolve');
+  Future<void> adminResolveReport(
+      {required String token, required int reportId}) async {
+    await _dio.put<void>(
+      '/v1/marketplace/admin/reports/$reportId/resolve',
+      options: _authOptions(token),
+    );
   }
 
   // =========================================================================
@@ -471,10 +513,11 @@ class MarketplaceRepository {
   /// Vorschläge für die Suchfeld-Autovervollständigung. Der Server liefert
   /// Präfix-Treffer mit Häufigkeit; die Tippfehler-Toleranz (Damerau-
   /// Levenshtein) macht die UI im suggestProvider (siehe dort).
-  Future<MpSuggestions> suggest({required String token, required String q}) async {
-    _auth(token);
+  Future<MpSuggestions> suggest(
+      {required String token, required String q}) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/marketplace/suggest',
+      options: _authOptions(token),
       queryParameters: {'q': q},
     );
     return MpSuggestions.fromJson(res.data ?? const {});
@@ -485,10 +528,11 @@ class MarketplaceRepository {
   // =========================================================================
 
   /// Reviews eines Angebots (öffentlich lesbar).
-  Future<MpReviews> reviews({required String token, required String listingId}) async {
-    _auth(token);
+  Future<MpReviews> reviews(
+      {required String token, required String listingId}) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/marketplace/listings/$listingId/reviews',
+      options: _authOptions(token),
     );
     return MpReviews.fromJson(res.data ?? const {});
   }
@@ -500,10 +544,13 @@ class MarketplaceRepository {
     required int rating,
     String? comment,
   }) async {
-    _auth(token);
     await _dio.post<void>(
       '/v1/marketplace/listings/$listingId/reviews',
-      data: {'rating': rating, if (comment != null && comment.isNotEmpty) 'comment': comment},
+      data: {
+        'rating': rating,
+        if (comment != null && comment.isNotEmpty) 'comment': comment
+      },
+      options: _authOptions(token),
     );
   }
 
@@ -513,15 +560,19 @@ class MarketplaceRepository {
 
   /// Ungelesen-Zahl + Inbox-Einträge.
   Future<MpNotifications> notifications({required String token}) async {
-    _auth(token);
-    final res = await _dio.get<Map<String, dynamic>>('/v1/marketplace/notifications');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/marketplace/notifications',
+      options: _authOptions(token),
+    );
     return MpNotifications.fromJson(res.data ?? const {});
   }
 
   /// Alles als gelesen markieren.
   Future<void> markNotificationsRead({required String token}) async {
-    _auth(token);
-    await _dio.post<void>('/v1/marketplace/notifications/read-all');
+    await _dio.post<void>(
+      '/v1/marketplace/notifications/read-all',
+      options: _authOptions(token),
+    );
   }
 }
 
@@ -561,7 +612,8 @@ class MpReviews {
   final double average;
   final int count;
 
-  const MpReviews({required this.reviews, required this.average, required this.count});
+  const MpReviews(
+      {required this.reviews, required this.average, required this.count});
 
   factory MpReviews.fromJson(Map<String, dynamic> json) {
     final list = ((json['reviews'] as List?) ?? const [])
@@ -601,7 +653,8 @@ class MpNotifications {
 
   const MpNotifications({required this.items, required this.unread});
 
-  factory MpNotifications.fromJson(Map<String, dynamic> json) => MpNotifications(
+  factory MpNotifications.fromJson(Map<String, dynamic> json) =>
+      MpNotifications(
         items: ((json['items'] as List?) ?? const [])
             .map((e) => MpNotification.fromJson(e as Map<String, dynamic>))
             .toList(growable: false),
@@ -651,5 +704,7 @@ final marketplaceRepositoryProvider = Provider<MarketplaceRepository>(
 /// Aktiver Access-Token (aus der Auth-Sitzung) für Marketplace-Requests.
 final marketplaceTokenProvider = Provider<String?>((ref) {
   final auth = ref.watch(authControllerProvider);
-  return auth.isAuthenticated ? ref.read(authControllerProvider.notifier).accessToken : null;
+  return auth.isAuthenticated
+      ? ref.read(authControllerProvider.notifier).accessToken
+      : null;
 });

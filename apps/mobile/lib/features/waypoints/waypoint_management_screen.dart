@@ -25,7 +25,7 @@ class WaypointManagementScreen extends ConsumerWidget {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
-        title: const Text('Touren', style: AppTypography.title),
+        title: const Text('Routenplanung', style: AppTypography.title),
         actions: [
           // M3-Feature „Route am Computer planen“ (QR + Plan abrufen).
           IconButton(
@@ -42,12 +42,6 @@ class WaypointManagementScreen extends ConsumerWidget {
                     ComputerPlanningSheet(repository: PairingRepository()),
               );
             },
-          ),
-          IconButton(
-            tooltip: 'Tour-Tagebuch',
-            icon: const Icon(Icons.auto_stories_outlined,
-                color: AppColors.textSecondaryDark),
-            onPressed: () => Navigator.of(context).pushNamed('/tour-diary'),
           ),
           IconButton(
             tooltip: 'GPX importieren',
@@ -181,25 +175,6 @@ class WaypointManagementScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  SizedBox(
-                    width: double.infinity,
-                    height: AppSpacing.touchTargetPlanning,
-                    child: OutlinedButton.icon(
-                      // Tour-Tagebuch: vergangene Fahrten, Statistiken,
-                      // GPX-Export/Import (Calimoto/Kurviger-kompatibel).
-                      onPressed: () =>
-                          Navigator.of(context).pushNamed('/tour-diary'),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: AppColors.borderHairlineDark),
-                        foregroundColor: AppColors.textPrimaryDark,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: const Icon(Icons.auto_stories_outlined),
-                      label: const Text('Tour-Tagebuch'),
-                    ),
-                  ),
                 ],
               ),
             ),

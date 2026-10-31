@@ -4,12 +4,8 @@ import '../../core/network/error_reporter.dart';
 import 'data/chat_realtime.dart';
 import 'data/chat_repository.dart';
 
-/// Session-Token des Chat-Benutzers. Im MVP setzt der Nutzer ihn einmalig
-/// in den Einstellungen (Supabase-JWT aus dem Login). Wenn die Auth-
-/// Feature-Gruppe (Login-Screens) angebunden wird, liefert dieser Provider
-/// das Token aus dem Session-Store - die Chat-Schicht ändert sich dann
-/// NICHT (Architekturregel Abschnitt 39: Chat nicht fest mit Screens
-/// oder Auth-Implementierung verkoppelt).
+/// Session-Token des Chat-Benutzers. Wird aus der zentralen MotoRoute-Auth
+/// gespiegelt, damit Chats und Sendefeld unmittelbar nach dem Login aktiv sind.
 ///
 /// null = nicht angemeldet: die Chat-UI zeigt einen sauberen
 /// „Zum Chatten anmelden“-Zustand statt zu crashen.
@@ -43,8 +39,7 @@ class ChatOverviewState {
     this.typingInId,
   });
 
-  int get totalUnread =>
-      conversations.fold(0, (sum, c) => sum + c.unreadCount);
+  int get totalUnread => conversations.fold(0, (sum, c) => sum + c.unreadCount);
 
   ChatOverviewState copyWith({
     bool? isLoading,
@@ -72,6 +67,8 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
   StreamSubscription<({String userId, bool isTyping})>? _typingSub;
   Timer? _pollTimer;
   String? _loadedWithToken;
+  int _loadGeneration = 0;
+  int _refreshGeneration = 0;
 
   ChatOverviewController(this._repo, this._realtime, this._ref)
       : super(const ChatOverviewState()) {
@@ -83,8 +80,9 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
     // Tokenwechsel (Login, Restore, Silent-Refresh nach ~50 min): WS
     // sofort mit dem FRISCHEN Token neu verbinden und Listen neu laden -
     // sonst läuft der Chat nach Token-Rotation ins Leere.
-    _ref.listen<String?>(chatSessionTokenProvider, (_, token) {
-      if (token != null) load();
+    _ref.listen<String?>(chatSessionTokenProvider, (previous, next) {
+      if (previous == next) return;
+      load();
     });
   }
 
@@ -92,9 +90,16 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
   Future<void> load() async {
     final token = _ref.read(chatSessionTokenProvider);
     if (token == null) {
+      _loadGeneration++;
+      _loadedWithToken = null;
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      _debounce?.cancel();
+      _realtime.disconnect();
       state = const ChatOverviewState();
       return;
     }
+    final generation = ++_loadGeneration;
     if (_loadedWithToken != token) {
       _loadedWithToken = token;
       _realtime.connect(token);
@@ -107,7 +112,7 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
       });
     }
     state = state.copyWith(isLoading: true, error: null);
-    await _refresh();
+    await _refresh(generation: generation);
   }
 
   void _wireStreams() {
@@ -133,15 +138,26 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
   Timer? _debounce;
   void _refreshSoon() {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () => _refresh(silent: true));
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (_ref.read(chatSessionTokenProvider) != null) {
+        _refresh(silent: true);
+      }
+    });
   }
 
-  Future<void> _refresh({bool silent = false}) async {
+  Future<void> _refresh({bool silent = false, int? generation}) async {
     final token = _ref.read(chatSessionTokenProvider);
     if (token == null) return;
+    final requestGeneration = generation ?? _loadGeneration;
+    final refreshGeneration = ++_refreshGeneration;
     try {
       final conversations = await _repo.conversations(token);
-      if (!mounted) return;
+      if (!mounted ||
+          refreshGeneration != _refreshGeneration ||
+          requestGeneration != _loadGeneration ||
+          token != _ref.read(chatSessionTokenProvider)) {
+        return;
+      }
       state = state.copyWith(
         conversations: conversations,
         isLoading: false,
@@ -149,7 +165,12 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
       );
     } catch (e) {
       ErrorReporter.instance.report('chat.load', e);
-      if (!mounted) return;
+      if (!mounted ||
+          refreshGeneration != _refreshGeneration ||
+          requestGeneration != _loadGeneration ||
+          token != _ref.read(chatSessionTokenProvider)) {
+        return;
+      }
       // Bereits geladene Nachrichten bleiben sichtbar (Abschnitt 37);
       // der Fehler erscheint nur, wenn gar keine Daten da sind.
       state = state.copyWith(
@@ -183,7 +204,7 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
     );
   }
 
-  Future<void> refresh() => _refresh(silent: true);
+  Future<void> refresh() => _refresh(silent: true, generation: _loadGeneration);
 
   @override
   void dispose() {
