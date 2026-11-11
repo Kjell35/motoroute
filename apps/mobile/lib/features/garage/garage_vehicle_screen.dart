@@ -91,14 +91,14 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
   Widget build(BuildContext context) {
     final i18n = ref.watch(i18nProvider);
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         elevation: 0,
         title: Text(_vehicle?.title ?? i18n.gVehicle, style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.textSecondaryDark),
+            icon: Icon(Icons.refresh, color: context.palette.textSecondary),
             onPressed: _reload,
           ),
         ],
@@ -108,9 +108,9 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
           : _error != null
               ? ListView(padding: const EdgeInsets.all(24), children: [
                   const SizedBox(height: 60),
-                  const Icon(Icons.cloud_off, color: AppColors.textMutedDark, size: 44),
+                  Icon(Icons.cloud_off, color: context.palette.textMuted, size: 44),
                   const SizedBox(height: 12),
-                  Center(child: Text(_error!, style: const TextStyle(color: AppColors.textSecondaryDark))),
+                  Center(child: Text(_error!, style: TextStyle(color: context.palette.textSecondary))),
                 ])
               : RefreshIndicator(
                   onRefresh: _reload,
@@ -143,7 +143,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
   Widget _buildStatusCard(I18n i18n) {
     final v = _vehicle!;
     return Card(
-      color: AppColors.bgSurfaceDark,
+      color: context.palette.bgSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -154,9 +154,9 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(v.title,
-                    style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 18, fontWeight: FontWeight.w700)),
+                    style: TextStyle(color: context.palette.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
                 if (v.subtitle.isNotEmpty)
-                  Text(v.subtitle, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+                  Text(v.subtitle, style: TextStyle(color: context.palette.textSecondary, fontSize: 13)),
               ]),
             ),
           ]),
@@ -164,10 +164,10 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
           Row(children: [
             Expanded(
               child: Text('${_fmtKm(v.odometerKm)} km',
-                  style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 22, fontWeight: FontWeight.w700)),
+                  style: TextStyle(color: context.palette.textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
             ),
             TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: AppColors.accentPrimaryDark),
+              style: TextButton.styleFrom(foregroundColor: context.palette.accentPrimary),
               onPressed: _editOdometer,
               icon: const Icon(Icons.edit, size: 18),
               label: Text(i18n.gUpdateKm),
@@ -184,17 +184,17 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     final newKm = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
-        title: Text(i18n.gUpdateKm, style: const TextStyle(color: AppColors.textPrimaryDark)),
+        backgroundColor: context.palette.bgSurface,
+        title: Text(i18n.gUpdateKm, style: TextStyle(color: context.palette.textPrimary)),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: i18n.gOdometer, filled: true, fillColor: AppColors.bgSurfaceRaisedDark),
+          decoration: InputDecoration(labelText: i18n.gOdometer, filled: true, fillColor: context.palette.bgSurfaceRaised),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(i18n.gCancel)),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
             onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text.trim())),
             child: Text(i18n.gSave),
           ),
@@ -212,15 +212,15 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
   Widget _buildReminders(I18n i18n) {
     final rems = _reminders ?? const <GarageReminder>[];
     if (rems.isEmpty) {
-      return _section(i18n.gReminders, [Text(i18n.gNothingDue, style: const TextStyle(color: AppColors.textSecondaryDark))]);
+      return _section(i18n.gReminders, [Text(i18n.gNothingDue, style: TextStyle(color: context.palette.textSecondary))]);
     }
     return _section(
       i18n.gReminders,
       rems.map((r) {
         final color = switch (r.level) {
-          GarageReminderStatus.overdue => AppColors.statusDanger,
-          GarageReminderStatus.dueSoon => AppColors.statusWarning,
-          GarageReminderStatus.ok => AppColors.statusSuccess,
+          GarageReminderStatus.overdue => context.palette.statusDanger,
+          GarageReminderStatus.dueSoon => context.palette.statusWarning,
+          GarageReminderStatus.ok => context.palette.statusSuccess,
         };
         final rest = <String>[
           if (r.kmRemaining != null) '${_fmtKm(r.kmRemaining!)} km',
@@ -229,7 +229,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
         return Row(children: [
           Icon(Icons.circle, size: 11, color: color),
           const SizedBox(width: 10),
-          Expanded(child: Text(r.labelDe, style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 14))),
+          Expanded(child: Text(r.labelDe, style: TextStyle(color: context.palette.textPrimary, fontSize: 14))),
           Text(
             r.level == GarageReminderStatus.overdue
                 ? i18n.gStatusOverdue
@@ -257,10 +257,10 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
         children: [
           SizedBox(
             width: 130,
-            child: Text(label, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+            child: Text(label, style: TextStyle(color: context.palette.textSecondary, fontSize: 13)),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13, fontWeight: FontWeight.w500)),
+            child: Text(value, style: TextStyle(color: context.palette.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
           ),
         ],
       ));
@@ -279,7 +279,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     }
 
     return _section(i18n.gSpecs, entries.isEmpty
-        ? [Text(i18n.gNoSpecs, style: const TextStyle(color: AppColors.textSecondaryDark))]
+        ? [Text(i18n.gNoSpecs, style: TextStyle(color: context.palette.textSecondary))]
         : entries);
   }
 
@@ -290,26 +290,26 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     return _sectionWithAction(
       i18n.gMaintenance,
       IconButton(
-        icon: const Icon(Icons.add_circle_outline, color: AppColors.accentPrimaryDark),
+        icon: Icon(Icons.add_circle_outline, color: context.palette.accentPrimary),
         onPressed: _addMaintenance,
       ),
       recs.isEmpty
-          ? [Text(i18n.gNoMaintenance, style: const TextStyle(color: AppColors.textSecondaryDark))]
+          ? [Text(i18n.gNoMaintenance, style: TextStyle(color: context.palette.textSecondary))]
           : recs.map((m) {
               final date = m.performedAt;
               final dateStr = date != null ? '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}' : '';
               return Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(m.labelDe, style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(m.labelDe, style: TextStyle(color: context.palette.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
                     Text(
                       [dateStr, '${_fmtKm(m.odometerKm)} km', if (m.shopName != null) m.shopName!].join(' · '),
-                      style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12),
+                      style: TextStyle(color: context.palette.textSecondary, fontSize: 12),
                     ),
                   ]),
                 ),
                 if (m.costCents != null)
-                  Text(_fmtEuro(m.costCents!), style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(_fmtEuro(m.costCents!), style: TextStyle(color: context.palette.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
               ]);
             }).toList(),
     );
@@ -326,14 +326,14 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) => AlertDialog(
-          backgroundColor: AppColors.bgSurfaceDark,
-          title: Text(i18n.gAddMaintenance, style: const TextStyle(color: AppColors.textPrimaryDark)),
+          backgroundColor: context.palette.bgSurface,
+          title: Text(i18n.gAddMaintenance, style: TextStyle(color: context.palette.textPrimary)),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<String>(
               initialValue: type,
-              items: types.map((t) => DropdownMenuItem(value: t, child: Text(maintenanceTypeLabelDe(t), style: const TextStyle(color: AppColors.textPrimaryDark)))).toList(),
+              items: types.map((t) => DropdownMenuItem(value: t, child: Text(maintenanceTypeLabelDe(t), style: TextStyle(color: context.palette.textPrimary)))).toList(),
               onChanged: (v) => setDialog(() => type = v ?? type),
-              dropdownColor: AppColors.bgSurfaceRaisedDark,
+              dropdownColor: context.palette.bgSurfaceRaised,
               decoration: _deco(),
             ),
             const SizedBox(height: 10),
@@ -346,7 +346,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(i18n.gCancel)),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+              style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(i18n.gSave),
             ),
@@ -377,7 +377,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     return _sectionWithAction(
       i18n.gFuel,
       IconButton(
-        icon: const Icon(Icons.add_circle_outline, color: AppColors.accentPrimaryDark),
+        icon: Icon(Icons.add_circle_outline, color: context.palette.accentPrimary),
         onPressed: _addFuel,
       ),
       [
@@ -386,23 +386,23 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(children: [
               Text('⛽ ${stats.averageConsumptionPer100km!.toStringAsFixed(1)} l/100 km',
-                  style: const TextStyle(color: AppColors.accentPrimaryDark, fontWeight: FontWeight.w700, fontSize: 15)),
+                  style: TextStyle(color: context.palette.accentPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
               const SizedBox(width: 12),
               Text('· ${_fmtEuro(stats.totalCostCents)} ${i18n.gTotal}',
-                  style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+                  style: TextStyle(color: context.palette.textSecondary, fontSize: 13)),
             ]),
           ),
         if (entries.isEmpty)
-          Text(i18n.gNoFuel, style: const TextStyle(color: AppColors.textSecondaryDark))
+          Text(i18n.gNoFuel, style: TextStyle(color: context.palette.textSecondary))
         else
           ...entries.take(5).map((f) {
             final date = f.date;
             final dateStr = date != null ? '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.' : '';
             return Row(children: [
-              Text(dateStr, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+              Text(dateStr, style: TextStyle(color: context.palette.textSecondary, fontSize: 13)),
               const SizedBox(width: 10),
-              Expanded(child: Text('${_fmtKm(f.odometerKm)} km · ${f.liters.toStringAsFixed(1)} l', style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13))),
-              Text(_fmtEuro(f.priceCentsTotal), style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13, fontWeight: FontWeight.w600)),
+              Expanded(child: Text('${_fmtKm(f.odometerKm)} km · ${f.liters.toStringAsFixed(1)} l', style: TextStyle(color: context.palette.textPrimary, fontSize: 13))),
+              Text(_fmtEuro(f.priceCentsTotal), style: TextStyle(color: context.palette.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
             ]);
           }),
       ],
@@ -419,8 +419,8 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
-        title: Text(i18n.gAddFuel, style: const TextStyle(color: AppColors.textPrimaryDark)),
+        backgroundColor: context.palette.bgSurface,
+        title: Text(i18n.gAddFuel, style: TextStyle(color: context.palette.textPrimary)),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: dateCtrl, decoration: _deco(label: i18n.gDate)),
           const SizedBox(height: 10),
@@ -435,7 +435,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(i18n.gCancel)),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentPrimaryDark),
+            style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(i18n.gSave),
           ),
@@ -467,13 +467,13 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     return _section(
       i18n.gTires,
       tires.isEmpty
-          ? [Text(i18n.gNoTires, style: const TextStyle(color: AppColors.textSecondaryDark))]
+          ? [Text(i18n.gNoTires, style: TextStyle(color: context.palette.textSecondary))]
           : tires.map((t) => Row(children: [
                 Text(t.position == 'front' ? '⬆️' : '⬇️', style: const TextStyle(fontSize: 15)),
                 const SizedBox(width: 8),
-                Expanded(child: Text('${t.brand} ${t.modelName} · ${t.size}', style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13))),
+                Expanded(child: Text('${t.brand} ${t.modelName} · ${t.size}', style: TextStyle(color: context.palette.textPrimary, fontSize: 13))),
                 if (t.treadDepthMm != null)
-                  Text('${t.treadDepthMm!.toStringAsFixed(1)} mm', style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+                  Text('${t.treadDepthMm!.toStringAsFixed(1)} mm', style: TextStyle(color: context.palette.textSecondary, fontSize: 13)),
               ])).toList(),
     );
   }
@@ -485,12 +485,12 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     return _section(
       i18n.gDocuments,
       docs.isEmpty
-          ? [Text(i18n.gNoDocuments, style: const TextStyle(color: AppColors.textSecondaryDark))]
+          ? [Text(i18n.gNoDocuments, style: TextStyle(color: context.palette.textSecondary))]
           : docs.map((d) => Row(children: [
-                const Icon(Icons.description_outlined, color: AppColors.textSecondaryDark, size: 18),
+                Icon(Icons.description_outlined, color: context.palette.textSecondary, size: 18),
                 const SizedBox(width: 8),
-                Expanded(child: Text(d.title, style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13))),
-                Text(_docTypeLabel(d.type), style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12)),
+                Expanded(child: Text(d.title, style: TextStyle(color: context.palette.textPrimary, fontSize: 13))),
+                Text(_docTypeLabel(d.type), style: TextStyle(color: context.palette.textSecondary, fontSize: 12)),
               ])).toList(),
     );
   }
@@ -519,23 +519,23 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
 
   Widget _costTile(String label, String value) => Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: AppColors.bgSurfaceRaisedDark, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(color: context.palette.bgSurfaceRaised, borderRadius: BorderRadius.circular(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12)),
+          Text(label, style: TextStyle(color: context.palette.textSecondary, fontSize: 12)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 17, fontWeight: FontWeight.w700)),
+          Text(value, style: TextStyle(color: context.palette.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
         ]),
       );
 
   // -- Bausteine --------------------------------------------------------------------
 
   Widget _section(String title, List<Widget> children) => Card(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+            Text(title, style: TextStyle(color: context.palette.textSecondary, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
             const SizedBox(height: 10),
             ...children,
           ]),
@@ -543,13 +543,13 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
       );
 
   Widget _sectionWithAction(String title, Widget action, List<Widget> children) => Card(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Expanded(child: Text(title, style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.3))),
+              Expanded(child: Text(title, style: TextStyle(color: context.palette.textSecondary, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.3))),
               action,
             ]),
             const SizedBox(height: 6),
@@ -560,9 +560,9 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
 
   InputDecoration _deco({String? label}) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textSecondaryDark),
+        labelStyle: TextStyle(color: context.palette.textSecondary),
         filled: true,
-        fillColor: AppColors.bgSurfaceRaisedDark,
+        fillColor: context.palette.bgSurfaceRaised,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       );
 

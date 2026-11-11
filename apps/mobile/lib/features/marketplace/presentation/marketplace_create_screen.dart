@@ -228,8 +228,8 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
 
   void _showSnack(String message, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: error ? AppColors.statusDanger : AppColors.bgSurfaceRaisedDark,
-      content: Text(message, style: const TextStyle(color: AppColors.textPrimaryDark)),
+      backgroundColor: error ? context.palette.statusDanger : context.palette.bgSurfaceRaised,
+      content: Text(message, style: TextStyle(color: context.palette.textPrimary)),
     ));
   }
 
@@ -270,10 +270,10 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                             label: Text('${c.emoji} ${_categoryLabel(c, i18n)}',
                                 textAlign: TextAlign.center),
                             selected: _category == c,
-                            selectedColor: AppColors.accentPrimaryDark,
+                            selectedColor: context.palette.accentPrimary,
                             labelStyle: TextStyle(
                               fontSize: 12,
-                              color: _category == c ? AppColors.textPrimaryDark : scheme.onSurface,
+                              color: _category == c ? context.palette.textPrimary : scheme.onSurface,
                             ),
                             backgroundColor: scheme.surfaceContainerHighest,
                             onSelected: (sel) => setState(() {
@@ -301,7 +301,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
               _hasListingPhoto ? 'Mindestens ein aussagekräftiges Artikelbild erforderlich.' : 'Pflichtfeld: mindestens ein Foto des angebotenen Artikels.',
               style: TextStyle(
                 fontSize: 12,
-                color: _hasListingPhoto ? scheme.onSurfaceVariant : AppColors.statusWarning,
+                color: _hasListingPhoto ? scheme.onSurfaceVariant : context.palette.statusWarning,
               ),
             ),
             const SizedBox(height: 8),
@@ -347,10 +347,10 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                             right: 8,
                             child: GestureDetector(
                               onTap: () => setState(() => _photos.remove(p)),
-                              child: const CircleAvatar(
+                              child: CircleAvatar(
                                 radius: 11,
-                                backgroundColor: AppColors.statusDanger,
-                                child: Icon(Icons.close, size: 14, color: Colors.white),
+                                backgroundColor: context.palette.statusDanger,
+                                child: const Icon(Icons.close, size: 14, color: Colors.white),
                               ),
                             ),
                           ),
@@ -435,7 +435,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                   .map((c) => ChoiceChip(
                         label: Text('${c.emoji} ${c.label}'),
                         selected: _condition == c,
-                        selectedColor: AppColors.accentPrimaryDark,
+                        selectedColor: context.palette.accentPrimary,
                         onSelected: (sel) => setState(() => _condition = c),
                       ))
                   .toList(),
@@ -485,14 +485,14 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
             FilledButton(
               onPressed: _submitting ? null : _submit,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentPrimaryDark,
-                foregroundColor: AppColors.textPrimaryDark,
+                backgroundColor: context.palette.accentPrimary,
+                foregroundColor: context.palette.textPrimary,
                 minimumSize: const Size.fromHeight(52),
               ),
               child: _submitting
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22, height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimaryDark))
+                      child: CircularProgressIndicator(strokeWidth: 2, color: context.palette.textPrimary))
                   : Text(i18n.mpSubmitForReview, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             ),
           ],
@@ -619,8 +619,8 @@ class _SubcatGroupTileState extends State<_SubcatGroupTile> {
                 return ChoiceChip(
                   label: Text(s.labelDe, style: const TextStyle(fontSize: 12)),
                   selected: selected,
-                  selectedColor: AppColors.accentPrimaryDark,
-                  labelStyle: TextStyle(color: selected ? AppColors.textPrimaryDark : scheme.onSurface),
+                  selectedColor: context.palette.accentPrimary,
+                  labelStyle: TextStyle(color: selected ? context.palette.textPrimary : scheme.onSurface),
                   backgroundColor: scheme.surfaceContainerHighest,
                   side: suggested
                       ? BorderSide(color: scheme.primary, width: 1.4)
@@ -671,10 +671,10 @@ class _ReviewResultView extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (icon, iconColor, title, color) = switch (listing.reviewStatus) {
-      MpReviewStatus.approved => (Icons.check_circle_outline, null, 'Veröffentlicht!', AppColors.statusSuccess),
-      MpReviewStatus.rejected => (Icons.block_outlined, null, 'Nicht veröffentlicht', AppColors.statusDanger),
-      MpReviewStatus.manualReview => (Icons.pending_outlined, null, 'Manuelle Prüfung', AppColors.accentPrimaryDark),
-      MpReviewStatus.pending => (Icons.hourglass_top_outlined, null, 'Prüfung läuft', AppColors.accentPrimaryDark),
+      MpReviewStatus.approved => (Icons.check_circle_outline, null, 'Veröffentlicht!', context.palette.statusSuccess),
+      MpReviewStatus.rejected => (Icons.block_outlined, null, 'Nicht veröffentlicht', context.palette.statusDanger),
+      MpReviewStatus.manualReview => (Icons.pending_outlined, null, 'Manuelle Prüfung', context.palette.accentPrimary),
+      MpReviewStatus.pending => (Icons.hourglass_top_outlined, null, 'Prüfung läuft', context.palette.accentPrimary),
     };
 
     return Scaffold(
@@ -706,8 +706,8 @@ class _ReviewResultView extends StatelessWidget {
               FilledButton(
                 onPressed: onClose,
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentPrimaryDark,
-                  foregroundColor: AppColors.textPrimaryDark,
+                  backgroundColor: context.palette.accentPrimary,
+                  foregroundColor: context.palette.textPrimary,
                   minimumSize: const Size.fromHeight(48),
                 ),
                 child: const Text('OK'),

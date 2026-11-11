@@ -55,7 +55,7 @@ class _MarketplaceMyListingsScreenState extends ConsumerState<MarketplaceMyListi
       if (!mounted) return;
       // 400 NOT_APPROVED = nicht freigegeben - Nutzer klar informieren.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: AppColors.statusDanger,
+        backgroundColor: context.palette.statusDanger,
         content: Text('$e', style: const TextStyle(color: Colors.white)),
       ));
     }
@@ -70,7 +70,7 @@ class _MarketplaceMyListingsScreenState extends ConsumerState<MarketplaceMyListi
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
+            style: FilledButton.styleFrom(backgroundColor: context.palette.statusDanger),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Löschen'),
           ),
@@ -86,7 +86,7 @@ class _MarketplaceMyListingsScreenState extends ConsumerState<MarketplaceMyListi
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: AppColors.statusDanger,
+        backgroundColor: context.palette.statusDanger,
         content: Text('$e', style: const TextStyle(color: Colors.white)),
       ));
     }
@@ -102,7 +102,7 @@ class _MarketplaceMyListingsScreenState extends ConsumerState<MarketplaceMyListi
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.statusDanger)))
+              ? Center(child: Text(_error!, style: TextStyle(color: context.palette.statusDanger)))
               : _listings.isEmpty
                   ? const Center(child: Text('Noch keine Angebote'))
                   : RefreshIndicator(
@@ -138,17 +138,32 @@ class _MyListingTile extends StatelessWidget {
     required this.onStatus,
   });
 
-  ({String label, Color color}) get _reviewBadge => switch (listing.reviewStatus) {
-        MpReviewStatus.approved => (label: '✅ Freigegeben', color: AppColors.statusSuccess),
-        MpReviewStatus.rejected => (label: '🚫 Abgelehnt', color: AppColors.statusDanger),
-        MpReviewStatus.manualReview => (label: '🕵️ Manuelle Prüfung', color: AppColors.accentPrimaryDark),
-        MpReviewStatus.pending => (label: '⏳ In Prüfung', color: AppColors.accentPrimaryDark),
+  /// Status-Abzeichen in den Farben des aktiven Schemas - als Methode,
+  /// weil ein Getter keinen context hat.
+  ({String label, Color color}) _reviewBadge(AppPalette palette) =>
+      switch (listing.reviewStatus) {
+        MpReviewStatus.approved => (
+            label: '✅ Freigegeben',
+            color: palette.statusSuccess
+          ),
+        MpReviewStatus.rejected => (
+            label: '🚫 Abgelehnt',
+            color: palette.statusDanger
+          ),
+        MpReviewStatus.manualReview => (
+            label: '🕵️ Manuelle Prüfung',
+            color: palette.accentPrimary
+          ),
+        MpReviewStatus.pending => (
+            label: '⏳ In Prüfung',
+            color: palette.accentPrimary
+          ),
       };
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final badge = _reviewBadge;
+    final badge = _reviewBadge(context.palette);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -164,7 +179,7 @@ class _MyListingTile extends StatelessWidget {
                 child: Text(listing.title, style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
               Text(listing.priceLabel,
-                  style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark)),
+                  style: TextStyle(fontWeight: FontWeight.w800, color: context.palette.accentPrimary)),
             ]),
             const SizedBox(height: 4),
             Row(children: [
@@ -183,7 +198,7 @@ class _MyListingTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 listing.reviewReason!,
-                style: const TextStyle(fontSize: 12, color: AppColors.statusDanger),
+                style: TextStyle(fontSize: 12, color: context.palette.statusDanger),
               ),
             ],
             const SizedBox(height: 10),

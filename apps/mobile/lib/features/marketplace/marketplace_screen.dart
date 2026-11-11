@@ -262,7 +262,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             icon: Badge(
               isLabelVisible: ref.watch(unreadCountProvider) > 0,
               label: Text('${ref.watch(unreadCountProvider)}'),
-              backgroundColor: AppColors.statusDanger,
+              backgroundColor: context.palette.statusDanger,
               child: const Icon(Icons.notifications_outlined),
             ),
             onPressed: () async {
@@ -296,8 +296,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.accentPrimaryDark,
-        foregroundColor: AppColors.textPrimaryDark,
+        backgroundColor: context.palette.accentPrimary,
+        foregroundColor: context.palette.textPrimary,
         icon: const Icon(Icons.add),
         label: Text(i18n.mpCreateListing),
         onPressed: () async {
@@ -408,10 +408,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                           label: Text(c.emoji, textAlign: TextAlign.center),
                           selected: selected,
                           tooltip: c.label,
-                          selectedColor: AppColors.accentPrimaryDark,
+                          selectedColor: context.palette.accentPrimary,
                           labelStyle: TextStyle(
                             color: selected
-                                ? AppColors.textPrimaryDark
+                                ? context.palette.textPrimary
                                 : scheme.onSurface,
                           ),
                           backgroundColor: scheme.surfaceContainerHighest,
@@ -532,7 +532,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Text(_error!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.statusDanger)),
+                        style: TextStyle(color: context.palette.statusDanger)),
                   ),
                 ),
               )
@@ -623,7 +623,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                       return ChoiceChip(
                         label: Text('${c.emoji} ${c.label}'),
                         selected: condition == c.apiValue,
-                        selectedColor: AppColors.accentPrimaryDark,
+                        selectedColor: context.palette.accentPrimary,
                         onSelected: (sel) => setSheetState(
                             () => condition = sel ? c.apiValue : null),
                       );
@@ -758,10 +758,10 @@ class _ListingCard extends StatelessWidget {
                       children: [
                         Text(
                           listing.priceLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
-                            color: AppColors.accentPrimaryDark,
+                            color: context.palette.accentPrimary,
                           ),
                         ),
                         const SizedBox(width: 8),

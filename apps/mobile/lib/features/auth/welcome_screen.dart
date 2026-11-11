@@ -370,7 +370,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                         child: Text(
                           i18n.tr('auth.browseWithoutAccount'),
                           style:
-                              const TextStyle(color: AppColors.textMutedDark),
+                              const TextStyle(color: AppColors.textSecondaryDark),
                         ),
                       ),
                     ],

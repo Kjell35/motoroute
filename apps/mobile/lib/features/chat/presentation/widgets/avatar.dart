@@ -16,13 +16,13 @@ class UserAvatar extends StatelessWidget {
     final initial = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
     return CircleAvatar(
       radius: size,
-      backgroundColor: AppColors.bgSurfaceRaisedDark,
+      backgroundColor: context.palette.bgSurfaceRaised,
       foregroundImage: (avatarUrl != null && avatarUrl!.isNotEmpty)
           ? NetworkImage(avatarUrl!)
           : null,
       child: Text(
         initial,
-        style: const TextStyle(color: AppColors.accentPrimaryDark, fontWeight: FontWeight.w700),
+        style: TextStyle(color: context.palette.accentPrimary, fontWeight: FontWeight.w700),
       ),
     );
   }

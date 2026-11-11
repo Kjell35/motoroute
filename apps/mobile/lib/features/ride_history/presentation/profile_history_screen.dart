@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/i18n/i18n.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/auth_providers.dart';
@@ -66,9 +67,12 @@ class _ProfileHistoryScreenState extends ConsumerState<ProfileHistoryScreen> {
   Widget build(BuildContext context) {
     final i18n = ref.watch(i18nProvider);
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        // Transparente AppBar: ohne expliziten Stil waehlt Flutter helle
+        // Symbole, die im hellen Schema unsichtbar waeren.
+        systemOverlayStyle: AppTheme.overlayFor(context),
         title: Text(i18n.tr('rideHistory.title'), style: AppTypography.title),
       ),
       body: _buildBody(context, i18n),
@@ -77,7 +81,7 @@ class _ProfileHistoryScreenState extends ConsumerState<ProfileHistoryScreen> {
 
   Widget _buildBody(BuildContext context, I18n i18n) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark));
+      return Center(child: CircularProgressIndicator(color: context.palette.accentPrimary));
     }
     if (_error != null) {
       return Center(
@@ -99,7 +103,7 @@ class _ProfileHistoryScreenState extends ConsumerState<ProfileHistoryScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.lock_outline, size: 48, color: AppColors.textSecondaryDark),
+              Icon(Icons.lock_outline, size: 48, color: context.palette.textSecondary),
               const SizedBox(height: 12),
               Text(i18n.tr('rideHistory.private'), style: AppTypography.title, textAlign: TextAlign.center),
               const SizedBox(height: 8),
@@ -169,7 +173,7 @@ class _StatHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -212,7 +216,7 @@ class _Stat extends StatelessWidget {
       children: [
         Text(value, style: AppTypography.title),
         const SizedBox(height: 2),
-        Text(label, style: AppTypography.caption),
+        Text(label, style: AppTypography.captionOf(context)),
       ],
     );
   }
@@ -231,13 +235,18 @@ class _HistoryMap extends StatelessWidget {
     return Container(
       height: 220,
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: CustomPaint(
-          painter: _HistoryMapPainter(rides: rides, places: places),
+          painter: _HistoryMapPainter(
+            rides: rides,
+            places: places,
+            accentPrimary: context.palette.accentPrimary,
+            statusWarning: context.palette.statusWarning,
+          ),
           child: const SizedBox.expand(),
         ),
       ),
@@ -248,7 +257,17 @@ class _HistoryMap extends StatelessWidget {
 class _HistoryMapPainter extends CustomPainter {
   final List<PublicRide> rides;
   final List<PublicPlace> places;
-  _HistoryMapPainter({required this.rides, required this.places});
+
+  /// Farben des aktiven Schemas: ein [CustomPainter] hat keinen BuildContext.
+  final Color accentPrimary;
+  final Color statusWarning;
+
+  _HistoryMapPainter({
+    required this.rides,
+    required this.places,
+    required this.accentPrimary,
+    required this.statusWarning,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -283,7 +302,7 @@ class _HistoryMapPainter extends CustomPainter {
     for (final ride in rides) {
       if (ride.track.length < 2) continue;
       final paint = Paint()
-        ..color = AppColors.accentPrimaryDark
+        ..color = accentPrimary
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
         ..strokeCap = StrokeCap.round;
@@ -299,14 +318,17 @@ class _HistoryMapPainter extends CustomPainter {
       canvas.drawCircle(
         project(LatLngPoint(lat: place.lat, lng: place.lng)),
         5,
-        Paint()..color = AppColors.statusWarning,
+        Paint()..color = statusWarning,
       );
     }
   }
 
   @override
   bool shouldRepaint(covariant _HistoryMapPainter oldDelegate) =>
-      oldDelegate.rides != rides || oldDelegate.places != places;
+      oldDelegate.rides != rides ||
+      oldDelegate.places != places ||
+      oldDelegate.accentPrimary != accentPrimary ||
+      oldDelegate.statusWarning != statusWarning;
 }
 
 class _RideCard extends StatelessWidget {
@@ -323,7 +345,7 @@ class _RideCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -338,17 +360,17 @@ class _RideCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.bgBaseDark,
+                    color: context.palette.bgBase,
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: Text(ride.region!, style: AppTypography.caption),
+                  child: Text(ride.region!, style: AppTypography.captionOf(context)),
                 ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             '${two(d.day)}.${two(d.month)}.${d.year} · ${two(d.hour)}:${two(d.minute)}',
-            style: AppTypography.caption,
+            style: AppTypography.captionOf(context),
           ),
           const SizedBox(height: 10),
           if (ride.track.length >= 2)
@@ -357,7 +379,14 @@ class _RideCard extends StatelessWidget {
               child: SizedBox(
                 height: 110,
                 width: double.infinity,
-                child: CustomPaint(painter: _RideTrackPainter(ride: ride)),
+                child: CustomPaint(
+                  painter: _RideTrackPainter(
+                    ride: ride,
+                    accentPrimary: context.palette.accentPrimary,
+                    statusWarning: context.palette.statusWarning,
+                    statusDanger: context.palette.statusDanger,
+                  ),
+                ),
               ),
             ),
           const SizedBox(height: 10),
@@ -376,7 +405,7 @@ class _RideCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               '${ride.startLabel ?? '?'} → ${ride.endLabel ?? '?'}',
-              style: AppTypography.caption,
+              style: AppTypography.captionOf(context),
             ),
           ],
           if (ride.description != null && ride.description!.isNotEmpty) ...[
@@ -517,7 +546,18 @@ class _PhotoViewerState extends State<_PhotoViewer> {
 
 class _RideTrackPainter extends CustomPainter {
   final PublicRide ride;
-  _RideTrackPainter({required this.ride});
+
+  /// Farben des aktiven Schemas: ein [CustomPainter] hat keinen BuildContext.
+  final Color accentPrimary;
+  final Color statusWarning;
+  final Color statusDanger;
+
+  _RideTrackPainter({
+    required this.ride,
+    required this.accentPrimary,
+    required this.statusWarning,
+    required this.statusDanger,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -544,7 +584,7 @@ class _RideTrackPainter extends CustomPainter {
         );
 
     final paint = Paint()
-      ..color = AppColors.accentPrimaryDark
+      ..color = accentPrimary
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
@@ -558,15 +598,19 @@ class _RideTrackPainter extends CustomPainter {
     final start = ride.start;
     final end = ride.end;
     if (start != null) {
-      canvas.drawCircle(project(start), 5, Paint()..color = AppColors.statusWarning);
+      canvas.drawCircle(project(start), 5, Paint()..color = statusWarning);
     }
     if (end != null) {
-      canvas.drawCircle(project(end), 5, Paint()..color = AppColors.statusDanger);
+      canvas.drawCircle(project(end), 5, Paint()..color = statusDanger);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _RideTrackPainter oldDelegate) => oldDelegate.ride != ride;
+  bool shouldRepaint(covariant _RideTrackPainter oldDelegate) =>
+      oldDelegate.ride != ride ||
+      oldDelegate.accentPrimary != accentPrimary ||
+      oldDelegate.statusWarning != statusWarning ||
+      oldDelegate.statusDanger != statusDanger;
 }
 
 class _PlaceTile extends StatelessWidget {
@@ -585,11 +629,11 @@ class _PlaceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(_icon, color: AppColors.accentPrimaryDark),
+      leading: Icon(_icon, color: context.palette.accentPrimary),
       title: Text(place.label, style: AppTypography.body),
       subtitle: Text(
         place.visitCount == 1 ? '1 Besuch' : '${place.visitCount} Besuche',
-        style: AppTypography.caption,
+        style: AppTypography.captionOf(context),
       ),
     );
   }

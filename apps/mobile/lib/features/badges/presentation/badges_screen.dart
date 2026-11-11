@@ -183,11 +183,11 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceRaisedDark,
+        backgroundColor: context.palette.bgSurfaceRaised,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           i18n.tr('badges.unlockedTitle'),
-          style: AppTypography.title.copyWith(color: AppColors.textPrimaryDark),
+          style: AppTypography.title.copyWith(color: context.palette.textPrimary),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -205,12 +205,12 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                         Text(
                           b.title,
                           style: AppTypography.bodyStrong
-                              .copyWith(color: AppColors.textPrimaryDark),
+                              .copyWith(color: context.palette.textPrimary),
                         ),
                         Text(
                           i18n.tr('badges.metersAway', {'m': '${b.distanceMeters}'}),
                           style:
-                              AppTypography.caption.copyWith(color: AppColors.textSecondaryDark),
+                              AppTypography.caption.copyWith(color: context.palette.textSecondary),
                         ),
                       ],
                     ),
@@ -221,7 +221,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
             const SizedBox(height: 12),
             Text(
               i18n.tr('badges.unlockedCount', {'count': '${result.totalUnlocked}'}),
-              style: AppTypography.caption.copyWith(color: AppColors.textSecondaryDark),
+              style: AppTypography.caption.copyWith(color: context.palette.textSecondary),
             ),
           ],
         ),
@@ -256,7 +256,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setLocal) => AlertDialog(
-          backgroundColor: AppColors.bgSurfaceRaisedDark,
+          backgroundColor: context.palette.bgSurfaceRaised,
           title: Text(i18n.tr('badges.adminAdd'), style: AppTypography.title),
           content: SingleChildScrollView(
             child: Column(
@@ -292,7 +292,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                 if (formError != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(formError!, style: AppTypography.caption.copyWith(color: AppColors.statusDanger)),
+                    child: Text(formError!, style: AppTypography.caption.copyWith(color: context.palette.statusDanger)),
                   ),
               ],
             ),
@@ -344,7 +344,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppColors.bgSurfaceRaisedDark),
+      SnackBar(content: Text(msg), backgroundColor: context.palette.bgSurfaceRaised),
     );
   }
 
@@ -352,11 +352,12 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
   Widget build(BuildContext context) {
     final i18n = ref.watch(i18nProvider);
     final shelf = _shelf;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final surface = dark ? AppColors.bgSurfaceDark : AppColors.bgSurfaceLight;
-    final raised = dark ? AppColors.bgSurfaceRaisedDark : AppColors.bgSurfaceRaisedLight;
-    final textPrimary = dark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
-    final textSecondary = dark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    // Die Palette loest das aktive Schema bereits auf - die frueheren
+    // Helligkeits-Ternaries waren noetig, solange hier feste Tokens standen.
+    final surface = context.palette.bgSurface;
+    final raised = context.palette.bgSurfaceRaised;
+    final textPrimary = context.palette.textPrimary;
+    final textSecondary = context.palette.textSecondary;
 
     return Scaffold(
       backgroundColor: surface,
@@ -374,7 +375,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _checkingIn ? null : _checkin,
-        backgroundColor: AppColors.accentPrimaryDark,
+        backgroundColor: context.palette.accentPrimary,
         foregroundColor: Colors.white,
         icon: _checkingIn
             ? const SizedBox(
@@ -406,7 +407,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.emoji_events, size: 30, color: AppColors.accentPrimaryDark),
+                            Icon(Icons.emoji_events, size: 30, color: context.palette.accentPrimary),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -427,7 +428,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                                           : shelf.unlockedCount / shelf.totalCount,
                                       minHeight: 8,
                                       backgroundColor: textSecondary.withValues(alpha: 0.2),
-                                      valueColor: const AlwaysStoppedAnimation(AppColors.accentPrimaryDark),
+                                      valueColor: AlwaysStoppedAnimation(context.palette.accentPrimary),
                                     ),
                                   ),
                                 ],
@@ -448,7 +449,7 @@ class _BadgesScreenState extends ConsumerState<BadgesScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.explore_outlined, color: AppColors.accentPrimaryDark),
+                              Icon(Icons.explore_outlined, color: context.palette.accentPrimary),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
@@ -527,9 +528,9 @@ class _BadgeCard extends StatelessWidget {
     final unlocked = badge.unlocked;
     final color = switch (badge.category) {
       // Farbige Icons je Kategorie - nur wenn freigeschaltet.
-      BadgeCategory.pass => AppColors.statusSuccess,
-      BadgeCategory.meeting => AppColors.accentPrimaryDark,
-      BadgeCategory.sight => AppColors.statusWarning,
+      BadgeCategory.pass => context.palette.statusSuccess,
+      BadgeCategory.meeting => context.palette.accentPrimary,
+      BadgeCategory.sight => context.palette.statusWarning,
     };
     return Container(
       padding: const EdgeInsets.all(12),
@@ -604,7 +605,7 @@ class _ErrorCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.emoji_events_outlined, size: 44, color: AppColors.textSecondaryDark),
+            Icon(Icons.emoji_events_outlined, size: 44, color: context.palette.textSecondary),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center, style: AppTypography.body),
             const SizedBox(height: 12),

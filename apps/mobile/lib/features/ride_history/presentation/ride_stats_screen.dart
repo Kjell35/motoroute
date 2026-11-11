@@ -36,9 +36,9 @@ class _RideStatsScreenState extends ConsumerState<RideStatsScreen> {
     final tours = ref.watch(tourDiaryProvider).tours;
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: Text(i18n.tr('stats.title'), style: AppTypography.title),
       ),
       body: tours.isEmpty
@@ -48,7 +48,7 @@ class _RideStatsScreenState extends ConsumerState<RideStatsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.query_stats, size: 56, color: AppColors.textMutedDark),
+                    Icon(Icons.query_stats, size: 56, color: context.palette.textMuted),
                     const SizedBox(height: AppSpacing.md),
                     Text(i18n.tr('stats.empty'), style: AppTypography.body),
                   ],
@@ -141,14 +141,14 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: AppTypography.caption),
+          Text(label.toUpperCase(), style: AppTypography.captionOf(context)),
           const SizedBox(height: AppSpacing.xs),
           Text(value, style: AppTypography.title),
         ],
@@ -185,9 +185,9 @@ class _MonthlyBarChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Column(
         children: [
@@ -198,7 +198,7 @@ class _MonthlyBarChart extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: 36,
-                    child: Text(m.label, style: AppTypography.caption),
+                    child: Text(m.label, style: AppTypography.captionOf(context)),
                   ),
                   Expanded(
                     child: Stack(
@@ -214,8 +214,8 @@ class _MonthlyBarChart extends StatelessWidget {
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    AppColors.accentPrimaryDark.withValues(alpha: 0.55),
-                                    AppColors.accentPrimaryDark,
+                                    context.palette.accentPrimary.withValues(alpha: 0.55),
+                                    context.palette.accentPrimary,
                                   ],
                                 ),
                               ),

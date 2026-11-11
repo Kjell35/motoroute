@@ -60,7 +60,7 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
     final code = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
+        backgroundColor: context.palette.bgSurface,
         title: const Text('Einladungs-QR scannen'),
         content: SizedBox(
           width: 320,
@@ -134,9 +134,9 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
     final name = _preview?['name'] as String?;
     final memberCount = _preview?['memberCount'] as int? ?? 0;
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('Gruppe beitreten'),
       ),
       body: Padding(
@@ -147,16 +147,16 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
             TextField(
               controller: _codeController,
               textCapitalization: TextCapitalization.characters,
-              style: const TextStyle(
-                  color: AppColors.textPrimaryDark, fontSize: 18, letterSpacing: 2),
+              style: TextStyle(
+                  color: context.palette.textPrimary, fontSize: 18, letterSpacing: 2),
               decoration: InputDecoration(
                 hintText: 'MOTO-7K4P92',
-                hintStyle: const TextStyle(color: AppColors.textMutedDark),
+                hintStyle: TextStyle(color: context.palette.textSecondary),
                 filled: true,
-                fillColor: AppColors.bgSurfaceDark,
+                fillColor: context.palette.bgSurface,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairlineDark),
+                  borderSide: BorderSide(color: context.palette.borderHairline),
                 ),
               ),
               onSubmitted: (_) => _lookup(),
@@ -169,7 +169,7 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.bgSurfaceRaisedDark),
+              style: FilledButton.styleFrom(backgroundColor: context.palette.bgSurfaceRaised),
               onPressed: _checking ? null : _lookup,
               child: _checking
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -177,32 +177,32 @@ class _GroupJoinScreenState extends ConsumerState<GroupJoinScreen> {
             ),
             if (_error != null) ...[
               const SizedBox(height: AppSpacing.md),
-              Text(_error!, style: const TextStyle(color: AppColors.statusDanger)),
+              Text(_error!, style: TextStyle(color: context.palette.statusDanger)),
             ],
             if (_preview != null) ...[
               const SizedBox(height: AppSpacing.xl),
               Container(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: AppColors.bgSurfaceDark,
+                  color: context.palette.bgSurface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.borderHairlineDark),
+                  border: Border.all(color: context.palette.borderHairline),
                 ),
                 child: Column(
                   children: [
                     Text(name ?? '',
-                        style: const TextStyle(
-                            color: AppColors.textPrimaryDark,
+                        style: TextStyle(
+                            color: context.palette.textPrimary,
                             fontSize: 20,
                             fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
                     Text('$memberCount Mitglieder',
-                        style: const TextStyle(color: AppColors.textSecondaryDark)),
+                        style: TextStyle(color: context.palette.textSecondary)),
                     const SizedBox(height: AppSpacing.lg),
                     FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accentPrimaryDark,
-                        foregroundColor: AppColors.textPrimaryDark,
+                        backgroundColor: context.palette.accentPrimary,
+                        foregroundColor: context.palette.textPrimary,
                         minimumSize: const Size.fromHeight(48),
                       ),
                       onPressed: _join,

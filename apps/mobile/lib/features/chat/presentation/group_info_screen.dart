@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
@@ -57,7 +58,11 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
         try {
           final inv = await repo.activeInvitation(token, group['id'] as String);
           code = inv?['code'] as String?;
-        } catch (_) {}
+        } catch (e) {
+          // Ohne Einladungscode kann der Nutzer niemanden einladen - das ist
+          // kein kosmetischer Ausfall.
+          ErrorReporter.instance.report('chat.group', e);
+        }
       }
       setState(() {
         _group = group ?? _group;
@@ -80,23 +85,23 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
     final me = ref.watch(chatMeProvider).value;
     final isOwner = _group != null && (_group!['owner_id'] ?? '') == me?.id;
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('ℹ️ Gruppeninfo'),
         actions: [
           if (isOwner)
             IconButton(
-              icon: const Icon(Icons.settings, color: AppColors.textSecondaryDark),
+              icon: Icon(Icons.settings, color: context.palette.textSecondary),
               tooltip: 'Gruppe bearbeiten',
               onPressed: _editGroup,
             ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+          ? Center(child: CircularProgressIndicator(color: context.palette.accentPrimary))
           : _error != null
-              ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.textSecondaryDark)))
+              ? Center(child: Text(_error!, style: TextStyle(color: context.palette.textSecondary)))
               : ListView(
                   padding: const EdgeInsets.all(AppSpacing.lg),
                   children: [
@@ -118,18 +123,18 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 32,
-            backgroundColor: AppColors.bgSurfaceRaisedDark,
+            backgroundColor: context.palette.bgSurfaceRaised,
             child: Text(
               name.isNotEmpty ? name.characters.first.toUpperCase() : 'G',
-              style: const TextStyle(color: AppColors.accentPrimaryDark, fontSize: 22, fontWeight: FontWeight.w700),
+              style: TextStyle(color: context.palette.accentText, fontSize: 22, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: AppSpacing.md),
@@ -138,15 +143,15 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name,
-                    style: const TextStyle(
-                        color: AppColors.textPrimaryDark, fontSize: 20, fontWeight: FontWeight.w700)),
+                    style: TextStyle(
+                        color: context.palette.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Text('${_members.length} Mitglieder',
-                    style: const TextStyle(color: AppColors.textSecondaryDark)),
+                    style: TextStyle(color: context.palette.textSecondary)),
                 if (description != null && description.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(description,
-                      style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+                      style: TextStyle(color: context.palette.textSecondary, fontSize: 13)),
                 ],
               ],
             ),
@@ -160,21 +165,21 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
 
   List<Widget> _ownerSection() {
     return [
-      const Text('👑 Owner-Bereich',
-          style: TextStyle(color: AppColors.accentPrimaryDark, fontWeight: FontWeight.w700)),
+      Text('👑 Owner-Bereich',
+          style: TextStyle(color: context.palette.accentPrimary, fontWeight: FontWeight.w700)),
       const SizedBox(height: AppSpacing.sm),
       Container(
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.bgSurfaceDark,
+          color: context.palette.bgSurface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderHairlineDark),
+          border: Border.all(color: context.palette.borderHairline),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('QR-Code und Einladungscode',
-                style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+            Text('QR-Code und Einladungscode',
+                style: TextStyle(color: context.palette.textSecondary, fontSize: 13)),
             if (_activeCode != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Center(
@@ -193,22 +198,22 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              const Text(
+              Text(
                 'Lade Biker ein: QR-Code scannen oder Code teilen.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 12),
+                style: TextStyle(color: context.palette.textSecondary, fontSize: 12),
               ),
             ],
             const SizedBox(height: 6),
             if (_activeCode != null)
               SelectableText(
                 _activeCode!,
-                style: const TextStyle(
-                    color: AppColors.textPrimaryDark, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 2),
+                style: TextStyle(
+                    color: context.palette.textPrimary, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 2),
               )
             else
-              const Text('Noch kein aktiver Code',
-                  style: TextStyle(color: AppColors.textMutedDark)),
+              Text('Noch kein aktiver Code',
+                  style: TextStyle(color: context.palette.textSecondary)),
             if (_activeCode != null)
               TextButton.icon(
                 onPressed: () async {
@@ -283,8 +288,8 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('Mitglieder (${_members.length})',
-            style: const TextStyle(
-                color: AppColors.textPrimaryDark, fontSize: 16, fontWeight: FontWeight.w700)),
+            style: TextStyle(
+                color: context.palette.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
         const SizedBox(height: AppSpacing.sm),
         ..._members.map((member) {
           final user = member.user;
@@ -296,7 +301,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
               children: [
                 Flexible(
                   child: Text(user.effectiveName,
-                      style: const TextStyle(color: AppColors.textPrimaryDark)),
+                      style: TextStyle(color: context.palette.textPrimary)),
                 ),
                 if (role == 'owner') ...[
                   const SizedBox(width: 6),
@@ -305,11 +310,11 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
               ],
             ),
             subtitle: Text(role == 'owner' ? 'Owner' : 'Mitglied',
-                style: const TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
+                style: TextStyle(color: context.palette.textSecondary, fontSize: 12)),
             trailing: isOwner && role != 'owner'
                 ? PopupMenuButton<String>(
-                    color: AppColors.bgSurfaceDark,
-                    icon: const Icon(Icons.more_vert, color: AppColors.textSecondaryDark),
+                    color: context.palette.bgSurface,
+                    icon: Icon(Icons.more_vert, color: context.palette.textSecondary),
                     onSelected: (action) => _memberAction(action, user),
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: 'remove', child: Text('Entfernen')),
@@ -353,28 +358,28 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
         // Gruppenrouten-Vorgabe. Nur der Owner plant neue Routen;
         // Mitglieder sehen dieselbe Liste (lesend/navigierend).
         FilledButton.icon(
-          icon: const Icon(Icons.route, color: AppColors.textPrimaryDark),
+          icon: Icon(Icons.route, color: context.palette.textPrimary),
           label: const Text('ROUTE PLANEN', style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
           onPressed: () => Navigator.of(context).pushNamed(
             '/chat/group-route-list',
             arguments: {'groupId': _group?['id'] ?? ''},
           ),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.bgSurfaceRaisedDark),
+          style: FilledButton.styleFrom(backgroundColor: context.palette.bgSurfaceRaised),
         ),
         const SizedBox(height: AppSpacing.md),
         OutlinedButton.icon(
-          icon: const Icon(Icons.logout, color: AppColors.statusDanger),
-          label: const Text('Gruppe verlassen', style: TextStyle(color: AppColors.statusDanger)),
+          icon: Icon(Icons.logout, color: context.palette.statusDanger),
+          label: Text('Gruppe verlassen', style: TextStyle(color: context.palette.statusDanger)),
           onPressed: () => _confirmLeave(isOwner),
-          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.statusDanger)),
+          style: OutlinedButton.styleFrom(side: BorderSide(color: context.palette.statusDanger)),
         ),
         if (isOwner) ...[
           const SizedBox(height: AppSpacing.sm),
           OutlinedButton.icon(
-            icon: const Icon(Icons.delete_forever, color: AppColors.statusDanger),
-            label: const Text('Gruppe löschen', style: TextStyle(color: AppColors.statusDanger)),
+            icon: Icon(Icons.delete_forever, color: context.palette.statusDanger),
+            label: Text('Gruppe löschen', style: TextStyle(color: context.palette.statusDanger)),
             onPressed: _confirmDelete,
-            style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.statusDanger)),
+            style: OutlinedButton.styleFrom(side: BorderSide(color: context.palette.statusDanger)),
           ),
         ],
       ],
@@ -388,7 +393,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
+        backgroundColor: context.palette.bgSurface,
         title: const Text('Gruppe verlassen?'),
         content: Text(isOwner
             ? 'Du bist Owner. Übertrage zuerst die Ownership oder lösche die Gruppe.'
@@ -397,7 +402,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Abbrechen')),
           if (!isOwner)
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
+              style: FilledButton.styleFrom(backgroundColor: context.palette.statusDanger),
               onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('Verlassen'),
             ),
@@ -432,13 +437,13 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
+        backgroundColor: context.palette.bgSurface,
         title: const Text('Gruppe löschen?'),
         content: const Text('Alle Nachrichten und Mitglieder werden entfernt. Das kann nicht rückgängig gemacht werden.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Abbrechen')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
+            style: FilledButton.styleFrom(backgroundColor: context.palette.statusDanger),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Endgültig löschen'),
           ),
@@ -464,7 +469,7 @@ class _GroupInfoScreenState extends ConsumerState<GroupInfoScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
+        backgroundColor: context.palette.bgSurface,
         title: const Text('Gruppe bearbeiten'),
         content: Column(
           mainAxisSize: MainAxisSize.min,

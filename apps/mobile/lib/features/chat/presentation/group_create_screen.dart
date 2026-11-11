@@ -9,8 +9,10 @@ import '../chat_providers.dart';
 import '../data/chat_repository.dart';
 
 /// Gruppe erstellen (Abschnitt 8): Name, Beschreibung, Kategorie.
-/// Gruppenbild (Upload) ist Architektur-vorbereitet (imageUrl-Feld),
-/// benötigt einen Storage-Bucket - TODO mit dem Storage-Feature.
+/// Gruppenbild (Upload) ist Architektur-vorbereitet (imageUrl-Feld). Es fehlt
+/// der Server-Endpunkt; Vertrag siehe docs/04-api.md,
+/// `POST /api/v1/chat/media/images` - Upload und Gruppen-Call bleiben getrennt,
+/// damit ein fehlgeschlagener Upload die Gruppe nicht verhindert.
 class GroupCreateScreen extends ConsumerStatefulWidget {
   const GroupCreateScreen({super.key});
 
@@ -72,9 +74,9 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('Gruppe erstellen'),
       ),
       body: ListView(
@@ -83,17 +85,17 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
           TextField(
             controller: _nameController,
             maxLength: 60,
-            style: const TextStyle(color: AppColors.textPrimaryDark),
+            style: TextStyle(color: context.palette.textPrimary),
             decoration: InputDecoration(
               labelText: 'Gruppenname',
-              labelStyle: const TextStyle(color: AppColors.textSecondaryDark),
+              labelStyle: TextStyle(color: context.palette.textSecondary),
               hintText: 'z. B. 🏍️ Alpen Tour 2026',
-              hintStyle: const TextStyle(color: AppColors.textMutedDark),
+              hintStyle: TextStyle(color: context.palette.textSecondary),
               filled: true,
-              fillColor: AppColors.bgSurfaceDark,
+              fillColor: context.palette.bgSurface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderHairlineDark),
+                borderSide: BorderSide(color: context.palette.borderHairline),
               ),
             ),
           ),
@@ -102,17 +104,17 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
             controller: _descriptionController,
             maxLength: 500,
             maxLines: 3,
-            style: const TextStyle(color: AppColors.textPrimaryDark),
+            style: TextStyle(color: context.palette.textPrimary),
             decoration: InputDecoration(
               labelText: 'Beschreibung (optional)',
-              labelStyle: const TextStyle(color: AppColors.textSecondaryDark),
+              labelStyle: TextStyle(color: context.palette.textSecondary),
               hintText: 'Worum gehts in der Gruppe?',
-              hintStyle: const TextStyle(color: AppColors.textMutedDark),
+              hintStyle: TextStyle(color: context.palette.textSecondary),
               filled: true,
-              fillColor: AppColors.bgSurfaceDark,
+              fillColor: context.palette.bgSurface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderHairlineDark),
+                borderSide: BorderSide(color: context.palette.borderHairline),
               ),
             ),
           ),
@@ -123,9 +125,9 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
                 .map((c) => ChoiceChip(
                       label: Text(c),
                       selected: _category == c,
-                      selectedColor: AppColors.accentPrimaryDark.withValues(alpha: 0.3),
+                      selectedColor: context.palette.accentPrimary.withValues(alpha: 0.3),
                       labelStyle: TextStyle(
-                        color: _category == c ? AppColors.textPrimaryDark : AppColors.textSecondaryDark,
+                        color: _category == c ? context.palette.textPrimary : context.palette.textSecondary,
                       ),
                       onSelected: (_) => setState(() => _category = c),
                     ))
@@ -134,8 +136,8 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
           const SizedBox(height: AppSpacing.xl),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentPrimaryDark,
-              foregroundColor: AppColors.textPrimaryDark,
+              backgroundColor: context.palette.accentPrimary,
+              foregroundColor: context.palette.textPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             onPressed: _creating ? null : _create,

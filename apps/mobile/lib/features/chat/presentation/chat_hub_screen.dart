@@ -6,6 +6,7 @@ import 'package:motoroute_app/core/network/error_message.dart'
 import 'package:motoroute_app/core/network/error_reporter.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
+import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 
 import 'package:motoroute_app/features/auth/auth_providers.dart';
@@ -37,14 +38,22 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
       chatSessionTokenProvider,
       (previous, next) {
         if (next != null) {
-          ref.read(chatOverviewProvider.notifier).load();
+          ref
+              .read(chatOverviewProvider.notifier)
+              .load()
+              .catchError((Object e) =>
+                  ErrorReporter.instance.report('chat.load', e));
         }
       },
     );
     _tabs.addListener(_onTabChanged);
     // Nach dem ersten Frame laden (Provider-Zugriff im State).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(chatOverviewProvider.notifier).load();
+      if (!mounted) return;
+      ref
+          .read(chatOverviewProvider.notifier)
+          .load()
+          .catchError((Object e) => ErrorReporter.instance.report('chat.load', e));
     });
   }
 
@@ -75,10 +84,11 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
     }
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        systemOverlayStyle: AppTheme.overlayFor(context),
         title: Text(i18n.chatTab, style: AppTypography.title),
         actions: [
           // Admin: Meldungen prüfen - nur sichtbar mit Admin-Konto
@@ -86,16 +96,16 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
           if (ref.watch(authControllerProvider).user?.isAdmin ?? false)
             IconButton(
               tooltip: 'Meldungen',
-              icon: const Icon(Icons.shield_outlined,
-                  color: AppColors.textSecondaryDark),
+              icon: Icon(Icons.shield_outlined,
+                  color: context.palette.textSecondary),
               onPressed: () => _showAdminReports(context),
             ),
         ],
         bottom: TabBar(
           controller: _tabs,
-          indicatorColor: AppColors.accentPrimaryDark,
-          labelColor: AppColors.textPrimaryDark,
-          unselectedLabelColor: AppColors.textSecondaryDark,
+          indicatorColor: context.palette.accentPrimary,
+          labelColor: context.palette.textPrimary,
+          unselectedLabelColor: context.palette.textSecondary,
           tabs: [
             Tab(text: '🌍 ${i18n.chatPublic}'),
             Tab(text: '🔒 ${i18n.chatPrivate}'),
@@ -105,9 +115,9 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
       ),
       floatingActionButton: _fabFor(context, state),
       body: state.isLoading && state.conversations.isEmpty
-          ? const Center(
+          ? Center(
               child:
-                  CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+                  CircularProgressIndicator(color: context.palette.accentPrimary))
           : state.error != null && state.conversations.isEmpty
               ? _ErrorView(
                   message: state.error!,
@@ -147,8 +157,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
     final index = _tabs.index;
     if (index == 0) return null; // Öffentlicher Chat: kein "neu".
     return FloatingActionButton.extended(
-      backgroundColor: AppColors.accentPrimaryDark,
-      foregroundColor: AppColors.textPrimaryDark,
+      backgroundColor: context.palette.accentPrimary,
+      foregroundColor: context.palette.textPrimary,
       onPressed: () => index == 1
           ? Navigator.of(context).pushNamed('/chat/new')
           : _showGroupActions(context),
@@ -163,7 +173,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
     if (token == null) return;
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.bgSurfaceDark,
+      backgroundColor: context.palette.bgSurface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -187,7 +197,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
   void _showGroupActions(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.bgSurfaceDark,
+      backgroundColor: context.palette.bgSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -196,20 +206,20 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.group_add,
-                  color: AppColors.accentPrimaryDark),
-              title: const Text('Gruppe erstellen',
-                  style: TextStyle(color: AppColors.textPrimaryDark)),
+              leading: Icon(Icons.group_add,
+                  color: context.palette.accentPrimary),
+              title: Text('Gruppe erstellen',
+                  style: TextStyle(color: context.palette.textPrimary)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushNamed('/chat/group-create');
               },
             ),
             ListTile(
-              leading: const Icon(Icons.vpn_key_outlined,
-                  color: AppColors.accentSecondary),
-              title: const Text('Gruppe beitreten (Einladungscode)',
-                  style: TextStyle(color: AppColors.textPrimaryDark)),
+              leading: Icon(Icons.vpn_key_outlined,
+                  color: context.palette.accentSecondary),
+              title: Text('Gruppe beitreten (Einladungscode)',
+                  style: TextStyle(color: context.palette.textPrimary)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushNamed('/chat/group-join');
@@ -243,11 +253,11 @@ class _PublicTabState extends ConsumerState<_PublicTab> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(AppSpacing.sm),
-            color: AppColors.statusWarning.withValues(alpha: 0.15),
-            child: const Text(
+            color: context.palette.statusWarning.withValues(alpha: 0.15),
+            child: Text(
               'Keine Internetverbindung - Nachrichten werden geladen, sobald die Verbindung steht.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.statusWarning, fontSize: 12),
+              style: TextStyle(color: context.palette.statusWarning, fontSize: 12),
             ),
           ),
         const Expanded(
@@ -282,7 +292,7 @@ class _ConversationListTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (conversations.isEmpty) {
       return RefreshIndicator(
-        color: AppColors.accentPrimaryDark,
+        color: context.palette.accentPrimary,
         onRefresh: onRefresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -295,14 +305,14 @@ class _ConversationListTab extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.chat_bubble_outline,
-                          size: 48, color: AppColors.textMutedDark),
+                      Icon(Icons.chat_bubble_outline,
+                          size: 48, color: context.palette.textSecondary),
                       const SizedBox(height: AppSpacing.md),
                       Text(
                         emptyText,
                         textAlign: TextAlign.center,
                         style:
-                            const TextStyle(color: AppColors.textSecondaryDark),
+                            TextStyle(color: context.palette.textSecondary),
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       FilledButton.icon(
@@ -310,8 +320,8 @@ class _ConversationListTab extends StatelessWidget {
                         icon: const Icon(Icons.add),
                         label: Text(actionLabel),
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.accentPrimaryDark,
-                          foregroundColor: AppColors.textPrimaryDark,
+                          backgroundColor: context.palette.accentPrimary,
+                          foregroundColor: context.palette.textPrimary,
                         ),
                       ),
                     ],
@@ -325,13 +335,13 @@ class _ConversationListTab extends StatelessWidget {
     }
 
     return RefreshIndicator(
-      color: AppColors.accentPrimaryDark,
+      color: context.palette.accentPrimary,
       onRefresh: onRefresh,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: conversations.length,
         separatorBuilder: (_, __) =>
-            const Divider(height: 1, color: AppColors.borderHairlineDark),
+            Divider(height: 1, color: context.palette.borderHairline),
         itemBuilder: (context, i) {
           final c = conversations[i];
           return _ConversationTile(conversation: c);
@@ -371,10 +381,10 @@ class _ConversationTile extends ConsumerWidget {
           horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
       leading: isGroup
           ? CircleAvatar(
-              backgroundColor: AppColors.bgSurfaceRaisedDark,
+              backgroundColor: context.palette.bgSurfaceRaised,
               child: Text(
                 title.isNotEmpty ? title.characters.first.toUpperCase() : 'G',
-                style: const TextStyle(color: AppColors.accentPrimaryDark),
+                style: TextStyle(color: context.palette.accentText),
               ),
             )
           : UserAvatar(avatarUrl: null, name: title, size: 24),
@@ -387,8 +397,8 @@ class _ConversationTile extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: hasUnread
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryDark,
+                    ? context.palette.textPrimary
+                    : context.palette.textPrimary,
                 fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
@@ -399,8 +409,8 @@ class _ConversationTile extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 12,
                 color: hasUnread
-                    ? AppColors.accentPrimaryDark
-                    : AppColors.textMutedDark,
+                    ? context.palette.accentPrimary
+                    : context.palette.textSecondary,
               ),
             ),
         ],
@@ -414,8 +424,8 @@ class _ConversationTile extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: hasUnread
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textSecondaryDark,
+                    ? context.palette.textPrimary
+                    : context.palette.textSecondary,
                 fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -425,13 +435,13 @@ class _ConversationTile extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.accentPrimaryDark,
+                color: context.palette.accentPrimary,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '$unread',
-                style: const TextStyle(
-                  color: AppColors.textPrimaryDark,
+                style: TextStyle(
+                  color: context.palette.textPrimary,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -469,10 +479,10 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.cloud_off, size: 48, color: AppColors.textMutedDark),
+          Icon(Icons.cloud_off, size: 48, color: context.palette.stateIdle),
           const SizedBox(height: AppSpacing.md),
           Text(message,
-              style: const TextStyle(color: AppColors.textSecondaryDark)),
+              style: TextStyle(color: context.palette.textSecondary)),
           const SizedBox(height: AppSpacing.md),
           TextButton(onPressed: onRetry, child: const Text('Erneut versuchen')),
         ],
@@ -490,9 +500,9 @@ class _NotSignedIn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('Chat'),
       ),
       body: Center(
@@ -501,13 +511,13 @@ class _NotSignedIn extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.lock_outline,
-                  size: 56, color: AppColors.textMutedDark),
+              Icon(Icons.lock_outline,
+                  size: 56, color: context.palette.textSecondary),
               const SizedBox(height: AppSpacing.lg),
               Text(
                 signedIn ? i18n.chatTab : i18n.chatLoginRequired,
-                style: const TextStyle(
-                    color: AppColors.textPrimaryDark,
+                style: TextStyle(
+                    color: context.palette.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700),
               ),
@@ -517,16 +527,16 @@ class _NotSignedIn extends StatelessWidget {
                     ? 'Deine Sitzung wird mit dem Chat verbunden.'
                     : i18n.chatLoginRequiredSub,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondaryDark),
+                style: TextStyle(color: context.palette.textSecondary),
               ),
               const SizedBox(height: AppSpacing.lg),
               if (signedIn)
-                const CircularProgressIndicator(
-                    color: AppColors.accentPrimaryDark)
+                CircularProgressIndicator(
+                    color: context.palette.accentPrimary)
               else
                 FilledButton(
                   style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accentPrimaryDark),
+                      backgroundColor: context.palette.accentPrimary),
                   onPressed: () => Navigator.of(context).pushNamed('/welcome'),
                   child: Text(i18n.login),
                 ),
@@ -611,30 +621,30 @@ class _AdminReportsSheetState extends State<_AdminReportsSheet> {
       controller: widget.scrollCtrl,
       padding: const EdgeInsets.all(16),
       children: [
-        const Row(children: [
-          Icon(Icons.flag_outlined, size: 20, color: AppColors.textPrimaryDark),
-          SizedBox(width: 8),
+        Row(children: [
+          Icon(Icons.flag_outlined, size: 20, color: context.palette.textPrimary),
+          const SizedBox(width: 8),
           Text(
             'Nutzer-Meldungen',
             style: TextStyle(
-                color: AppColors.textPrimaryDark,
+                color: context.palette.textPrimary,
                 fontWeight: FontWeight.w700,
                 fontSize: 18),
           ),
         ]),
         const SizedBox(height: 12),
         if (_busy)
-          const Center(
+          Center(
               child:
-                  CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+                  CircularProgressIndicator(color: context.palette.accentPrimary))
         else if (_error != null)
-          Text(_error!, style: const TextStyle(color: AppColors.statusDanger))
+          Text(_error!, style: TextStyle(color: context.palette.statusDanger))
         else if (_reports == null || _reports!.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
             child: Center(
               child: Text('Keine offenen Meldungen.',
-                  style: TextStyle(color: AppColors.textSecondaryDark)),
+                  style: TextStyle(color: context.palette.textSecondary)),
             ),
           )
         else
@@ -665,26 +675,26 @@ class _ReportTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceRaisedDark,
+        color: context.palette.bgSurfaceRaised,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(who,
-              style: const TextStyle(
-                  color: AppColors.textPrimaryDark,
+              style: TextStyle(
+                  color: context.palette.textPrimary,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 2),
           Text('Grund: $reason',
-              style: const TextStyle(
-                  color: AppColors.textSecondaryDark, fontSize: 13)),
+              style: TextStyle(
+                  color: context.palette.textSecondary, fontSize: 13)),
           if (details != null && details.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(details,
-                style: const TextStyle(
-                    color: AppColors.textSecondaryDark, fontSize: 12)),
+                style: TextStyle(
+                    color: context.palette.textSecondary, fontSize: 12)),
           ],
           const SizedBox(height: 10),
           Row(
@@ -698,9 +708,9 @@ class _ReportTile extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 8),
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentPrimaryDark,
+                      foregroundColor: context.palette.accentPrimary,
                       side:
-                          const BorderSide(color: AppColors.accentPrimaryDark),
+                          BorderSide(color: context.palette.accentPrimary),
                       visualDensity: VisualDensity.compact,
                     ),
                     onPressed: () => onResolve(report['id'].toString(), status),

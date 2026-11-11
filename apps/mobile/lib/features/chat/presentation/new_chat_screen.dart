@@ -98,9 +98,9 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('Neuer Chat'),
       ),
       body: Column(
@@ -111,25 +111,25 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               controller: _searchController,
               autofocus: true,
               onChanged: _onChanged,
-              style: const TextStyle(color: AppColors.textPrimaryDark),
+              style: TextStyle(color: context.palette.textPrimary),
               decoration: InputDecoration(
                 hintText: 'Benutzername suchen …',
-                hintStyle: const TextStyle(color: AppColors.textMutedDark),
-                prefixIcon: const Icon(Icons.search, color: AppColors.textSecondaryDark),
+                hintStyle: TextStyle(color: context.palette.textSecondary),
+                prefixIcon: Icon(Icons.search, color: context.palette.textSecondary),
                 filled: true,
-                fillColor: AppColors.bgSurfaceDark,
+                fillColor: context.palette.bgSurface,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.borderHairlineDark),
+                  borderSide: BorderSide(color: context.palette.borderHairline),
                 ),
               ),
             ),
           ),
-          if (_searching) const LinearProgressIndicator(color: AppColors.accentPrimaryDark),
+          if (_searching) LinearProgressIndicator(color: context.palette.accentPrimary),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Text(_error!, style: const TextStyle(color: AppColors.statusDanger)),
+              child: Text(_error!, style: TextStyle(color: context.palette.statusDanger)),
             ),
           Expanded(
             child: _results.isEmpty
@@ -138,7 +138,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                       _searchController.text.trim().length < 2
                           ? 'Tippe mindestens 2 Zeichen, um Biker zu finden.'
                           : 'Keine Biker gefunden.',
-                      style: const TextStyle(color: AppColors.textMutedDark),
+                      style: TextStyle(color: context.palette.textSecondary),
                     ),
                   )
                 : ListView.builder(
@@ -148,13 +148,13 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                       return ListTile(
                         leading: UserAvatar(avatarUrl: user.avatarUrl, name: user.effectiveName),
                         title: Text(user.effectiveName,
-                            style: const TextStyle(color: AppColors.textPrimaryDark)),
+                            style: TextStyle(color: context.palette.textPrimary)),
                         subtitle: user.username != null
                             ? Text('@${user.username}',
-                                style: const TextStyle(color: AppColors.textMutedDark))
+                                style: TextStyle(color: context.palette.textSecondary))
                             : null,
-                        trailing: const Icon(Icons.chat_bubble_outline,
-                            color: AppColors.accentPrimaryDark, size: 20),
+                        trailing: Icon(Icons.chat_bubble_outline,
+                            color: context.palette.accentPrimary, size: 20),
                         onTap: () => _openChat(user),
                       );
                     },

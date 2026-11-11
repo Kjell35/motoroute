@@ -34,7 +34,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.bgSurfaceDark,
+      backgroundColor: context.palette.bgSurface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => const _CreateVehicleSheet(),
@@ -48,9 +48,9 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
     final session = ref.watch(garageSessionProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         elevation: 0,
         title: Text(i18n.gTitle,
             style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -58,8 +58,8 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
           session.value != null
               ? IconButton(
                   tooltip: i18n.gLogout,
-                  icon: const Icon(Icons.logout,
-                      color: AppColors.textSecondaryDark),
+                  icon: Icon(Icons.logout,
+                      color: context.palette.textSecondary),
                   onPressed: () async {
                     await ref.read(garageSessionProvider.notifier).logout();
                     ref.invalidate(garageListProvider);
@@ -72,7 +72,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
             child: Text(_friendly(e),
-                style: const TextStyle(color: AppColors.textSecondaryDark))),
+                style: TextStyle(color: context.palette.textSecondary))),
         data: (s) {
           if (s == null) return _buildNeedsAccount(i18n);
           return _buildGarage(i18n, s);
@@ -94,7 +94,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Card(
-            color: AppColors.bgSurfaceDark,
+            color: context.palette.bgSurface,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             child: Padding(
@@ -103,14 +103,14 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.garage_outlined,
-                      size: 44, color: AppColors.accentPrimaryDark),
+                  Icon(Icons.garage_outlined,
+                      size: 44, color: context.palette.accentPrimary),
                   const SizedBox(height: 12),
                   Text(
                     signedIn ? i18n.gConnectTitle : i18n.gConnectNeedLogin,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        color: AppColors.textPrimaryDark,
+                    style: TextStyle(
+                        color: context.palette.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.w700),
                   ),
@@ -118,14 +118,14 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
                   Text(
                     signedIn ? i18n.gConnectHint : i18n.gConnectNeedLoginHint,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        color: AppColors.textSecondaryDark, fontSize: 13),
+                    style: TextStyle(
+                        color: context.palette.textSecondary, fontSize: 13),
                   ),
                   const SizedBox(height: 18),
                   if (signedIn)
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accentPrimaryDark,
+                        backgroundColor: context.palette.accentPrimary,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
@@ -172,14 +172,14 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
         error: (e, _) => ListView(
           children: [
             const SizedBox(height: 80),
-            const Icon(Icons.cloud_off,
-                color: AppColors.textMutedDark, size: 44),
+            Icon(Icons.cloud_off,
+                color: context.palette.textMuted, size: 44),
             const SizedBox(height: 10),
             Center(
               child: Text(
                 _friendly(e),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondaryDark),
+                style: TextStyle(color: context.palette.textSecondary),
               ),
             ),
           ],
@@ -195,18 +195,18 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
               padding: const EdgeInsets.all(24),
               children: [
                 const SizedBox(height: 60),
-                const Icon(Icons.garage_outlined,
-                    size: 48, color: AppColors.textSecondaryDark),
+                Icon(Icons.garage_outlined,
+                    size: 48, color: context.palette.textSecondary),
                 const SizedBox(height: 14),
                 Text(
                   i18n.gEmpty,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textSecondaryDark),
+                  style: TextStyle(color: context.palette.textSecondary),
                 ),
                 const SizedBox(height: 20),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accentPrimaryDark),
+                      backgroundColor: context.palette.accentPrimary),
                   onPressed: _openCreateDialog,
                   icon: const Icon(Icons.add),
                   label: Text(i18n.gAddVehicle),
@@ -219,7 +219,7 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
             children: [
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentPrimaryDark,
+                  backgroundColor: context.palette.accentPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 onPressed: _openCreateDialog,
@@ -259,8 +259,8 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
   Widget _sectionHeader(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8, left: 4),
         child: Text(text,
-            style: const TextStyle(
-                color: AppColors.textSecondaryDark,
+            style: TextStyle(
+                color: context.palette.textSecondary,
                 fontWeight: FontWeight.w700,
                 fontSize: 15)),
       );
@@ -276,14 +276,16 @@ class _VehicleCard extends StatelessWidget {
   final I18n i18n;
   final VoidCallback onTap;
 
-  Color get _statusColor {
+  /// Ampel-Farbe des Wartungsstatus - braucht die Palette des Schemas,
+  /// deshalb als Methode statt Getter (ein Getter haette keinen context).
+  Color _statusColor(AppPalette palette) {
     switch (vehicle.worstStatus) {
       case 'overdue':
-        return AppColors.statusDanger;
+        return palette.statusDanger;
       case 'dueSoon':
-        return AppColors.statusWarning;
+        return palette.statusWarning;
       default:
-        return AppColors.statusSuccess;
+        return palette.statusSuccess;
     }
   }
 
@@ -302,7 +304,7 @@ class _VehicleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final i18n = this.i18n;
     return Card(
-      color: AppColors.bgSurfaceDark,
+      color: context.palette.bgSurface,
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
@@ -317,7 +319,7 @@ class _VehicleCard extends StatelessWidget {
                 height: 54,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppColors.bgSurfaceRaisedDark,
+                  color: context.palette.bgSurfaceRaised,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(vehicle.category.emoji,
@@ -329,21 +331,21 @@ class _VehicleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(vehicle.title,
-                        style: const TextStyle(
-                            color: AppColors.textPrimaryDark,
+                        style: TextStyle(
+                            color: context.palette.textPrimary,
                             fontWeight: FontWeight.w700,
                             fontSize: 16),
                         overflow: TextOverflow.ellipsis),
                     if (vehicle.subtitle.isNotEmpty)
                       Text(vehicle.subtitle,
-                          style: const TextStyle(
-                              color: AppColors.textSecondaryDark,
+                          style: TextStyle(
+                              color: context.palette.textSecondary,
                               fontSize: 13)),
                     const SizedBox(height: 4),
                     Text(
                       '${_fmtKm(vehicle.odometerKm)} km',
-                      style: const TextStyle(
-                          color: AppColors.textSecondaryDark, fontSize: 13),
+                      style: TextStyle(
+                          color: context.palette.textSecondary, fontSize: 13),
                     ),
                   ],
                 ),
@@ -352,7 +354,8 @@ class _VehicleCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Icon(Icons.circle, size: 12, color: _statusColor),
+                  Icon(Icons.circle,
+                      size: 12, color: _statusColor(context.palette)),
                   const SizedBox(height: 4),
                   SizedBox(
                     width: 92,
@@ -360,7 +363,7 @@ class _VehicleCard extends StatelessWidget {
                       _statusText(i18n),
                       textAlign: TextAlign.right,
                       style: TextStyle(
-                          color: _statusColor,
+                          color: _statusColor(context.palette),
                           fontSize: 11,
                           fontWeight: FontWeight.w600),
                     ),
@@ -540,8 +543,8 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(i18n.gAddVehicle,
-                style: const TextStyle(
-                    color: AppColors.textPrimaryDark,
+                style: TextStyle(
+                    color: context.palette.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 14),
@@ -564,11 +567,11 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
                   .map((m) => DropdownMenuItem(
                       value: m,
                       child: Text(m.name,
-                          style: const TextStyle(
-                              color: AppColors.textPrimaryDark))))
+                          style: TextStyle(
+                              color: context.palette.textPrimary))))
                   .toList(),
               onChanged: _pickManufacturer,
-              dropdownColor: AppColors.bgSurfaceRaisedDark,
+              dropdownColor: context.palette.bgSurfaceRaised,
               decoration: _dropdownDeco(),
             ),
             const SizedBox(height: 10),
@@ -583,11 +586,11 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
                   .map((m) => DropdownMenuItem(
                       value: m,
                       child: Text(m.name,
-                          style: const TextStyle(
-                              color: AppColors.textPrimaryDark))))
+                          style: TextStyle(
+                              color: context.palette.textPrimary))))
                   .toList(),
               onChanged: _pickModel,
-              dropdownColor: AppColors.bgSurfaceRaisedDark,
+              dropdownColor: context.palette.bgSurfaceRaised,
               decoration: _dropdownDeco(),
             ),
             if (_variants != null && _variants!.isNotEmpty) ...[
@@ -599,11 +602,11 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
                     .map((v) => DropdownMenuItem(
                         value: v,
                         child: Text(v.name,
-                            style: const TextStyle(
-                                color: AppColors.textPrimaryDark))))
+                            style: TextStyle(
+                                color: context.palette.textPrimary))))
                     .toList(),
                 onChanged: (v) => setState(() => _variant = v),
-                dropdownColor: AppColors.bgSurfaceRaisedDark,
+                dropdownColor: context.palette.bgSurfaceRaised,
                 decoration: _dropdownDeco(),
               ),
             ],
@@ -632,13 +635,13 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!,
-                  style: const TextStyle(
-                      color: AppColors.statusDanger, fontSize: 13)),
+                  style: TextStyle(
+                      color: context.palette.statusDanger, fontSize: 13)),
             ],
             const SizedBox(height: 16),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentPrimaryDark,
+                backgroundColor: context.palette.accentPrimary,
                 padding: const EdgeInsets.symmetric(vertical: 13),
               ),
               onPressed: _busy ? null : _submit,
@@ -658,15 +661,15 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
 
   InputDecoration _dropdownDeco() => InputDecoration(
         filled: true,
-        fillColor: AppColors.bgSurfaceRaisedDark,
+        fillColor: context.palette.bgSurfaceRaised,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       );
 
   InputDecoration _fieldDeco(String label) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textSecondaryDark),
+        labelStyle: TextStyle(color: context.palette.textSecondary),
         filled: true,
-        fillColor: AppColors.bgSurfaceRaisedDark,
+        fillColor: context.palette.bgSurfaceRaised,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       );
 }

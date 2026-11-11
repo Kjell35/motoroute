@@ -416,7 +416,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     final isMine = msg.senderId == ref.read(chatMeProvider).value?.id;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.bgSurfaceDark,
+      backgroundColor: context.palette.bgSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -426,9 +426,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           children: [
             ListTile(
               leading:
-                  const Icon(Icons.reply, color: AppColors.accentPrimaryDark),
-              title: const Text('Antworten',
-                  style: TextStyle(color: AppColors.textPrimaryDark)),
+                  Icon(Icons.reply, color: context.palette.accentPrimary),
+              title: Text('Antworten',
+                  style: TextStyle(color: context.palette.textPrimary)),
               onTap: () {
                 Navigator.pop(context);
                 setState(() => _replyToId = msg.id);
@@ -437,14 +437,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             ),
             if (isMine)
               ListTile(
-                leading: const Icon(Icons.delete_outline,
-                    color: AppColors.statusDanger),
-                title: const Text('Nachricht löschen',
-                    style: TextStyle(color: AppColors.textPrimaryDark)),
-                subtitle: const Text(
+                leading: Icon(Icons.delete_outline,
+                    color: context.palette.statusDanger),
+                title: Text('Nachricht löschen',
+                    style: TextStyle(color: context.palette.textPrimary)),
+                subtitle: Text(
                     'Wird für alle als „Nachricht gelöscht“ angezeigt',
                     style: TextStyle(
-                        color: AppColors.textMutedDark, fontSize: 12)),
+                        color: context.palette.textSecondary, fontSize: 12)),
                 onTap: () {
                   Navigator.pop(context);
                   _deleteMessage(msg);
@@ -452,10 +452,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               ),
             if (!isMine)
               ListTile(
-                leading: const Icon(Icons.flag_outlined,
-                    color: AppColors.statusWarning),
-                title: const Text('Nachricht melden',
-                    style: TextStyle(color: AppColors.textPrimaryDark)),
+                leading: Icon(Icons.flag_outlined,
+                    color: context.palette.statusWarning),
+                title: Text('Nachricht melden',
+                    style: TextStyle(color: context.palette.textPrimary)),
                 onTap: () {
                   Navigator.pop(context);
                   _reportMessage(msg);
@@ -476,18 +476,18 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 6),
-            color: AppColors.statusWarning.withValues(alpha: 0.15),
-            child: const Text(
+            color: context.palette.statusWarning.withValues(alpha: 0.15),
+            child: Text(
               'Keine Internetverbindung.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.statusWarning, fontSize: 12),
+              style: TextStyle(color: context.palette.statusWarning, fontSize: 12),
             ),
           ),
         Expanded(
           child: _isLoading && _messages.isEmpty
-              ? const Center(
+              ? Center(
                   child: CircularProgressIndicator(
-                      color: AppColors.accentPrimaryDark))
+                      color: context.palette.accentPrimary))
               : _error != null && _messages.isEmpty
                   ? Center(
                       child: Padding(
@@ -498,8 +498,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                             Text(
                               _error!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  color: AppColors.textSecondaryDark),
+                              style: TextStyle(
+                                  color: context.palette.textSecondary),
                             ),
                             const SizedBox(height: AppSpacing.md),
                             FilledButton.icon(
@@ -507,8 +507,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                               icon: const Icon(Icons.refresh),
                               label: const Text('Erneut versuchen'),
                               style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.accentPrimaryDark,
-                                foregroundColor: AppColors.textPrimaryDark,
+                                backgroundColor: context.palette.accentPrimary,
+                                foregroundColor: context.palette.textPrimary,
                               ),
                             ),
                           ],
@@ -524,26 +524,26 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
     if (widget.embedded) return body;
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgSurfaceDark,
+        backgroundColor: context.palette.bgSurface,
         title: Row(
           children: [
             if (widget.type == ConversationType.group)
               CircleAvatar(
                 radius: 16,
-                backgroundColor: AppColors.bgSurfaceRaisedDark,
+                backgroundColor: context.palette.bgSurfaceRaised,
                 child: Text(
                   widget.title.isNotEmpty
                       ? widget.title.characters.first.toUpperCase()
                       : 'G',
-                  style: const TextStyle(
-                      color: AppColors.accentPrimaryDark, fontSize: 13),
+                  style: TextStyle(
+                      color: context.palette.accentText, fontSize: 13),
                 ),
               )
             else
-              const Icon(Icons.lock_outline,
-                  size: 18, color: AppColors.textSecondaryDark),
+              Icon(Icons.lock_outline,
+                  size: 18, color: context.palette.textSecondary),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -552,20 +552,20 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   Text(widget.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: AppColors.textPrimaryDark, fontSize: 16)),
+                      style: TextStyle(
+                          color: context.palette.textPrimary, fontSize: 16)),
                   if (widget.subtitle != null)
                     Text(widget.subtitle!,
-                        style: const TextStyle(
-                            color: AppColors.textMutedDark, fontSize: 12)),
+                        style: TextStyle(
+                            color: context.palette.textSecondary, fontSize: 12)),
                 ],
               ),
             ),
             // Gruppeninfo (Abschnitt 33)
             if (widget.type == ConversationType.group)
               IconButton(
-                icon: const Icon(Icons.info_outline,
-                    color: AppColors.textSecondaryDark),
+                icon: Icon(Icons.info_outline,
+                    color: context.palette.textSecondary),
                 onPressed: () => Navigator.of(context).pushNamed(
                   '/chat/group-info',
                   arguments: {
@@ -583,11 +583,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   Widget _buildMessageList(ChatUser? me) {
     if (_messages.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Noch keine Nachrichten.\nSchreib die erste!',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textMutedDark),
+          style: TextStyle(color: context.palette.textSecondary),
         ),
       );
     }
@@ -609,8 +609,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 )
               : TextButton(
                   onPressed: _loadMore,
-                  child: const Text('Ältere Nachrichten laden',
-                      style: TextStyle(color: AppColors.textSecondaryDark)),
+                  child: Text('Ältere Nachrichten laden',
+                      style: TextStyle(color: context.palette.textSecondary)),
                 );
         }
         final adjusted = _hasMore ? index - 1 : index;
@@ -626,14 +626,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   }
 
   Widget _buildTypingIndicator() {
-    return const Padding(
-      padding: EdgeInsets.only(left: AppSpacing.lg, bottom: 4),
+    return Padding(
+      padding: const EdgeInsets.only(left: AppSpacing.lg, bottom: 4),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
           'schreibt gerade …',
           style: TextStyle(
-              color: AppColors.textMutedDark,
+              color: context.palette.textSecondary,
               fontStyle: FontStyle.italic,
               fontSize: 12),
         ),
@@ -648,9 +648,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        decoration: const BoxDecoration(
-          color: AppColors.bgSurfaceDark,
-          border: Border(top: BorderSide(color: AppColors.borderHairlineDark)),
+        decoration: BoxDecoration(
+          color: context.palette.bgSurface,
+          border: Border(top: BorderSide(color: context.palette.borderHairline)),
         ),
         child: Row(
           children: [
@@ -660,7 +660,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 child: Chip(
                   label:
                       const Text('Antworten', style: TextStyle(fontSize: 11)),
-                  backgroundColor: AppColors.bgSurfaceRaisedDark,
+                  backgroundColor: context.palette.bgSurfaceRaised,
                   onDeleted: () => setState(() => _replyToId = null),
                 ),
               ),
@@ -674,18 +674,18 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _send(),
                 onChanged: _onComposerChanged,
-                style: const TextStyle(color: AppColors.textPrimaryDark),
+                style: TextStyle(color: context.palette.textPrimary),
                 decoration: InputDecoration(
                   hintText: _token == null
                       ? 'Zum Chatten anmelden'
                       : _isLoading
                           ? 'Nachrichten werden geladen …'
                           : 'Nachricht schreiben ...',
-                  hintStyle: const TextStyle(color: AppColors.textMutedDark),
+                  hintStyle: TextStyle(color: context.palette.textSecondary),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide:
-                        const BorderSide(color: AppColors.borderHairlineDark),
+                        BorderSide(color: context.palette.borderHairline),
                   ),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -699,16 +699,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               icon: Container(
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(
-                    color: AppColors.accentPrimaryDark, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                    color: context.palette.accentPrimary, shape: BoxShape.circle),
                 child: _sending
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
+                    ? Padding(
+                        padding: const EdgeInsets.all(12),
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.textPrimaryDark),
+                            strokeWidth: 2, color: context.palette.textPrimary),
                       )
-                    : const Icon(Icons.send,
-                        color: AppColors.textPrimaryDark, size: 20),
+                    : Icon(Icons.send,
+                        color: context.palette.textPrimary, size: 20),
               ),
             ),
           ],
@@ -738,17 +738,17 @@ class _RouteCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 4, bottom: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: AppColors.accentPrimaryDark.withValues(alpha: 0.4)),
+            color: context.palette.accentPrimary.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(name.toUpperCase(),
-              style: const TextStyle(
-                  color: AppColors.accentPrimaryDark,
+              style: TextStyle(
+                  color: context.palette.accentText,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.5)),
           const SizedBox(height: 6),
@@ -760,7 +760,7 @@ class _RouteCard extends StatelessWidget {
               if (score != null) '🌀 Kurven-Score $score',
             ].join(' · '),
             style:
-                const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
+                TextStyle(color: context.palette.textPrimary, fontSize: 13),
           ),
           if (routeId != null && routeId.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -768,8 +768,8 @@ class _RouteCard extends StatelessWidget {
               width: double.infinity,
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentPrimaryDark,
-                  foregroundColor: AppColors.textPrimaryDark,
+                  backgroundColor: context.palette.accentPrimary,
+                  foregroundColor: context.palette.textPrimary,
                 ),
                 icon: const Icon(Icons.route, size: 18),
                 label: const Text('ROUTE ÖFFNEN',
@@ -811,14 +811,14 @@ class _MessageBubble extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.bgSurfaceDark,
+            color: context.palette.bgSurface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderHairlineDark),
+            border: Border.all(color: context.palette.borderHairline),
           ),
-          child: const Text(
+          child: Text(
             'Nachricht gelöscht',
             style: TextStyle(
-                color: AppColors.textMutedDark,
+                color: context.palette.textSecondary,
                 fontStyle: FontStyle.italic,
                 fontSize: 13),
           ),
@@ -834,15 +834,15 @@ class _MessageBubble extends StatelessWidget {
           BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
       decoration: BoxDecoration(
         color: isMine
-            ? AppColors.accentPrimaryDark.withValues(alpha: 0.25)
-            : AppColors.bgSurfaceRaisedDark,
+            ? context.palette.accentPrimary.withValues(alpha: 0.25)
+            : context.palette.bgSurfaceRaised,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
           bottomLeft: Radius.circular(isMine ? 16 : 4),
           bottomRight: Radius.circular(isMine ? 4 : 16),
         ),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -854,8 +854,10 @@ class _MessageBubble extends StatelessWidget {
               },
               child: Text(
                 senderName,
-                style: const TextStyle(
-                  color: AppColors.accentPrimaryDark,
+                style: TextStyle(
+                  // Akzent als SCHRIFT: im hellen Schema dunkler, sonst nur
+                  // 3,39:1 auf der hellen Blase.
+                  color: context.palette.accentText,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
@@ -870,14 +872,14 @@ class _MessageBubble extends StatelessWidget {
           else
             Text(
               message.content,
-              style: const TextStyle(
-                  color: AppColors.textPrimaryDark, fontSize: 15, height: 1.3),
+              style: TextStyle(
+                  color: context.palette.textPrimary, fontSize: 15, height: 1.3),
             ),
           const SizedBox(height: 2),
           Text(
             formatClock(message.createdAt),
-            style:
-                const TextStyle(color: AppColors.textMutedDark, fontSize: 10),
+            style: TextStyle(
+                color: context.palette.textSecondaryStrong, fontSize: 10),
           ),
         ],
       ),

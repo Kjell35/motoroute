@@ -57,7 +57,7 @@ class _MarketplaceFavoritesScreenState extends ConsumerState<MarketplaceFavorite
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.statusDanger)))
+              ? Center(child: Text(_error!, style: TextStyle(color: context.palette.statusDanger)))
               : _listings.isEmpty
                   ? const Center(child: Text('Noch keine gemerkten Angebote'))
                   : RefreshIndicator(
@@ -87,7 +87,7 @@ class _MarketplaceFavoritesScreenState extends ConsumerState<MarketplaceFavorite
                               subtitle: Text('${listing.condition.emoji} ${listing.condition.label} · 📍 ${listing.locationLabel}'),
                               trailing: Text(
                                 listing.priceLabel,
-                                style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark),
+                                style: TextStyle(fontWeight: FontWeight.w800, color: context.palette.accentPrimary),
                               ),
                               onLongPress: () => _remove(listing.id),
                               onTap: () {

@@ -19,6 +19,7 @@ class _MarketplaceInboxScreenState extends ConsumerState<MarketplaceInboxScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final token = ref.read(marketplaceTokenProvider);
       if (token != null) {
         ref.read(marketplaceNotificationsProvider.notifier).refresh(token);
@@ -77,7 +78,7 @@ class _MarketplaceInboxScreenState extends ConsumerState<MarketplaceInboxScreen>
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: n.readAt == null
-                          ? AppColors.accentPrimaryDark.withValues(alpha: 0.5)
+                          ? context.palette.accentPrimary.withValues(alpha: 0.5)
                           : scheme.outlineVariant,
                     ),
                   ),

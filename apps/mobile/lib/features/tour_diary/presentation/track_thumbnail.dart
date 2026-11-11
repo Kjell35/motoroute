@@ -20,15 +20,19 @@ class TrackThumbnail extends StatelessWidget {
     if (track.length < 2) {
       return Container(
         decoration: BoxDecoration(
-          color: AppColors.bgSurfaceRaisedDark,
+          color: context.palette.bgSurfaceRaised,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderHairlineDark),
+          border: Border.all(color: context.palette.borderHairline),
         ),
-        child: const Icon(Icons.route_outlined, color: AppColors.textMutedDark),
+        child: Icon(Icons.route_outlined, color: context.palette.stateIdle),
       );
     }
     return CustomPaint(
-      painter: _TrackPainter(track: track),
+      painter: _TrackPainter(
+        track: track,
+        accentPrimary: context.palette.accentPrimary,
+        accentSecondary: context.palette.accentSecondary,
+      ),
       size: Size.infinite,
     );
   }
@@ -36,7 +40,17 @@ class TrackThumbnail extends StatelessWidget {
 
 class _TrackPainter extends CustomPainter {
   final List<TrackPoint> track;
-  _TrackPainter({required this.track});
+
+  /// Farben kommen vom Aufrufer: ein [CustomPainter] hat keinen BuildContext,
+  /// aus dem er die Palette des aktiven Schemas lesen koennte.
+  final Color accentPrimary;
+  final Color accentSecondary;
+
+  _TrackPainter({
+    required this.track,
+    required this.accentPrimary,
+    required this.accentSecondary,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -78,14 +92,14 @@ class _TrackPainter extends CustomPainter {
 
     // Sanfter Glow hinter der Linie.
     final glow = Paint()
-      ..color = AppColors.accentPrimaryDark.withValues(alpha: 0.25)
+      ..color = accentPrimary.withValues(alpha: 0.25)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
     final line = Paint()
-      ..color = AppColors.accentPrimaryDark
+      ..color = accentPrimary
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
@@ -102,11 +116,14 @@ class _TrackPainter extends CustomPainter {
     // Start (türkis) und Ziel (orange) markieren.
     final startP = toPoint(track.first);
     final endP = toPoint(track.last);
-    canvas.drawCircle(startP, 4, Paint()..color = AppColors.accentSecondary);
-    canvas.drawCircle(endP, 4, Paint()..color = AppColors.accentPrimaryDark);
+    canvas.drawCircle(startP, 4, Paint()..color = accentSecondary);
+    canvas.drawCircle(endP, 4, Paint()..color = accentPrimary);
     canvas.drawPath(path, line);
   }
 
   @override
-  bool shouldRepaint(covariant _TrackPainter oldDelegate) => oldDelegate.track != track;
+  bool shouldRepaint(covariant _TrackPainter oldDelegate) =>
+      oldDelegate.track != track ||
+      oldDelegate.accentPrimary != accentPrimary ||
+      oldDelegate.accentSecondary != accentSecondary;
 }

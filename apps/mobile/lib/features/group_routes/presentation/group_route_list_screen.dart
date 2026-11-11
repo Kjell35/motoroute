@@ -62,12 +62,12 @@ class _GroupRouteListScreenState extends ConsumerState<GroupRouteListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
-      appBar: AppBar(backgroundColor: AppColors.bgBaseDark, title: const Text('Route planen')),
+      backgroundColor: context.palette.bgBase,
+      appBar: AppBar(backgroundColor: context.palette.bgBase, title: const Text('Route planen')),
       floatingActionButton: _isOwner
           ? FloatingActionButton.extended(
-              backgroundColor: AppColors.accentPrimaryDark,
-              foregroundColor: AppColors.textPrimaryDark,
+              backgroundColor: context.palette.accentPrimary,
+              foregroundColor: context.palette.textPrimary,
               icon: const Icon(Icons.add_road),
               label: const Text('Neue Route planen'),
               onPressed: () => Navigator.of(context)
@@ -75,9 +75,9 @@ class _GroupRouteListScreenState extends ConsumerState<GroupRouteListScreen> {
             )
           : null,
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accentPrimaryDark))
+          ? Center(child: CircularProgressIndicator(color: context.palette.accentPrimary))
           : _error != null
-              ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.textSecondaryDark)))
+              ? Center(child: Text(_error!, style: TextStyle(color: context.palette.textSecondary)))
               : (_routes == null || _routes!.isEmpty)
                   ? Center(
                       child: Padding(
@@ -85,21 +85,21 @@ class _GroupRouteListScreenState extends ConsumerState<GroupRouteListScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.route_outlined, size: 48, color: AppColors.textMutedDark),
+                            Icon(Icons.route_outlined, size: 48, color: context.palette.textSecondary),
                             const SizedBox(height: AppSpacing.md),
                             Text(
                               _isOwner
                                   ? 'Noch keine gemeinsame Route.\nPlane die erste Tour für deine Gruppe!'
                                   : 'Der Owner hat noch keine Route geplant.',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: AppColors.textSecondaryDark),
+                              style: TextStyle(color: context.palette.textSecondary),
                             ),
                           ],
                         ),
                       ),
                     )
                   : RefreshIndicator(
-                      color: AppColors.accentPrimaryDark,
+                      color: context.palette.accentPrimary,
                       onRefresh: _load,
                       child: ListView.builder(
                         itemCount: _routes!.length,
@@ -107,16 +107,16 @@ class _GroupRouteListScreenState extends ConsumerState<GroupRouteListScreen> {
                           final r = _routes![i];
                           return ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                            leading: const Icon(Icons.route, color: AppColors.accentPrimaryDark),
+                            leading: Icon(Icons.route, color: context.palette.accentPrimary),
                             title: Text(r.name,
-                                style: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w600)),
+                                style: TextStyle(color: context.palette.textPrimary, fontWeight: FontWeight.w600)),
                             subtitle: Text(
                               r.distanceMeters != null
                                   ? '${(r.distanceMeters! / 1000).round()} km · ${r.status.label}'
                                   : r.status.label,
-                              style: const TextStyle(color: AppColors.textMutedDark, fontSize: 12),
+                              style: TextStyle(color: context.palette.textSecondary, fontSize: 12),
                             ),
-                            trailing: const Icon(Icons.chevron_right, color: AppColors.textMutedDark),
+                            trailing: Icon(Icons.chevron_right, color: context.palette.textMuted),
                             onTap: () => Navigator.of(context)
                                 .pushNamed('/chat/group-route-planner', arguments: {'routeId': r.id}),
                           );

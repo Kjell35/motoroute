@@ -9,6 +9,7 @@ import 'package:motoroute_app/features/routing/domain/route_entities.dart'
     show Waypoint;
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
+import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 
 import '../data/gpx_service.dart';
@@ -87,10 +88,11 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
     final tour = _parsed;
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        systemOverlayStyle: AppTheme.overlayFor(context),
         title: Text(i18n.tr('tour.import.title'), style: AppTypography.title),
       ),
       body: SafeArea(
@@ -102,14 +104,14 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
               if (!_parsing && tour == null && _error == null)
                 _IntroCard(onPick: _pickAndParse, i18n: i18n),
               if (_parsing)
-                const Expanded(
+                Expanded(
                   child: Center(
                       child: CircularProgressIndicator(
-                          color: AppColors.accentPrimaryDark)),
+                          color: context.palette.accentPrimary)),
                 ),
               if (_error != null) ...[
-                const Icon(Icons.error_outline,
-                    size: 48, color: AppColors.statusDanger),
+                Icon(Icons.error_outline,
+                    size: 48, color: context.palette.statusDanger),
                 const SizedBox(height: AppSpacing.md),
                 Text(_error!,
                     style: AppTypography.body, textAlign: TextAlign.center),
@@ -117,8 +119,8 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     _errorHint!,
-                    style: AppTypography.caption
-                        .copyWith(color: AppColors.textSecondaryDark),
+                    style: AppTypography.captionOf(context)
+                        .copyWith(color: context.palette.textSecondary),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -165,7 +167,7 @@ class _GpxImportScreenState extends ConsumerState<GpxImportScreen> {
                   height: AppSpacing.touchTargetPlanning,
                   child: FilledButton.icon(
                     style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accentPrimaryDark),
+                        backgroundColor: context.palette.accentPrimary),
                     onPressed: () => _startNavigation(context),
                     icon: const Icon(Icons.navigation),
                     label: Text(i18n.tr('tour.import.ride')),
@@ -222,12 +224,12 @@ class _PreviewMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Chip(
-        avatar: Icon(icon, size: 18, color: AppColors.accentSecondary),
+        avatar: Icon(icon, size: 18, color: context.palette.accentSecondary),
         label: Text(label),
-        backgroundColor: AppColors.bgSurfaceDark,
-        side: const BorderSide(color: AppColors.borderHairlineDark),
+        backgroundColor: context.palette.bgSurface,
+        side: BorderSide(color: context.palette.borderHairline),
         labelStyle:
-            AppTypography.caption.copyWith(color: AppColors.textPrimaryDark),
+            AppTypography.caption.copyWith(color: context.palette.textPrimary),
       );
 }
 
@@ -243,19 +245,19 @@ class _IntroCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.upload_file,
-                size: 64, color: AppColors.textMutedDark),
+            Icon(Icons.upload_file,
+                size: 64, color: context.palette.stateIdle),
             const SizedBox(height: AppSpacing.lg),
             Text(
               i18n.tr('tour.import.intro'),
               style: AppTypography.body
-                  .copyWith(color: AppColors.textSecondaryDark),
+                  .copyWith(color: context.palette.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),
             FilledButton.icon(
               style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentPrimaryDark),
+                  backgroundColor: context.palette.accentPrimary),
               onPressed: onPick,
               icon: const Icon(Icons.folder_open),
               label: Text(i18n.tr('tour.import.pick')),

@@ -98,36 +98,36 @@ class _GroupRouteStartScreenState extends ConsumerState<GroupRouteStartScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
-      appBar: AppBar(backgroundColor: AppColors.bgBaseDark, title: const Text('Route starten')),
+      backgroundColor: context.palette.bgBase,
+      appBar: AppBar(backgroundColor: context.palette.bgBase, title: const Text('Route starten')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.motorcycle, size: 64, color: AppColors.accentPrimaryDark),
+              Icon(Icons.motorcycle, size: 64, color: context.palette.accentPrimary),
               const SizedBox(height: AppSpacing.lg),
-              const Text('Bereit für die gemeinsame Tour?',
+              Text('Bereit für die gemeinsame Tour?',
                   style: TextStyle(
-                      color: AppColors.textPrimaryDark, fontSize: 20, fontWeight: FontWeight.w700)),
+                      color: context.palette.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
               const SizedBox(height: AppSpacing.sm),
-              const Text(
+              Text(
                 'Die Route wird mit den gespeicherten Einstellungen\n(Fahrstil, Vermeidungen, Stopps) an die Navigation übergeben.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondaryDark),
+                style: TextStyle(color: context.palette.textSecondary),
               ),
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                Text(_error!, style: const TextStyle(color: AppColors.statusDanger)),
+                Text(_error!, style: TextStyle(color: context.palette.statusDanger)),
               ],
               const SizedBox(height: AppSpacing.xl),
               _starting
-                  ? const CircularProgressIndicator(color: AppColors.accentPrimaryDark)
+                  ? CircularProgressIndicator(color: context.palette.accentPrimary)
                   : FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accentPrimaryDark,
-                        foregroundColor: AppColors.textPrimaryDark,
+                        backgroundColor: context.palette.accentPrimary,
+                        foregroundColor: context.palette.textPrimary,
                         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                       ),
                       icon: const Icon(Icons.play_arrow),

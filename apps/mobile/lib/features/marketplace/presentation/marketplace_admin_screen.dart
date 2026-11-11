@@ -80,7 +80,7 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: AppColors.statusDanger,
+        backgroundColor: context.palette.statusDanger,
         content: Text('$e', style: const TextStyle(color: Colors.white)),
       ));
     }
@@ -95,7 +95,7 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: AppColors.statusDanger,
+        backgroundColor: context.palette.statusDanger,
         content: Text('$e', style: const TextStyle(color: Colors.white)),
       ));
     }
@@ -116,7 +116,7 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
                     child: Text(
                       'Kein Admin-Zugriff.\n$_error',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.statusDanger),
+                      style: TextStyle(color: context.palette.statusDanger),
                     ),
                   ),
                 )

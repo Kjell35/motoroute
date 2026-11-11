@@ -125,9 +125,9 @@ class _GroupRouteCreateScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-          backgroundColor: AppColors.bgBaseDark,
+          backgroundColor: context.palette.bgBase,
           title: const Text('Neue Gruppenroute')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -135,7 +135,7 @@ class _GroupRouteCreateScreenState
           TextField(
             controller: _nameController,
             maxLength: 80,
-            style: const TextStyle(color: AppColors.textPrimaryDark),
+            style: TextStyle(color: context.palette.textPrimary),
             decoration: _input('Name der Tour', 'z. B. Alpenrunde'),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -205,16 +205,16 @@ class _GroupRouteCreateScreenState
           Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: AppColors.bgSurfaceDark,
+              color: context.palette.bgSurface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.borderHairlineDark),
+              border: Border.all(color: context.palette.borderHairline),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Wer darf diese Route bearbeiten?',
+                Text('Wer darf diese Route bearbeiten?',
                     style: TextStyle(
-                        color: AppColors.textPrimaryDark,
+                        color: context.palette.textPrimary,
                         fontWeight: FontWeight.w700)),
                 const SizedBox(height: AppSpacing.sm),
                 RadioGroup<EditingPermission>(
@@ -222,31 +222,31 @@ class _GroupRouteCreateScreenState
                   onChanged: (value) {
                     if (value != null) setState(() => _permission = value);
                   },
-                  child: const Column(
+                  child: Column(
                     children: [
                       RadioListTile<EditingPermission>(
                         value: EditingPermission.allMembers,
-                        activeColor: AppColors.accentPrimaryDark,
+                        activeColor: context.palette.accentPrimary,
                         title: Text('🔓 Alle Gruppenmitglieder',
                             style: TextStyle(
-                                color: AppColors.textPrimaryDark,
+                                color: context.palette.textPrimary,
                                 fontSize: 14)),
                         subtitle: Text(
                             'Alle dürfen Stopps hinzufügen, verschieben, löschen',
                             style: TextStyle(
-                                color: AppColors.textMutedDark, fontSize: 12)),
+                                color: context.palette.textSecondary, fontSize: 12)),
                       ),
                       RadioListTile<EditingPermission>(
                         value: EditingPermission.ownerOnly,
-                        activeColor: AppColors.accentPrimaryDark,
+                        activeColor: context.palette.accentPrimary,
                         title: Text('🔒 Nur der Owner',
                             style: TextStyle(
-                                color: AppColors.textPrimaryDark,
+                                color: context.palette.textPrimary,
                                 fontSize: 14)),
                         subtitle: Text(
                             'Andere sehen und fahren die Route nur',
                             style: TextStyle(
-                                color: AppColors.textMutedDark, fontSize: 12)),
+                                color: context.palette.textSecondary, fontSize: 12)),
                       ),
                     ],
                   ),
@@ -258,8 +258,8 @@ class _GroupRouteCreateScreenState
 
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentPrimaryDark,
-              foregroundColor: AppColors.textPrimaryDark,
+              backgroundColor: context.palette.accentPrimary,
+              foregroundColor: context.palette.textPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             onPressed: (_creating ||
@@ -287,7 +287,7 @@ class _GroupRouteCreateScreenState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.bgSurfaceDark,
+      backgroundColor: context.palette.bgSurface,
       builder: (_) => SizedBox(
         height: MediaQuery.of(context).size.height * 0.7,
         child: Column(
@@ -298,25 +298,25 @@ class _GroupRouteCreateScreenState
                 controller: _searchController,
                 autofocus: true,
                 onChanged: _runSearch,
-                style: const TextStyle(color: AppColors.textPrimaryDark),
+                style: TextStyle(color: context.palette.textPrimary),
                 decoration: _input('Ort, Adresse oder PLZ …', 'z. B. München'),
               ),
             ),
             Expanded(
               child: _searching
-                  ? const Center(
+                  ? Center(
                       child: CircularProgressIndicator(
-                          color: AppColors.accentPrimaryDark))
+                          color: context.palette.accentPrimary))
                   : ListView.builder(
                       itemCount: _results.length,
                       itemBuilder: (context, i) {
                         final r = _results[i];
                         return ListTile(
-                          leading: const Icon(Icons.place,
-                              color: AppColors.accentPrimaryDark, size: 20),
+                          leading: Icon(Icons.place,
+                              color: context.palette.accentPrimary, size: 20),
                           title: Text(r.label,
-                              style: const TextStyle(
-                                  color: AppColors.textPrimaryDark,
+                              style: TextStyle(
+                                  color: context.palette.textPrimary,
                                   fontSize: 14)),
                           onTap: () {
                             setState(() {
@@ -338,21 +338,21 @@ class _GroupRouteCreateScreenState
     );
   }
 
-  TextStyle _sectionLabel() => const TextStyle(
-      color: AppColors.textSecondaryDark,
+  TextStyle _sectionLabel() => TextStyle(
+      color: context.palette.textSecondary,
       fontSize: 13,
       fontWeight: FontWeight.w600);
 
   InputDecoration _input(String label, String hint) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textSecondaryDark),
+        labelStyle: TextStyle(color: context.palette.textSecondary),
         hintText: hint,
-        hintStyle: const TextStyle(color: AppColors.textMutedDark),
+        hintStyle: TextStyle(color: context.palette.textSecondary),
         filled: true,
-        fillColor: AppColors.bgSurfaceDark,
+        fillColor: context.palette.bgSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.borderHairlineDark),
+          borderSide: BorderSide(color: context.palette.borderHairline),
         ),
         counterText: '',
       );
@@ -366,21 +366,21 @@ class _GroupRouteCreateScreenState
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.bgSurfaceDark,
+          color: context.palette.bgSurface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderHairlineDark),
+          border: Border.all(color: context.palette.borderHairline),
         ),
         child: Row(
           children: [
-            Icon(icon, color: AppColors.accentPrimaryDark, size: 18),
+            Icon(icon, color: context.palette.accentPrimary, size: 18),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(label,
                   style: TextStyle(
                       color: label.startsWith('Start wählen') ||
                               label.startsWith('Ziel wählen')
-                          ? AppColors.textMutedDark
-                          : AppColors.textPrimaryDark)),
+                          ? context.palette.textSecondary
+                          : context.palette.textPrimary)),
             ),
           ],
         ),
@@ -393,11 +393,11 @@ class _GroupRouteCreateScreenState
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      selectedColor: AppColors.accentPrimaryDark.withValues(alpha: 0.35),
+      selectedColor: context.palette.accentPrimary.withValues(alpha: 0.35),
       labelStyle: TextStyle(
           color: selected
-              ? AppColors.textPrimaryDark
-              : AppColors.textSecondaryDark),
+              ? context.palette.textPrimary
+              : context.palette.textSecondary),
       onSelected: (_) => setState(() => _style = style),
     );
   }
@@ -407,12 +407,12 @@ class _GroupRouteCreateScreenState
     return FilterChip(
       label: Text(label),
       selected: selected,
-      selectedColor: AppColors.accentPrimaryDark.withValues(alpha: 0.35),
-      checkmarkColor: AppColors.textPrimaryDark,
+      selectedColor: context.palette.accentPrimary.withValues(alpha: 0.35),
+      checkmarkColor: context.palette.textPrimary,
       labelStyle: TextStyle(
           color: selected
-              ? AppColors.textPrimaryDark
-              : AppColors.textSecondaryDark),
+              ? context.palette.textPrimary
+              : context.palette.textSecondary),
       onSelected: (v) => setState(() {
         v ? _avoid.add(option) : _avoid.remove(option);
       }),

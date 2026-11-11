@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
+import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
 import 'dart:typed_data';
 
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/network/error_reporter.dart';
 import '../data/gpx_service.dart';
 import '../domain/tour_entities.dart';
 import '../tour_diary_providers.dart';
@@ -29,7 +31,14 @@ class _TourDiaryScreenState extends ConsumerState<TourDiaryScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(tourDiaryProvider.notifier).load();
+      if (!mounted) return;
+      // Komfort-Daten: ein Ladefehler darf nicht als unbehandelter Fehler
+      // aus dem Callback entweichen.
+      ref
+          .read(tourDiaryProvider.notifier)
+          .load()
+          .catchError((Object e) =>
+              ErrorReporter.instance.report('tour_diary.load', e));
     });
   }
 
@@ -39,15 +48,16 @@ class _TourDiaryScreenState extends ConsumerState<TourDiaryScreen> {
     final i18n = ref.watch(i18nProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        systemOverlayStyle: AppTheme.overlayFor(context),
         title: Text(i18n.toursTab, style: AppTypography.title),
         actions: [
           IconButton(
             icon:
-                const Icon(Icons.alt_route, color: AppColors.accentPrimaryDark),
+                Icon(Icons.alt_route, color: context.palette.accentPrimary),
             tooltip: i18n.tr('tour.planner'),
             onPressed: () => Navigator.of(context).pushNamed('/waypoints'),
           ),
@@ -75,9 +85,9 @@ class _TourDiaryScreenState extends ConsumerState<TourDiaryScreen> {
       ),
       body: SafeArea(
         child: state.isLoading
-            ? const Center(
+            ? Center(
                 child: CircularProgressIndicator(
-                    color: AppColors.accentPrimaryDark))
+                    color: context.palette.accentPrimary))
             : state.error != null
                 ? _ErrorView(
                     message: state.error!,
@@ -102,8 +112,8 @@ class _EmptyView extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.route_outlined,
-                size: 64, color: AppColors.textMutedDark),
+            Icon(Icons.route_outlined,
+                size: 64, color: context.palette.stateIdle),
             const SizedBox(height: AppSpacing.lg),
             Text(
               i18n.tr('tour.empty.title'),
@@ -114,15 +124,15 @@ class _EmptyView extends ConsumerWidget {
             Text(
               i18n.tr('tour.empty.sub'),
               style: AppTypography.body
-                  .copyWith(color: AppColors.textSecondaryDark),
+                  .copyWith(color: context.palette.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),
             FilledButton.icon(
               onPressed: () => Navigator.of(context).pushNamed('/search'),
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentPrimaryDark,
-                foregroundColor: AppColors.textPrimaryDark,
+                backgroundColor: context.palette.accentPrimary,
+                foregroundColor: context.palette.textPrimary,
               ),
               icon: const Icon(Icons.search),
               label: Text(i18n.tr('tour.planDestination')),
@@ -131,8 +141,8 @@ class _EmptyView extends ConsumerWidget {
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).pushNamed('/roundtrip'),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.borderHairlineDark),
-                foregroundColor: AppColors.textPrimaryDark,
+                side: BorderSide(color: context.palette.borderHairline),
+                foregroundColor: context.palette.textPrimary,
               ),
               icon: const Icon(Icons.loop),
               label: Text(i18n.tr('tour.planRoundtrip')),
@@ -141,8 +151,8 @@ class _EmptyView extends ConsumerWidget {
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).pushNamed('/tour-import'),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.accentPrimaryDark),
-                foregroundColor: AppColors.accentPrimaryDark,
+                side: BorderSide(color: context.palette.accentPrimary),
+                foregroundColor: context.palette.accentPrimary,
               ),
               icon: const Icon(Icons.upload_file),
               label: Text(i18n.tr('tour.import.title')),
@@ -167,11 +177,11 @@ class _ErrorView extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.statusDanger),
+            Icon(Icons.error_outline,
+                size: 48, color: context.palette.statusDanger),
             const SizedBox(height: AppSpacing.md),
             Text(message,
-                style: AppTypography.caption, textAlign: TextAlign.center),
+                style: AppTypography.captionOf(context), textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.lg),
             OutlinedButton(
                 onPressed: onRetry,
@@ -202,8 +212,8 @@ class _TourList extends ConsumerWidget {
               child: FilledButton.icon(
                 onPressed: () => Navigator.of(context).pushNamed('/search'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentPrimaryDark,
-                  foregroundColor: AppColors.textPrimaryDark,
+                  backgroundColor: context.palette.accentPrimary,
+                  foregroundColor: context.palette.textPrimary,
                   minimumSize: const Size.fromHeight(48),
                 ),
                 icon: const Icon(Icons.search),
@@ -215,8 +225,8 @@ class _TourList extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).pushNamed('/roundtrip'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimaryDark,
-                  side: const BorderSide(color: AppColors.borderHairlineDark),
+                  foregroundColor: context.palette.textPrimary,
+                  side: BorderSide(color: context.palette.borderHairline),
                   minimumSize: const Size.fromHeight(48),
                 ),
                 icon: const Icon(Icons.loop),
@@ -231,8 +241,8 @@ class _TourList extends ConsumerWidget {
           child: OutlinedButton.icon(
             onPressed: () => Navigator.of(context).pushNamed('/tour-import'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.accentPrimaryDark,
-              side: const BorderSide(color: AppColors.accentPrimaryDark),
+              foregroundColor: context.palette.accentPrimary,
+              side: BorderSide(color: context.palette.accentPrimary),
               minimumSize: const Size.fromHeight(48),
             ),
             icon: const Icon(Icons.upload_file),
@@ -244,9 +254,9 @@ class _TourList extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
-            color: AppColors.bgSurfaceDark,
+            color: context.palette.bgSurface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderHairlineDark),
+            border: Border.all(color: context.palette.borderHairline),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.25),
@@ -297,10 +307,10 @@ class _SummaryCell extends StatelessWidget {
         children: [
           Text(value,
               style: AppTypography.title
-                  .copyWith(color: AppColors.accentPrimaryDark)),
+                  .copyWith(color: context.palette.accentPrimary)),
           const SizedBox(height: 2),
           Text(label,
-              style: AppTypography.caption, textAlign: TextAlign.center),
+              style: AppTypography.captionOf(context), textAlign: TextAlign.center),
         ],
       ),
     );
@@ -316,9 +326,9 @@ class _TourCard extends ConsumerWidget {
     final i18n = ref.watch(i18nProvider);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Material(
         color: Colors.transparent,
@@ -349,7 +359,7 @@ class _TourCard extends ConsumerWidget {
                       const SizedBox(height: 2),
                       Text(
                         _formatDate(tour.startedAt, i18n),
-                        style: AppTypography.caption,
+                        style: AppTypography.captionOf(context),
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Wrap(
@@ -373,7 +383,7 @@ class _TourCard extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: AppColors.textMutedDark),
+                Icon(Icons.chevron_right, color: context.palette.stateIdle),
               ],
             ),
           ),
@@ -398,9 +408,9 @@ class _Stat extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: AppColors.textMutedDark),
+        Icon(icon, size: 14, color: context.palette.stateIdle),
         const SizedBox(width: 4),
-        Text(text, style: AppTypography.caption),
+        Text(text, style: AppTypography.captionOf(context)),
       ],
     );
   }
@@ -419,11 +429,11 @@ class TourDetailScreen extends ConsumerWidget {
 
     if (tour == null) {
       return Scaffold(
-        backgroundColor: AppColors.bgBaseDark,
-        appBar: AppBar(backgroundColor: AppColors.bgBaseDark),
-        body: const Center(
+        backgroundColor: context.palette.bgBase,
+        appBar: AppBar(backgroundColor: context.palette.bgBase),
+        body: Center(
             child:
-                CircularProgressIndicator(color: AppColors.accentPrimaryDark)),
+                CircularProgressIndicator(color: context.palette.accentPrimary)),
       );
     }
 
@@ -433,25 +443,26 @@ class TourDetailScreen extends ConsumerWidget {
         '${two(tour.startedAt.hour)}:${two(tour.startedAt.minute)}';
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        systemOverlayStyle: AppTheme.overlayFor(context),
         title: Text(tour.title, style: AppTypography.title),
         actions: [
           IconButton(
             icon:
-                const Icon(Icons.delete_outline, color: AppColors.statusDanger),
+                Icon(Icons.delete_outline, color: context.palette.statusDanger),
             tooltip: i18n.tr('tour.delete'),
             onPressed: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
-                  backgroundColor: AppColors.bgSurfaceDark,
+                  backgroundColor: context.palette.bgSurface,
                   title:
                       Text(i18n.tr('tour.delete'), style: AppTypography.title),
                   content: Text(i18n.tr('tour.deleteConfirm'),
-                      style: AppTypography.caption),
+                      style: AppTypography.captionOf(context)),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -460,7 +471,7 @@ class TourDetailScreen extends ConsumerWidget {
                     FilledButton(
                       onPressed: () => Navigator.of(dialogContext).pop(true),
                       style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.statusDanger),
+                          backgroundColor: context.palette.statusDanger),
                       child: Text(i18n.tr('tour.delete')),
                     ),
                   ],
@@ -485,7 +496,7 @@ class TourDetailScreen extends ConsumerWidget {
               child: TrackThumbnail(track: tour.track, large: true),
             ),
             const SizedBox(height: AppSpacing.lg),
-            Text(dateText, style: AppTypography.caption),
+            Text(dateText, style: AppTypography.captionOf(context)),
             const SizedBox(height: AppSpacing.lg),
             Row(
               children: [
@@ -517,8 +528,8 @@ class TourDetailScreen extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: AppSpacing.xs),
                   child: Row(
                     children: [
-                      const Icon(Icons.location_on_outlined,
-                          size: 16, color: AppColors.accentPrimaryDark),
+                      Icon(Icons.location_on_outlined,
+                          size: 16, color: context.palette.accentPrimary),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                           child: Text(poi.label, style: AppTypography.body)),
@@ -533,7 +544,7 @@ class TourDetailScreen extends ConsumerWidget {
               child: FilledButton.icon(
                 onPressed: () => _exportGpx(context, ref, tour),
                 style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accentPrimaryDark),
+                    backgroundColor: context.palette.accentPrimary),
                 icon: const Icon(Icons.ios_share),
                 label: Text(i18n.tr('tour.export')),
               ),
@@ -585,15 +596,15 @@ class _DetailCell extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.md),
         margin: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
-          color: AppColors.bgSurfaceDark,
+          color: context.palette.bgSurface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderHairlineDark),
+          border: Border.all(color: context.palette.borderHairline),
         ),
         child: Column(
           children: [
             Text(value, style: AppTypography.title.copyWith(fontSize: 18)),
             const SizedBox(height: 2),
-            Text(label, style: AppTypography.caption),
+            Text(label, style: AppTypography.captionOf(context)),
           ],
         ),
       ),

@@ -103,9 +103,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final state = ref.watch(searchControllerProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: Text(
           widget.addWaypointMode
               ? ref.watch(i18nProvider).searchWaypointTitle
@@ -122,9 +122,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               child: Container(
                 height: AppSpacing.touchTargetPlanning,
                 decoration: BoxDecoration(
-                  color: AppColors.bgSurfaceDark,
+                  color: context.palette.bgSurface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderHairlineDark),
+                  border: Border.all(color: context.palette.borderHairline),
                 ),
                 child: TextField(
                   controller: _queryController,
@@ -150,16 +150,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                     prefixIcon:
-                        const Icon(Icons.search, color: AppColors.textSecondaryDark),
+                        Icon(Icons.search, color: context.palette.textSecondary),
                     suffixIcon: IconButton(
                       icon:
-                          const Icon(Icons.close, color: AppColors.textSecondaryDark),
+                          Icon(Icons.close, color: context.palette.textSecondary),
                       onPressed: () {
                         _queryController.clear();
                         ref.read(searchControllerProvider.notifier).submit('');
                       },
                     ),
-                    hintStyle: AppTypography.caption,
+                    hintStyle: AppTypography.captionOf(context),
                     hintText: ref.watch(i18nProvider).searchHint,
                   ),
                 ),
@@ -183,7 +183,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off, color: AppColors.textMutedDark, size: 48),
+            Icon(Icons.cloud_off, color: context.palette.textMuted, size: 48),
             const SizedBox(height: AppSpacing.md),
             Text(state.error!, style: AppTypography.body),
             const SizedBox(height: AppSpacing.lg),
@@ -199,12 +199,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return ListView(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         children: [
-          const Text('Zuletzt gesucht', style: AppTypography.caption),
+          Text('Zuletzt gesucht', style: AppTypography.captionOf(context)),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Noch keine Suchanfragen in dieser Sitzung.',
             style:
-                AppTypography.body.copyWith(color: AppColors.textSecondaryDark),
+                AppTypography.body.copyWith(color: context.palette.textSecondary),
           ),
         ],
       );
@@ -213,7 +213,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return Center(
         child: Text('Keine Treffer',
             style:
-                AppTypography.body.copyWith(color: AppColors.textSecondaryDark)),
+                AppTypography.body.copyWith(color: context.palette.textSecondary)),
       );
     }
     return ListView.builder(
@@ -224,11 +224,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         return ListTile(
           leading: Icon(
             result.isPoi ? Icons.place : Icons.location_city,
-            color: AppColors.accentSecondary,
+            color: context.palette.accentSecondary,
             size: 24,
           ),
           title: Text(result.label, style: AppTypography.bodyStrong),
-          subtitle: Text(_subtitleFor(result), style: AppTypography.caption),
+          subtitle: Text(_subtitleFor(result), style: AppTypography.captionOf(context)),
           onTap: () => _selectResult(result),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 0, vertical: AppSpacing.xs),

@@ -151,8 +151,8 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
 
   void _snack(String message, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: error ? AppColors.statusDanger : AppColors.bgSurfaceRaisedDark,
-      content: Text(message, style: const TextStyle(color: AppColors.textPrimaryDark)),
+      backgroundColor: error ? context.palette.statusDanger : context.palette.bgSurfaceRaised,
+      content: Text(message, style: TextStyle(color: context.palette.textPrimary)),
     ));
   }
 
@@ -168,7 +168,7 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
         actions: [
           IconButton(
             icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_outline,
-                color: _isFavorite ? AppColors.statusDanger : null),
+                color: _isFavorite ? context.palette.statusDanger : null),
             onPressed: _toggleFavorite,
           ),
           IconButton(
@@ -180,7 +180,7 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.statusDanger)))
+              ? Center(child: Text(_error!, style: TextStyle(color: context.palette.statusDanger)))
               : listing == null
                   ? const Center(child: Text('Angebot nicht gefunden'))
                   : ListView(
@@ -230,7 +230,7 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
                             children: [
                               Text(
                                 listing.priceLabel,
-                                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.accentPrimaryDark),
+                                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: context.palette.accentPrimary),
                               ),
                               const SizedBox(height: 6),
                               Text(listing.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
@@ -277,8 +277,8 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
                 child: FilledButton.icon(
                   onPressed: _busy ? null : _contactSeller,
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accentPrimaryDark,
-                    foregroundColor: AppColors.textPrimaryDark,
+                    backgroundColor: context.palette.accentPrimary,
+                    foregroundColor: context.palette.textPrimary,
                     minimumSize: const Size.fromHeight(52),
                   ),
                   icon: const Icon(Icons.chat_bubble_outline),

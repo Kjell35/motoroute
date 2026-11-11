@@ -22,20 +22,20 @@ class WaypointManagementScreen extends ConsumerWidget {
     final tapMode = ref.watch(mapWaypointTapModeProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('Routenplanung', style: AppTypography.title),
         actions: [
           // M3-Feature „Route am Computer planen“ (QR + Plan abrufen).
           IconButton(
             tooltip: 'Route am Computer planen',
-            icon: const Icon(Icons.computer_outlined,
-                color: AppColors.textSecondaryDark),
+            icon: Icon(Icons.computer_outlined,
+                color: context.palette.textSecondary),
             onPressed: () {
               showModalBottomSheet<void>(
                 context: context,
-                backgroundColor: AppColors.bgSurfaceDark,
+                backgroundColor: context.palette.bgSurface,
                 showDragHandle: true,
                 isScrollControlled: true,
                 builder: (_) =>
@@ -45,8 +45,8 @@ class WaypointManagementScreen extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'GPX importieren',
-            icon: const Icon(Icons.upload_file_outlined,
-                color: AppColors.textSecondaryDark),
+            icon: Icon(Icons.upload_file_outlined,
+                color: context.palette.textSecondary),
             onPressed: () => Navigator.of(context).pushNamed('/tour-import'),
           ),
         ],
@@ -60,7 +60,7 @@ class WaypointManagementScreen extends ConsumerWidget {
                       child: Text(
                         'Noch keine Wegpunkte - suche ein Ziel, um zu starten.',
                         style: AppTypography.body
-                            .copyWith(color: AppColors.textSecondaryDark),
+                            .copyWith(color: context.palette.textSecondary),
                         textAlign: TextAlign.center,
                       ),
                     )
@@ -82,10 +82,10 @@ class WaypointManagementScreen extends ConsumerWidget {
                           key: ValueKey('${wp.lat}_${wp.lng}_$index'),
                           margin: const EdgeInsets.only(bottom: AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: AppColors.bgSurfaceDark,
+                            color: context.palette.bgSurface,
                             borderRadius: BorderRadius.circular(12),
                             border:
-                                Border.all(color: AppColors.borderHairlineDark),
+                                Border.all(color: context.palette.borderHairline),
                           ),
                           child: ListTile(
                             leading: Icon(
@@ -95,10 +95,10 @@ class WaypointManagementScreen extends ConsumerWidget {
                                       ? Icons.flag
                                       : Icons.location_on_outlined,
                               color: isFirst
-                                  ? AppColors.accentPrimaryDark
+                                  ? context.palette.accentPrimary
                                   : isLast
-                                      ? AppColors.accentSecondary
-                                      : AppColors.textSecondaryDark,
+                                      ? context.palette.accentSecondary
+                                      : context.palette.textSecondary,
                               size: 20,
                             ),
                             title: Text(
@@ -107,7 +107,7 @@ class WaypointManagementScreen extends ConsumerWidget {
                             ),
                             subtitle: Text(
                               '${wp.lat.toStringAsFixed(4)}, ${wp.lng.toStringAsFixed(4)}',
-                              style: AppTypography.caption,
+                              style: AppTypography.captionOf(context),
                             ),
                             trailing: IconButton(
                               // Start und Ziel sind im MVP-Flow Fixpunkte -
@@ -119,8 +119,8 @@ class WaypointManagementScreen extends ConsumerWidget {
                                       notifier.state = updated;
                                     }
                                   : null,
-                              icon: const Icon(Icons.close,
-                                  color: AppColors.textMutedDark, size: 20),
+                              icon: Icon(Icons.close,
+                                  color: context.palette.textMuted, size: 20),
                             ),
                           ),
                         );
@@ -139,9 +139,9 @@ class WaypointManagementScreen extends ConsumerWidget {
                           '/search',
                           arguments: {'addWaypoint': true}),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: AppColors.borderHairlineDark),
-                        foregroundColor: AppColors.textPrimaryDark,
+                        side: BorderSide(
+                            color: context.palette.borderHairline),
+                        foregroundColor: context.palette.textPrimary,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -162,9 +162,9 @@ class WaypointManagementScreen extends ConsumerWidget {
                         Navigator.of(context).pushNamed('/map');
                       },
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: AppColors.borderHairlineDark),
-                        foregroundColor: AppColors.textPrimaryDark,
+                        side: BorderSide(
+                            color: context.palette.borderHairline),
+                        foregroundColor: context.palette.textPrimary,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),

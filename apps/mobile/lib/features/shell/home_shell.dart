@@ -59,7 +59,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.textMutedDark,
+                  color: AppColors.stateIdleDark,
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),

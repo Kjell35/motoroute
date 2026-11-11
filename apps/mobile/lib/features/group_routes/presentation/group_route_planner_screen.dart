@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/formatters.dart'
@@ -32,14 +33,22 @@ class _GroupRoutePlannerScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(groupRouteDetailProvider(widget.routeId).notifier).load();
+      // Screen kann vor dem ersten Frame verlassen werden - ref.read auf
+      // einem entsorgten State wirft.
+      if (!mounted) return;
+      ref
+          .read(groupRouteDetailProvider(widget.routeId).notifier)
+          .load()
+          .catchError((Object e) =>
+              ErrorReporter.instance.report('group_route.load', e));
       // Recalc läuft serverseitig asynchron - Metriken kurz nachziehen.
       _metricsPoll = Timer.periodic(const Duration(seconds: 8), (_) {
-        if (mounted) {
-          ref
-              .read(groupRouteDetailProvider(widget.routeId).notifier)
-              .refreshFromRealtime();
-        }
+        if (!mounted) return;
+        ref
+            .read(groupRouteDetailProvider(widget.routeId).notifier)
+            .refreshFromRealtime()
+            .catchError((Object e) =>
+                ErrorReporter.instance.report('group_route.poll', e));
       });
     });
   }
@@ -56,9 +65,9 @@ class _GroupRoutePlannerScreenState
     final me = ref.watch(chatMeProvider).value;
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: async.valueOrNull == null
             ? const Text('Gruppenroute')
             : Text(async.valueOrNull!.route.name),
@@ -67,7 +76,7 @@ class _GroupRoutePlannerScreenState
           if (async.valueOrNull != null)
             IconButton(
               icon:
-                  const Icon(Icons.groups, color: AppColors.textSecondaryDark),
+                  Icon(Icons.groups, color: context.palette.textSecondary),
               tooltip: 'Live-Gruppenfahrt',
               onPressed: () => Navigator.of(context).pushNamed(
                   '/chat/group-ride',
@@ -76,15 +85,15 @@ class _GroupRoutePlannerScreenState
         ],
       ),
       body: async.when(
-        loading: () => const Center(
+        loading: () => Center(
             child:
-                CircularProgressIndicator(color: AppColors.accentPrimaryDark)),
+                CircularProgressIndicator(color: context.palette.accentPrimary)),
         error: (msg, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('$msg',
-                  style: const TextStyle(color: AppColors.textSecondaryDark)),
+                  style: TextStyle(color: context.palette.textSecondary)),
               const SizedBox(height: AppSpacing.md),
               TextButton(
                 onPressed: () => ref
@@ -108,29 +117,29 @@ class _GroupRoutePlannerScreenState
     final isOwner = route.createdBy == meId;
     return [
       PopupMenuButton<String>(
-        color: AppColors.bgSurfaceDark,
-        icon: const Icon(Icons.more_vert, color: AppColors.textSecondaryDark),
+        color: context.palette.bgSurface,
+        icon: Icon(Icons.more_vert, color: context.palette.textSecondary),
         onSelected: (action) => _onMenuAction(context, action, route, isOwner),
         itemBuilder: (_) => [
           if (isOwner)
-            const PopupMenuItem(
+            PopupMenuItem(
                 value: 'permission',
                 child: Text('Routenberechtigungen',
-                    style: TextStyle(color: AppColors.textPrimaryDark))),
-          const PopupMenuItem(
+                    style: TextStyle(color: context.palette.textPrimary))),
+          PopupMenuItem(
               value: 'duplicate',
               child: Text('Route duplizieren',
-                  style: TextStyle(color: AppColors.textPrimaryDark))),
+                  style: TextStyle(color: context.palette.textPrimary))),
           if (isOwner && route.status == GroupRouteStatus.finalized)
-            const PopupMenuItem(
+            PopupMenuItem(
                 value: 'lock',
                 child: Text('Route sperren',
-                    style: TextStyle(color: AppColors.textPrimaryDark))),
+                    style: TextStyle(color: context.palette.textPrimary))),
           if (isOwner && route.status == GroupRouteStatus.locked)
-            const PopupMenuItem(
+            PopupMenuItem(
                 value: 'unlock',
                 child: Text('Route freigeben',
-                    style: TextStyle(color: AppColors.textPrimaryDark))),
+                    style: TextStyle(color: context.palette.textPrimary))),
         ],
       ),
     ];
@@ -146,29 +155,29 @@ class _GroupRoutePlannerScreenState
         final selected = await showDialog<EditingPermission>(
           context: context,
           builder: (dialogContext) => SimpleDialog(
-            backgroundColor: AppColors.bgSurfaceDark,
-            title: const Text('Routenberechtigungen',
-                style: TextStyle(color: AppColors.textPrimaryDark)),
+            backgroundColor: context.palette.bgSurface,
+            title: Text('Routenberechtigungen',
+                style: TextStyle(color: context.palette.textPrimary)),
             children: [
               RadioGroup<EditingPermission>(
                 groupValue: current,
                 onChanged: (value) {
                   if (value != null) Navigator.pop(dialogContext, value);
                 },
-                child: const Column(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     RadioListTile<EditingPermission>(
                       value: EditingPermission.allMembers,
-                      activeColor: AppColors.accentPrimaryDark,
+                      activeColor: context.palette.accentPrimary,
                       title: Text('🔓 Alle Gruppenmitglieder',
-                          style: TextStyle(color: AppColors.textPrimaryDark)),
+                          style: TextStyle(color: context.palette.textPrimary)),
                     ),
                     RadioListTile<EditingPermission>(
                       value: EditingPermission.ownerOnly,
-                      activeColor: AppColors.accentPrimaryDark,
+                      activeColor: context.palette.accentPrimary,
                       title: Text('🔒 Nur Owner',
-                          style: TextStyle(color: AppColors.textPrimaryDark)),
+                          style: TextStyle(color: context.palette.textPrimary)),
                     ),
                   ],
                 ),
@@ -225,7 +234,7 @@ class _GroupRoutePlannerScreenState
               // Live-Gruppenfahrt (Abschnitt 18): wer fährt mit?
               OutlinedButton.icon(
                 icon:
-                    const Icon(Icons.groups, color: AppColors.accentSecondary),
+                    Icon(Icons.groups, color: context.palette.accentSecondary),
                 label: const Text('👥 LIVE-GRUPPENFAHRT',
                     style: TextStyle(
                         fontWeight: FontWeight.w700, letterSpacing: 1)),
@@ -233,7 +242,7 @@ class _GroupRoutePlannerScreenState
                     '/chat/group-ride',
                     arguments: {'routeId': widget.routeId}),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.accentSecondary),
+                  side: BorderSide(color: context.palette.accentSecondary),
                   minimumSize: const Size.fromHeight(48),
                 ),
               ),
@@ -248,12 +257,12 @@ class _GroupRoutePlannerScreenState
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.md),
-      color: AppColors.bgSurfaceDark,
+      color: context.palette.bgSurface,
       child: Row(
         children: [
           Text(route.status.label,
-              style: const TextStyle(
-                  color: AppColors.textPrimaryDark,
+              style: TextStyle(
+                  color: context.palette.textPrimary,
                   fontWeight: FontWeight.w700)),
           const Spacer(),
           if (isOwner && route.status != GroupRouteStatus.locked)
@@ -271,7 +280,7 @@ class _GroupRoutePlannerScreenState
                 route.status == GroupRouteStatus.finalized
                     ? 'Weiter planen'
                     : 'Route fertigstellen',
-                style: const TextStyle(color: AppColors.accentPrimaryDark),
+                style: TextStyle(color: context.palette.accentPrimary),
               ),
             ),
         ],
@@ -289,9 +298,9 @@ class _GroupRoutePlannerScreenState
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,8 +315,8 @@ class _GroupRoutePlannerScreenState
           const SizedBox(height: AppSpacing.md),
           Text(
             '${route.startName ?? 'Start'}  →  ${route.destName ?? 'Ziel'}',
-            style: const TextStyle(
-                color: AppColors.textSecondaryDark, fontSize: 13),
+            style: TextStyle(
+                color: context.palette.textSecondary, fontSize: 13),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -332,13 +341,13 @@ class _GroupRoutePlannerScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(value,
-            style: const TextStyle(
-                color: AppColors.textPrimaryDark,
+            style: TextStyle(
+                color: context.palette.textPrimary,
                 fontSize: 22,
                 fontWeight: FontWeight.w700)),
         Text(label,
             style:
-                const TextStyle(color: AppColors.textMutedDark, fontSize: 12)),
+                TextStyle(color: context.palette.textSecondary, fontSize: 12)),
       ],
     );
   }
@@ -347,12 +356,12 @@ class _GroupRoutePlannerScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceRaisedDark,
+        color: context.palette.bgSurfaceRaised,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(text,
-          style: const TextStyle(
-              color: AppColors.textSecondaryDark, fontSize: 11)),
+          style: TextStyle(
+              color: context.palette.textSecondary, fontSize: 11)),
     );
   }
 
@@ -363,19 +372,19 @@ class _GroupRoutePlannerScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Stopps (${stops.length})',
-            style: const TextStyle(
-                color: AppColors.textPrimaryDark,
+            style: TextStyle(
+                color: context.palette.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700)),
         const SizedBox(height: AppSpacing.sm),
         // START-Marker
         _terminalTile('START', route: true),
         if (stops.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
             child: Text(
                 'Noch keine Stopps - füge Tankstellen, Treffs oder Aussichtspunkte hinzu!',
-                style: TextStyle(color: AppColors.textMutedDark)),
+                style: TextStyle(color: context.palette.textSecondary)),
           )
         else
           ReorderableListView.builder(
@@ -410,11 +419,11 @@ class _GroupRoutePlannerScreenState
       child: Row(
         children: [
           Icon(route ? Icons.trip_origin : Icons.flag,
-              color: AppColors.accentPrimaryDark, size: 18),
+              color: context.palette.accentPrimary, size: 18),
           const SizedBox(width: AppSpacing.sm),
           Text(label,
-              style: const TextStyle(
-                  color: AppColors.textSecondaryDark,
+              style: TextStyle(
+                  color: context.palette.textSecondary,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1)),
         ],
@@ -428,21 +437,21 @@ class _GroupRoutePlannerScreenState
       key: key,
       contentPadding: EdgeInsets.zero,
       leading: Text('${stop.position}.',
-          style: const TextStyle(
-              color: AppColors.textMutedDark, fontWeight: FontWeight.w700)),
+          style: TextStyle(
+              color: context.palette.textSecondary, fontWeight: FontWeight.w700)),
       title: Text('${stop.category.label}  ${stop.name}',
-          style: const TextStyle(color: AppColors.textPrimaryDark),
+          style: TextStyle(color: context.palette.textPrimary),
           maxLines: 1,
           overflow: TextOverflow.ellipsis),
       subtitle: stop.address != null
           ? Text(stop.address!,
               style:
-                  const TextStyle(color: AppColors.textMutedDark, fontSize: 12))
+                  TextStyle(color: context.palette.textSecondary, fontSize: 12))
           : null,
       trailing: canEdit
           ? IconButton(
-              icon: const Icon(Icons.close,
-                  color: AppColors.textMutedDark, size: 18),
+              icon: Icon(Icons.close,
+                  color: context.palette.textSecondary, size: 18),
               onPressed: () => _confirmDelete(context, stop),
             )
           : null,
@@ -453,18 +462,18 @@ class _GroupRoutePlannerScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.bgSurfaceDark,
-        title: const Text('Stopp wirklich entfernen?',
-            style: TextStyle(color: AppColors.textPrimaryDark)),
+        backgroundColor: context.palette.bgSurface,
+        title: Text('Stopp wirklich entfernen?',
+            style: TextStyle(color: context.palette.textPrimary)),
         content: Text(stop.name,
-            style: const TextStyle(color: AppColors.textSecondaryDark)),
+            style: TextStyle(color: context.palette.textSecondary)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Abbrechen')),
           FilledButton(
             style:
-                FilledButton.styleFrom(backgroundColor: AppColors.statusDanger),
+                FilledButton.styleFrom(backgroundColor: context.palette.statusDanger),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Entfernen'),
           ),
@@ -480,14 +489,14 @@ class _GroupRoutePlannerScreenState
 
   Widget _addStopButton(BuildContext context) {
     return OutlinedButton.icon(
-      icon: const Icon(Icons.add_location_alt,
-          color: AppColors.accentPrimaryDark),
-      label: const Text('＋ Stopp hinzufügen',
+      icon: Icon(Icons.add_location_alt,
+          color: context.palette.accentPrimary),
+      label: Text('＋ Stopp hinzufügen',
           style: TextStyle(
-              color: AppColors.textPrimaryDark, fontWeight: FontWeight.w600)),
+              color: context.palette.textPrimary, fontWeight: FontWeight.w600)),
       onPressed: () => _openAddStopSheet(context),
       style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: AppColors.accentPrimaryDark),
+        side: BorderSide(color: context.palette.accentPrimary),
         padding: const EdgeInsets.symmetric(vertical: 12),
       ),
     );
@@ -497,7 +506,7 @@ class _GroupRoutePlannerScreenState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.bgSurfaceDark,
+      backgroundColor: context.palette.bgSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -510,16 +519,16 @@ class _GroupRoutePlannerScreenState
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.bgSurfaceDark,
+        color: context.palette.bgSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderHairlineDark),
+        border: Border.all(color: context.palette.borderHairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Änderungen',
+          Text('Änderungen',
               style: TextStyle(
-                  color: AppColors.textSecondaryDark,
+                  color: context.palette.textSecondary,
                   fontWeight: FontWeight.w700,
                   fontSize: 13)),
           const SizedBox(height: AppSpacing.sm),
@@ -527,8 +536,8 @@ class _GroupRoutePlannerScreenState
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   '${c.userName ?? 'Jemand'} · ${_actionLabel(c.action)}${c.detail != null ? ': ${c.detail}' : ''}',
-                  style: const TextStyle(
-                      color: AppColors.textMutedDark, fontSize: 12),
+                  style: TextStyle(
+                      color: context.palette.textSecondary, fontSize: 12),
                 ),
               )),
         ],
@@ -550,8 +559,8 @@ class _GroupRoutePlannerScreenState
   Widget _startButton(BuildContext context, GroupRoute route) {
     return FilledButton.icon(
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.accentPrimaryDark,
-        foregroundColor: AppColors.textPrimaryDark,
+        backgroundColor: context.palette.accentPrimary,
+        foregroundColor: context.palette.textPrimary,
         minimumSize: const Size.fromHeight(56),
       ),
       icon: const Icon(Icons.motorcycle, size: 24),
@@ -653,9 +662,9 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Stopp hinzufügen',
+            Text('Stopp hinzufügen',
                 style: TextStyle(
-                    color: AppColors.textPrimaryDark,
+                    color: context.palette.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
@@ -663,14 +672,14 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
               controller: _searchController,
               autofocus: true,
               onChanged: _search,
-              style: const TextStyle(color: AppColors.textPrimaryDark),
+              style: TextStyle(color: context.palette.textPrimary),
               decoration: InputDecoration(
                 hintText: 'Adresse, Ort oder PLZ suchen …',
-                hintStyle: const TextStyle(color: AppColors.textMutedDark),
-                prefixIcon: const Icon(Icons.search,
-                    color: AppColors.textSecondaryDark),
+                hintStyle: TextStyle(color: context.palette.textSecondary),
+                prefixIcon: Icon(Icons.search,
+                    color: context.palette.textSecondary),
                 filled: true,
-                fillColor: AppColors.bgSurfaceRaisedDark,
+                fillColor: context.palette.bgSurfaceRaised,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -685,7 +694,7 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
                   .map((c) => ActionChip(
                         label:
                             Text(c.label, style: const TextStyle(fontSize: 12)),
-                        backgroundColor: AppColors.bgSurfaceRaisedDark,
+                        backgroundColor: context.palette.bgSurfaceRaised,
                         onPressed: () {
                           // Kategorie als Name-Vorlage ohne Koordinate macht
                           // keinen Sinn - Nutzer sucht zuerst, Kategorie ist
@@ -703,25 +712,25 @@ class _AddStopSheetState extends ConsumerState<_AddStopSheet> {
             SizedBox(
               height: 240,
               child: _searching
-                  ? const Center(
+                  ? Center(
                       child: CircularProgressIndicator(
-                          color: AppColors.accentPrimaryDark))
+                          color: context.palette.accentPrimary))
                   : _results.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                               'Suche einen Ort - oder tippe später direkt auf der Karte.',
-                              style: TextStyle(color: AppColors.textMutedDark)))
+                              style: TextStyle(color: context.palette.textSecondary)))
                       : ListView.builder(
                           itemCount: _results.length,
                           itemBuilder: (context, i) {
                             final r = _results[i];
                             return ListTile(
                               dense: true,
-                              leading: const Icon(Icons.place,
-                                  color: AppColors.accentPrimaryDark, size: 18),
+                              leading: Icon(Icons.place,
+                                  color: context.palette.accentPrimary, size: 18),
                               title: Text(r.label,
-                                  style: const TextStyle(
-                                      color: AppColors.textPrimaryDark,
+                                  style: TextStyle(
+                                      color: context.palette.textPrimary,
                                       fontSize: 13)),
                               onTap: () => _add(r, StopCategory.other),
                             );
