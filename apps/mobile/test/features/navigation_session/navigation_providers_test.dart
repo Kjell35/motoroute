@@ -105,7 +105,10 @@ void main() {
       Waypoint(lat: 48.1, lng: 11.1, label: 'Ziel'),
     ];
 
-    when(() => location.watchPosition(tuning: any(named: 'tuning')))
+    when(() => location.watchPosition(
+          tuning: any(named: 'tuning'),
+          backgroundNavigation: true,
+        ))
         .thenAnswer((_) => positions.stream);
     when(() => routing.reroute(
           waypoints: any(named: 'waypoints'),

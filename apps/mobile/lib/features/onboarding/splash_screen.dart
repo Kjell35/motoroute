@@ -1,14 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
+import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/features/auth/auth_providers.dart';
 import 'package:motoroute_app/features/ride_history/ride_history_settings.dart';
+import '../../core/network/error_reporter.dart';
 
 /// Screen 1: Splash - Markenmoment + Entscheider. Während der Animation
 /// läuft parallel die Auth-Wiederherstellung; nach Minimum 900 ms und
@@ -46,7 +49,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Fahrhistorie-Einstellungen laden (lokaler Spiegel sofort,
     // Server-Stand best-effort - Fehler sind hier egal).
     unawaited(
-      ref.read(rideHistorySettingsProvider.notifier).load().catchError((_) {}),
+      ref.read(rideHistorySettingsProvider.notifier).load().catchError(
+          (Object e) =>
+              ErrorReporter.instance.report('ride_history.settings', e)),
     );
 
     // Kaltstart-Warmup: Die Free-Tier-Instanz des Backends schläft nach
@@ -125,61 +130,67 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fade,
-          child: ScaleTransition(
-            scale: _scale,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.accentPrimaryDark.withValues(alpha: 0.12),
-                    border: Border.all(
+    // Der Splash ist IMMER dunkel (Markenmoment) - die Symbole
+    // müssen deshalb auch im hellen Schema hell bleiben.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.statusOverlayDark,
+      child: Scaffold(
+        backgroundColor: AppColors.bgBaseDark,
+        body: Center(
+          child: FadeTransition(
+            opacity: _fade,
+            child: ScaleTransition(
+              scale: _scale,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color:
-                          AppColors.accentPrimaryDark.withValues(alpha: 0.35),
-                      width: 2,
+                          AppColors.accentPrimaryDark.withValues(alpha: 0.12),
+                      border: Border.all(
+                        color:
+                            AppColors.accentPrimaryDark.withValues(alpha: 0.35),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.two_wheeler,
+                      size: 52,
+                      color: AppColors.accentPrimaryDark,
                     ),
                   ),
-                  child: const Icon(
-                    Icons.two_wheeler,
-                    size: 52,
-                    color: AppColors.accentPrimaryDark,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                const Text(
-                  'MOTOROUTE',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimaryDark,
-                    letterSpacing: 4,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                const Text('Fahrspaß statt nur ankommen',
-                    style: AppTypography.caption),
-                const SizedBox(height: AppSpacing.xxl),
-                SizedBox(
-                  width: 132,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: const LinearProgressIndicator(
-                      minHeight: 2,
-                      backgroundColor: AppColors.bgSurfaceRaisedDark,
-                      valueColor:
-                          AlwaysStoppedAnimation(AppColors.accentPrimaryDark),
+                  const SizedBox(height: AppSpacing.lg),
+                  const Text(
+                    'MOTOROUTE',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimaryDark,
+                      letterSpacing: 4,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: AppSpacing.xs),
+                  const Text('Fahrspaß statt nur ankommen',
+                      style: AppTypography.caption),
+                  const SizedBox(height: AppSpacing.xxl),
+                  SizedBox(
+                    width: 132,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: const LinearProgressIndicator(
+                        minHeight: 2,
+                        backgroundColor: AppColors.bgSurfaceRaisedDark,
+                        valueColor:
+                            AlwaysStoppedAnimation(AppColors.accentPrimaryDark),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

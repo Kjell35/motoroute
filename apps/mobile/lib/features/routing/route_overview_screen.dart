@@ -4,6 +4,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
+import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
@@ -91,10 +92,20 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
     final latLngs = route.geometry.map((p) => LatLng(p[1], p[0])).toList();
     if (latLngs.isEmpty) return;
 
+    // Casing unter der Route: auf dem hellen Positron-Stil reicht das Orange
+    // allein nicht auf 3:1 gegen die Karte.
     await controller.addLine(
       LineOptions(
         geometry: latLngs,
-        lineColor: '#FF5A1F',
+        lineColor: AppColors.bgBaseDark.mapHex,
+        lineWidth: 9.0,
+        lineOpacity: 0.9,
+      ),
+    );
+    await controller.addLine(
+      LineOptions(
+        geometry: latLngs,
+        lineColor: AppColors.accentPrimaryDark.mapHex,
         lineWidth: 5.0,
         lineOpacity: 0.9,
       ),
@@ -111,11 +122,13 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
           geometry: LatLng(wp.lat, wp.lng),
           iconImage: 'circle-15',
           iconSize: isFirst || isLast ? 1.4 : 1.1,
+          iconHaloColor: AppColors.bgBaseDark.mapHex,
+          iconHaloWidth: 2.0,
           iconColor: isFirst
-              ? '#3DD68C'
+              ? AppColors.mapRouteStart.mapHex
               : isLast
-                  ? '#E5484D'
-                  : '#FF5A1F',
+                  ? AppColors.statusDanger.mapHex
+                  : AppColors.accentPrimaryDark.mapHex,
           textField: wp.label ??
               (isFirst
                   ? 'Start'
@@ -124,8 +137,8 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
                       : '${i + 1}'),
           textOffset: const Offset(0, 1.2),
           textSize: 12,
-          textColor: '#FFFFFF',
-          textHaloColor: '#0B0E11',
+          textColor: AppColors.textPrimaryDark.mapHex,
+          textHaloColor: AppColors.bgBaseDark.mapHex,
           textHaloWidth: 1.2,
         ));
       } catch (_) {}
@@ -163,7 +176,11 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
     if (route == null) {
       return Scaffold(
         backgroundColor: AppColors.bgBaseDark,
-        appBar: AppBar(backgroundColor: AppColors.bgBaseDark),
+        appBar: AppBar(
+          backgroundColor: AppColors.bgBaseDark,
+          foregroundColor: AppColors.textPrimaryDark,
+          systemOverlayStyle: AppTheme.statusOverlayDark,
+        ),
         body: Center(child: Text(i18n.tr('route.overview'))),
       );
     }
@@ -174,6 +191,8 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
       backgroundColor: AppColors.bgBaseDark,
       appBar: AppBar(
         backgroundColor: AppColors.bgBaseDark,
+        foregroundColor: AppColors.textPrimaryDark,
+        systemOverlayStyle: AppTheme.statusOverlayDark,
         title: Text(i18n.tr('route.overview'), style: AppTypography.title),
       ),
       body: SafeArea(
@@ -218,7 +237,7 @@ class _RouteOverviewScreenState extends ConsumerState<RouteOverviewScreen> {
                                 ? i18n.tr('map.offlineNote')
                                 : i18n.tr('map.attribution'),
                             style: const TextStyle(
-                              color: AppColors.textMutedDark,
+                              color: AppColors.textSecondaryDark,
                               fontSize: 10,
                             ),
                           ),

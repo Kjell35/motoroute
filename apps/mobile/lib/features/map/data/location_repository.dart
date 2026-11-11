@@ -17,20 +17,42 @@ class LocationRepository {
   /// Genauigkeit (high/medium/low) und Distanz-Filter. Ein WECHSEL der
   /// Parameter erfordert einen Neuaufbau des Streams; der Navigation-
   /// Controller reabonniert, wenn der Modus wechselt.
-  Stream<Position> watchPosition({LocationTuning? tuning}) {
+  /// [backgroundNavigation] startet den Android-Foreground-Service, damit
+  /// die Navigation bei ausgeschaltetem Display weiterläuft. Für reines
+  /// Karten-Browsing bleibt er aus - kein Dauer-Notification ohne Fahrt.
+  Stream<Position> watchPosition({
+    LocationTuning? tuning,
+    bool backgroundNavigation = false,
+    String notificationTitle = 'MotoRoute navigiert',
+    String notificationText = 'Standort wird für die Navigation genutzt.',
+  }) {
     final accuracy = switch (tuning?.accuracy ?? LocationAccuracyPreset.high) {
       LocationAccuracyPreset.high => LocationAccuracy.high,
       LocationAccuracyPreset.medium => LocationAccuracy.medium,
       LocationAccuracyPreset.low => LocationAccuracy.low,
     };
     return Geolocator.getPositionStream(
-      locationSettings: LocationSettings(
+      locationSettings: AndroidSettings(
         accuracy: accuracy,
         distanceFilter: tuning?.distanceFilterMeters ?? 3,
         // timeLimit als Sicherheitsnetz: liefert GPS keine Position
         // (z. B. Tunnel), fließt kein Update - der Screen zeigt dann
         // weiterhin den letzten Stand.
         timeLimit: const Duration(seconds: 30),
+        // Nur während der Navigation: Android drosselt Standort-Updates im
+        // Hintergrund, ohne Foreground-Service verstummt die Ansage, sobald
+        // das Display ausgeht. geolocator bringt den Dienst selbst mit
+        // (`foregroundServiceType="location"`), der Wakelock hält die CPU
+        // wach, damit Fixes nicht gesammelt nachgeliefert werden.
+        foregroundNotificationConfig: backgroundNavigation
+            ? ForegroundNotificationConfig(
+                notificationTitle: notificationTitle,
+                notificationText: notificationText,
+                notificationChannelName: 'Navigation',
+                enableWakeLock: true,
+                setOngoing: true,
+              )
+            : null,
       ),
     );
   }

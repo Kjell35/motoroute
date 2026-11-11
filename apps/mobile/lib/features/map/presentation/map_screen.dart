@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter/services.dart'
+    show HapticFeedback, SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +11,7 @@ import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/features/routing/routing_flow.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
+import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/features/chat/chat_providers.dart';
@@ -18,12 +20,15 @@ import 'package:motoroute_app/features/hazards/hazard_repository.dart';
 import 'package:motoroute_app/features/hazards/presentation/hazard_report_sheet.dart';
 import 'package:motoroute_app/features/map/data/location_repository.dart';
 import 'package:motoroute_app/features/map/data/map_style.dart';
+import 'package:motoroute_app/features/navigation_session/navigation_providers.dart';
+import 'package:motoroute_app/features/navigation_session/navigation_session_store.dart';
 import 'package:motoroute_app/features/poi/biker_poi_sync.dart';
 import 'package:motoroute_app/features/poi/poi_map_layer.dart';
 import 'package:motoroute_app/features/poi/poi_providers.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import 'package:motoroute_app/features/search/search_providers.dart';
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
+import '../../../core/network/error_reporter.dart';
 
 /// Screen 3+4 aus Phase 3, Teil C: Startseite und Kartenseite sind
 /// bewusst DERSELBE Screen. Diese Version zeigt POI-Kreise (je nach
@@ -49,9 +54,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   StreamSubscription<List<({String id, String action})>>? _bikerPoiPushSub;
   ProviderSubscription<BikerPoiSyncState>? _bikerPoiStateSub;
 
+  /// Unterbrochene Navigation aus einem früheren App-Lauf.
+  NavigationSessionSnapshot? _resumableSession;
+
   @override
   void initState() {
     super.initState();
+    // Nach dem ersten Frame laden: der Store braucht die Plattform.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _loadResumableSession());
     _poiLayer = PoiMapLayer(() => _mapController);
     _requestLocationPermission();
     _loadStyle();
@@ -105,14 +116,27 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final sync = ref.read(bikerPoiSyncProvider.notifier);
-      // Reconnect-Watcher: Funkloch raus → Sync läuft nach, sobald wieder
-      // Schnitt + Backend da sind (offline zeigt die Karte SQLite-Bestand).
-      sync.offline.watchConnectivity();
-      await sync.restoreCache();
-      await sync.sync();
+      try {
+        // Reconnect-Watcher: Funkloch raus → Sync läuft nach, sobald wieder
+        // Schnitt + Backend da sind (offline zeigt die Karte SQLite-Bestand).
+        sync.offline.watchConnectivity();
+        await sync.restoreCache();
+        await sync.sync();
+      } catch (e) {
+        // Fehlt die Datenbank (gesperrt, beschädigt, Plugin nicht da),
+        // bleibt die Karte trotzdem nutzbar: der kuratierte POI-Sync ist
+        // Komfort, kein Muss - ein unbehandelter Fehler hier würde den
+        // ganzen Screen mitreißen. Gemeldet wird er trotzdem, sonst bliebe
+        // der Ausfall unsichtbar.
+        ErrorReporter.instance.report('bikerpoi.sync', e);
+      }
       if (!mounted) return;
       _bikerPoiSyncTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-        if (mounted) sync.sync();
+        if (!mounted) return;
+        // Wie beim Startlauf: ein Sync-Fehler bleibt Komfort-Sache und
+        // taucht nicht als unbehandelter Timer-Fehler auf.
+        sync.sync().catchError(
+            (Object e) => ErrorReporter.instance.report('bikerpoi.sync', e));
       });
     });
   }
@@ -128,12 +152,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   Future<void> _loadStyle() async {
     final choice = ref.read(mapStyleChoiceProvider);
-    final style = await loadMapStyle(choice);
+    final style = await ref.read(mapStyleLoaderProvider)(choice);
     if (mounted) setState(() => _styleString = style);
   }
 
   Future<void> _requestLocationPermission() async {
-    final granted = await LocationRepository().ensurePermission();
+    // Plugin/Permission kann werfen (Desktop, gesperrter Dienst): die Karte
+    // bleibt nutzbar, nur der Standort-Knopf meldet "nicht verfügbar".
+    bool granted = false;
+    try {
+      granted = await LocationRepository().ensurePermission();
+    } catch (e) {
+      ErrorReporter.instance.report('location.permission', e);
+    }
     if (mounted) setState(() => _hasLocationPermission = granted);
   }
 
@@ -185,9 +216,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           CircleOptions(
             geometry: LatLng(point[1], point[0]),
             circleRadius: incident.isBlocking ? 9 : 6,
-            circleColor: incident.isBlocking ? '#E5484D' : '#F5A623',
+            circleColor: incident.isBlocking
+                ? AppColors.statusDanger.mapHex
+                : AppColors.statusWarning.mapHex,
             circleStrokeWidth: 2,
-            circleStrokeColor: '#0B0E11',
+            circleStrokeColor: AppColors.bgBaseDark.mapHex,
             circleOpacity: 0.85,
           ),
         ));
@@ -229,10 +262,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           CircleOptions(
             geometry: LatLng(hazard.lat, hazard.lng),
             circleRadius: 8 + (hazard.upvotes.clamp(1, 10)).toDouble(),
-            circleColor:
-                hazard.type == HazardType.sperrung ? '#E5484D' : '#F5A623',
+            circleColor: hazard.type == HazardType.sperrung
+                ? AppColors.statusDanger.mapHex
+                : AppColors.statusWarning.mapHex,
             circleStrokeWidth: 2,
-            circleStrokeColor: '#0B0E11',
+            circleStrokeColor: AppColors.bgBaseDark.mapHex,
             circleOpacity: 0.9,
           ),
           {'hazardId': hazard.id},
@@ -778,63 +812,78 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final vehicleType = ref.watch(vehicleTypeProvider);
     final tapMode = ref.watch(mapWaypointTapModeProvider);
+    // Statusleisten-Symbole folgen dem Kartenstil, nicht dem App-
+    // Schema: Die Karte ist ohne AppBar der oberste Stil-Geber,
+    // sonst bleibt der zuletzt gesetzte (z. B. dunkel auf heller
+    // Positron-Karte) bzw. der Plattform-Standard stehen.
+    final mapStyleChoice = ref.watch(mapStyleChoiceProvider);
+    final statusBarStyle = mapStyleChoice == MapStyleChoice.dark
+        ? AppTheme.statusOverlayDark
+        : AppTheme.statusOverlayLight;
 
-    return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
-      body: _styleString == null
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                MapLibreMap(
-                  // Fallback: leerer Stil - maplibre_gl verlangt einen
-                  // nicht-leeren String. Routing bleibt trotzdem nutzbar.
-                  styleString: isPlaceholderStyle(_styleString!)
-                      ? emptyMapStyle
-                      : _styleString!,
-                  initialCameraPosition: const CameraPosition(
-                    target: LatLng(48.1351, 11.5820), // München als Startpunkt
-                    zoom: 12,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: statusBarStyle,
+      child: Scaffold(
+        backgroundColor: AppColors.bgBaseDark,
+        body: _styleString == null
+            ? const Center(child: CircularProgressIndicator())
+            : Stack(
+                children: [
+                  MapLibreMap(
+                    // Fallback: leerer Stil - maplibre_gl verlangt einen
+                    // nicht-leeren String. Routing bleibt trotzdem nutzbar.
+                    styleString: isPlaceholderStyle(_styleString!)
+                        ? emptyMapStyle
+                        : _styleString!,
+                    initialCameraPosition: const CameraPosition(
+                      target:
+                          LatLng(48.1351, 11.5820), // München als Startpunkt
+                      zoom: 12,
+                    ),
+                    // Cockpit-Steuerung: Kompass dreht mit (tap = nach Norden
+                    // zurück), Kameraposition wird getrackt.
+                    compassEnabled: true,
+                    compassViewPosition: CompassViewPosition.topRight,
+                    trackCameraPosition: true,
+                    myLocationEnabled: _hasLocationPermission,
+                    myLocationTrackingMode: MyLocationTrackingMode.tracking,
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                      _drawIncidents(ref);
+                      _drawHazards(ref);
+                    },
+                    onMapClick: (point, latLng) => _onMapTap(latLng),
+                    onCameraIdle: () {
+                      _poiLayer.onCameraIdle(ref);
+                      _drawIncidents(ref);
+                      _drawHazards(ref);
+                    },
                   ),
-                  // Cockpit-Steuerung: Kompass dreht mit (tap = nach Norden
-                  // zurück), Kameraposition wird getrackt.
-                  compassEnabled: true,
-                  compassViewPosition: CompassViewPosition.topRight,
-                  trackCameraPosition: true,
-                  myLocationEnabled: _hasLocationPermission,
-                  myLocationTrackingMode: MyLocationTrackingMode.tracking,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                    _drawIncidents(ref);
-                    _drawHazards(ref);
-                  },
-                  onMapClick: (point, latLng) => _onMapTap(latLng),
-                  onCameraIdle: () {
-                    _poiLayer.onCameraIdle(ref);
-                    _drawIncidents(ref);
-                    _drawHazards(ref);
-                  },
-                ),
-                // Quellen-Hinweis (Pflicht bei OSM/CARTO-Daten) + ehrlicher
-                // Fallback-Hinweis, falls Tiles nicht laden (Offline).
-                Positioned(
-                  left: AppSpacing.sm,
-                  bottom: AppSpacing.xs,
-                  child: Text(
-                    isPlaceholderStyle(_styleString!)
-                        ? ref.watch(i18nProvider).mapOfflineNote
-                        : ref.watch(i18nProvider).attribution,
-                    style: const TextStyle(
-                      color: AppColors.textMutedDark,
-                      fontSize: 10,
+                  // Quellen-Hinweis (Pflicht bei OSM/CARTO-Daten) + ehrlicher
+                  // Fallback-Hinweis, falls Tiles nicht laden (Offline).
+                  Positioned(
+                    left: AppSpacing.sm,
+                    bottom: AppSpacing.xs,
+                    child: Text(
+                      isPlaceholderStyle(_styleString!)
+                          ? ref.watch(i18nProvider).mapOfflineNote
+                          : ref.watch(i18nProvider).attribution,
+                      style: const TextStyle(
+                        color: AppColors.textSecondaryDark,
+                        fontSize: 10,
+                      ),
                     ),
                   ),
-                ),
-                _buildTopBar(context, vehicleType),
-                _buildSideButtons(context),
-                _buildRoutePlanningEntry(context),
-                if (tapMode) _buildTapModeBanner(context),
-              ],
-            ),
+                  _buildTopBar(context, vehicleType),
+                  _buildSideButtons(context),
+                  _buildRoutePlanningEntry(context),
+                  if (tapMode)
+                    _buildTapModeBanner(context)
+                  else if (_resumableSession != null)
+                    _buildResumeBanner(context),
+                ],
+              ),
+      ),
     );
   }
 
@@ -1098,6 +1147,91 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Liegt eine unterbrochene Sitzung vor, bekommt der Fahrer sie beim
+  /// Start angeboten - statt sie neu planen zu müssen (oft im Funkloch).
+  Future<void> _loadResumableSession() async {
+    if (!mounted) return;
+    final snapshot = await ref.read(navigationSessionStoreProvider).load();
+    if (!mounted || snapshot == null) return;
+    setState(() => _resumableSession = snapshot);
+  }
+
+  void _resumeNavigation() {
+    final snapshot = _resumableSession;
+    if (snapshot == null) return;
+    setState(() => _resumableSession = null);
+    ref.read(navigationControllerProvider.notifier).resume(snapshot);
+    Navigator.of(context).pushNamed('/navigation');
+  }
+
+  Future<void> _discardResumableSession() async {
+    setState(() => _resumableSession = null);
+    await ref.read(navigationSessionStoreProvider).clear();
+  }
+
+  /// Wiederaufnahme-Hinweis: gleiche Position und Breite wie das
+  /// Tap-Modus-Banner, damit die Karte nicht umgebaut wird - es zeigt
+  /// immer nur eines von beiden.
+  Widget _buildResumeBanner(BuildContext context) {
+    final i18n = ref.watch(i18nProvider);
+    final snapshot = _resumableSession!;
+    final km = (snapshot.remainingMeters / 1000)
+        .toStringAsFixed(1)
+        .replaceAll('.', ',');
+    return Positioned(
+      top: AppSpacing.xxxl + AppSpacing.touchTargetPlanning + AppSpacing.lg,
+      left: AppSpacing.lg,
+      right: AppSpacing.lg,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.bgSurfaceDark,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderHairlineDark),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.navigation,
+                    color: AppColors.accentPrimaryDark, size: 18),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '${i18n.navResumeTitle} - noch $km km',
+                    style: const TextStyle(color: AppColors.textPrimaryDark),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: _discardResumableSession,
+                  child: const Icon(Icons.close,
+                      color: AppColors.textSecondaryDark, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    i18n.navResumeHint,
+                    style: const TextStyle(
+                        color: AppColors.textSecondaryDark, fontSize: 12),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _resumeNavigation,
+                  child: Text(i18n.navResumeContinue),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

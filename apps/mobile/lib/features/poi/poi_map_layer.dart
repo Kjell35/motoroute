@@ -7,6 +7,7 @@ import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/features/poi/biker_poi_sync.dart';
 import 'package:motoroute_app/features/poi/poi_offline_cache.dart';
 import 'package:motoroute_app/features/poi/poi_providers.dart';
+import 'package:motoroute_app/core/theme/app_colors.dart';
 
 /// Rendert POIs als Kreise auf der Karte und lädt den Layer nach, wenn
 /// sich der Kartenausschnitt oder die aktiven Kategorien ändern.
@@ -297,7 +298,7 @@ class PoiMapLayer {
             circleRadius: 7,
             circleColor: _colorFor(poi.category),
             circleStrokeWidth: 1.5,
-            circleStrokeColor: '#0B0E11',
+            circleStrokeColor: AppColors.bgBaseDark.mapHex,
             circleOpacity: 0.9,
           ),
           {'poiId': poi.id},
@@ -315,8 +316,8 @@ class PoiMapLayer {
                   ? '${poi.name.substring(0, 24)}…'
                   : poi.name,
               textSize: 11,
-              textColor: '#FFFFFF',
-              textHaloColor: '#0B0E11',
+              textColor: AppColors.textPrimaryDark.mapHex,
+              textHaloColor: AppColors.bgBaseDark.mapHex,
               textHaloWidth: 1.5,
               textOffset: const Offset(0, 1.4),
               textAnchor: 'top',
@@ -370,17 +371,17 @@ class PoiMapLayer {
   }
 
   static String _colorFor(PoiCategory category) => switch (category) {
-        PoiCategory.fuel => '#FF5A1F',
-        PoiCategory.motoHotel => '#2EC4B6',
-        PoiCategory.bikerMeetup => '#2EC4B6',
-        PoiCategory.campsite => '#2EC4B6',
-        PoiCategory.iceCream => '#2EC4B6',
-        PoiCategory.speedCamera => '#E5484D',
+        PoiCategory.fuel => AppColors.accentPrimaryDark.mapHex,
+        PoiCategory.motoHotel => AppColors.accentSecondary.mapHex,
+        PoiCategory.bikerMeetup => AppColors.accentSecondary.mapHex,
+        PoiCategory.campsite => AppColors.accentSecondary.mapHex,
+        PoiCategory.iceCream => AppColors.accentSecondary.mapHex,
+        PoiCategory.speedCamera => AppColors.statusDanger.mapHex,
         // Biker-POI-Dienst-Kategorien: kräftiges Gelb - hebt die
         // kuratierten TomTom-POIs visuell von den OSM-POIs ab.
-        PoiCategory.restaurant => '#F5A623',
-        PoiCategory.pub => '#F5A623',
-        PoiCategory.snack => '#F5A623',
+        PoiCategory.restaurant => AppColors.statusWarning.mapHex,
+        PoiCategory.pub => AppColors.statusWarning.mapHex,
+        PoiCategory.snack => AppColors.statusWarning.mapHex,
       };
 
   /// True, wenn [inner] komplett in [outer] liegt - verhindert das

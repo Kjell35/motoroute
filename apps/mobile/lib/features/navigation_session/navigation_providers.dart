@@ -7,6 +7,7 @@ import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/utils/geo.dart';
 import 'package:motoroute_app/core/utils/route_matcher.dart';
 import 'package:motoroute_app/features/map/data/location_repository.dart';
+import 'package:motoroute_app/features/navigation_session/navigation_session_store.dart';
 import 'package:motoroute_app/features/navigation_session/speed_camera_warner.dart';
 import 'package:motoroute_app/features/navigation_session/voice_announcer.dart';
 import 'package:motoroute_app/features/routing/data/routing_providers.dart';
@@ -21,6 +22,24 @@ import 'package:motoroute_app/features/weather/route_weather_providers.dart';
 /// konservativ: falsches Rerouting ist ärgerlicher als spätes Rerouting.
 const double kOffRouteThresholdMeters = 60;
 const Duration kRerouteRetryInterval = Duration(seconds: 15);
+
+/// Obergrenze des Warte-Backoffs nach fehlgeschlagenen Umleitungen.
+const Duration kMaxRerouteBackoff = Duration(minutes: 2);
+
+/// Wartezeit vor dem nächsten Umleitungsversuch: 15 s, 30 s, 60 s, dann
+/// Deckel bei zwei Minuten. Im Funkloch ist häufigeres Fragen reiner
+/// Akkuverbrauch ohne jede Erfolgschance.
+Duration rerouteBackoffFor(int failures) {
+  if (failures <= 0) return kRerouteRetryInterval;
+  final ms =
+      kRerouteRetryInterval.inMilliseconds * (1 << failures.clamp(0, 4));
+  return Duration(
+    milliseconds: ms.clamp(
+      kRerouteRetryInterval.inMilliseconds,
+      kMaxRerouteBackoff.inMilliseconds,
+    ),
+  );
+}
 
 class NavigationState {
   final bool isNavigating;
@@ -115,13 +134,20 @@ class NavigationController extends StateNotifier<NavigationState> {
   VoiceAnnouncer? _voice;
   ProviderSubscription<bool>? _voicePrefSub;
   int _navigationGeneration = 0;
+
+  /// Aufeinanderfolgende fehlgeschlagene Umleitungen (Backoff-Zähler).
+  int _rerouteFailures = 0;
+
+  final NavigationSessionStore? _sessionStore;
   DateTime? _lastRerouteAttemptAt;
 
   NavigationController(
     this._ref,
     this._locationRepository, {
     this.rerouteRetryInterval = kRerouteRetryInterval,
-  }) : super(const NavigationState()) {
+    NavigationSessionStore? sessionStore,
+  })  : _sessionStore = sessionStore,
+        super(const NavigationState()) {
     _watchEnergySaver();
     // Sprachansagen-Toggle: Live-Sync während der Fahrt - der Screen-
     // Schalter wirkt ohne Neustart; Ausschalten stoppt laufende Ansagen.
@@ -134,7 +160,7 @@ class NavigationController extends StateNotifier<NavigationState> {
     });
   }
 
-  void start(ComputedRoute route) {
+  void start(ComputedRoute route, {double traveledMeters = 0}) {
     _navigationGeneration++;
     _lastRerouteAttemptAt = null;
     _cumulative = cumulativeDistances(route.geometry);
@@ -145,9 +171,11 @@ class NavigationController extends StateNotifier<NavigationState> {
     );
     _lastPosition = null;
     _lastPositionIndex = null;
+    _rerouteFailures = 0;
     state = NavigationState(
       isNavigating: true,
       route: route,
+      traveledMeters: traveledMeters.clamp(0.0, route.distanceMeters),
       energySaverCritical: _ref.read(energySaverControllerProvider).mode ==
           EnergySaverMode.critical,
     );
@@ -174,6 +202,10 @@ class NavigationController extends StateNotifier<NavigationState> {
       german: !_ref.read(i18nProvider).isEnglish,
     )..enabled = _ref.read(voiceAnnouncementsEnabledProvider);
     _voice = voice;
+    // Sitzung sofort sichern: Stirbt der Prozess (Android-Kill im
+    // Hintergrund, Akku leer), findet die App die Route beim nächsten
+    // Start wieder vor statt sie neu planen zu müssen.
+    unawaited(_persistSession(force: true));
   }
 
   /// Proaktive Umleitung: lauscht auf Traffic-Refreshes und leitet um,
@@ -276,6 +308,7 @@ class NavigationController extends StateNotifier<NavigationState> {
             isRerouting: false,
             error: 'Umleitung fehlgeschlagen - alte Route bleibt aktiv',
           );
+          _rerouteFailures++;
         },
         (newRoute) {
           final computed = ComputedRoute.fromDomain(newRoute);
@@ -292,6 +325,7 @@ class NavigationController extends StateNotifier<NavigationState> {
             isRerouting: false,
             rerouteReason: reason,
           );
+          _rerouteFailures = 0;
           // Neue Route = neue Manöver: Dedupe-Historie leeren + Ansage.
           unawaited(_voice?.onReroute(reason: reason));
         },
@@ -300,6 +334,7 @@ class NavigationController extends StateNotifier<NavigationState> {
       if (!_isCurrentNavigation(generation)) return;
       state =
           state.copyWith(isRerouting: false, error: 'Umleitung fehlgeschlagen');
+      _rerouteFailures++;
     }
   }
 
@@ -311,7 +346,9 @@ class NavigationController extends StateNotifier<NavigationState> {
     final tuning =
         _ref.read(energySaverControllerProvider.notifier).locationTuning;
     _positionSubscription =
-        _locationRepository.watchPosition(tuning: tuning).listen(
+        _locationRepository
+            .watchPosition(tuning: tuning, backgroundNavigation: true)
+            .listen(
               _onPosition,
               onError: (Object e) =>
                   state = state.copyWith(error: 'GPS-Signal verloren'),
@@ -355,6 +392,9 @@ class NavigationController extends StateNotifier<NavigationState> {
 
     // Sprachansagen: ebenfalls Fire-and-forget (dedupliziert intern).
     unawaited(_announceVoice(position));
+
+    // Sitzung mitschreiben - der Store drosselt selbst (250 m / 2 min).
+    unawaited(_persistSession());
   }
 
   Future<void> _announceVoice(Position position) async {
@@ -418,6 +458,7 @@ class NavigationController extends StateNotifier<NavigationState> {
           _lastPositionIndex = null;
           state = NavigationState(
               isNavigating: true, route: computed, isRerouting: false);
+          _rerouteFailures = 0;
           // Off-Route-Reroute: Fahrer weiß sonst nicht, dass die Route neu ist.
           unawaited(_voice?.onReroute());
         },
@@ -426,15 +467,22 @@ class NavigationController extends StateNotifier<NavigationState> {
       if (!_isCurrentNavigation(generation)) return;
       state = state.copyWith(
           isRerouting: false, error: 'Neuberechnung fehlgeschlagen');
+      _rerouteFailures++;
     }
   }
+
+  /// Wartezeit bis zum nächsten Versuch: der erste Fehlversuch bleibt beim
+  /// eingestellten Intervall (konfigurierbar), danach exponentiell.
+  Duration _backoff() => _rerouteFailures == 0
+      ? rerouteRetryInterval
+      : rerouteBackoffFor(_rerouteFailures);
 
   bool _canStartReroute() {
     if (!state.isNavigating || state.isRerouting) return false;
     final now = DateTime.now();
     final lastAttempt = _lastRerouteAttemptAt;
     if (lastAttempt != null &&
-        now.difference(lastAttempt) < rerouteRetryInterval) {
+        now.difference(lastAttempt) < _backoff()) {
       return false;
     }
     _lastRerouteAttemptAt = now;
@@ -443,6 +491,41 @@ class NavigationController extends StateNotifier<NavigationState> {
 
   bool _isCurrentNavigation(int generation) =>
       generation == _navigationGeneration && state.isNavigating;
+
+  /// Schreibt die laufende Sitzung (gedrosselt). Fehler bleiben im Store -
+  /// Persistenz darf die Navigation nie stören.
+  Future<void> _persistSession({bool force = false}) async {
+    final store = _sessionStore;
+    final route = state.route;
+    if (store == null || route == null || !state.isNavigating) return;
+    // Am Ziel gibt es nichts fortzusetzen - sonst böte der naechste
+    // Start "noch 0,0 km" an.
+    if (state.remainingMeters <= 25) {
+      await store.clear();
+      return;
+    }
+    final snapshot = NavigationSessionSnapshot(
+      route: route,
+      traveledMeters: state.traveledMeters,
+      savedAt: DateTime.now(),
+    );
+    if (force) {
+      await store.save(snapshot);
+    } else {
+      await store.saveIfDue(snapshot);
+    }
+  }
+
+  /// Beim App-Start: liegt eine unterbrochene Sitzung vor? (null = keine)
+  Future<NavigationSessionSnapshot?> restoreSession() async =>
+      _sessionStore?.load();
+
+  /// Gespeicherte Sitzung fortsetzen - gleiche Route, gleicher Fortschritt,
+  /// gleiche Präferenz. Bewusst OHNE neuen Backend-Aufruf: im Funkloch ist
+  /// die gespeicherte Route die einzige, die es gibt.
+  void resume(NavigationSessionSnapshot snapshot) {
+    start(snapshot.route, traveledMeters: snapshot.traveledMeters);
+  }
 
   void stop() {
     _navigationGeneration++;
@@ -454,6 +537,8 @@ class NavigationController extends StateNotifier<NavigationState> {
     _trafficSub?.close();
     _trafficSub = null;
     _ref.read(trafficControllerProvider.notifier).stopNavigationMonitoring();
+    // Beendete Navigation darf beim nächsten Start nicht wieder auftauchen.
+    unawaited(_sessionStore?.clear());
     // Ansagen stoppen (auch mitten im Satz) + Historie leeren.
     _voice?.stop();
     _voice = null;
@@ -493,5 +578,9 @@ class NavigationController extends StateNotifier<NavigationState> {
 
 final navigationControllerProvider =
     StateNotifierProvider<NavigationController, NavigationState>((ref) {
-  return NavigationController(ref, ref.watch(locationRepositoryProvider));
+  return NavigationController(
+    ref,
+    ref.watch(locationRepositoryProvider),
+    sessionStore: ref.watch(navigationSessionStoreProvider),
+  );
 });

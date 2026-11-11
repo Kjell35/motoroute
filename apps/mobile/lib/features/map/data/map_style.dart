@@ -88,6 +88,13 @@ Future<String> loadMapStyle([MapStyleChoice choice = MapStyleChoice.light]) asyn
   }
 }
 
+/// Ladefunktion als Provider: der Screen liest sie statt [loadMapStyle]
+/// direkt aufzurufen. Widget-Tests setzen hier einen festen Stil ein und
+/// hängen damit nicht am Asset-Timing des Test-Bundles.
+final mapStyleLoaderProvider =
+    Provider<Future<String> Function(MapStyleChoice)>(
+        (ref) => (choice) => loadMapStyle(choice));
+
 /// true, wenn der geladene Stil keine Kacheln enthält (Offline-Fall) -
 /// Aufrufer zeigen dann den "Karte offline"-Hinweis.
 bool isPlaceholderStyle(String style) => style == emptyMapStyle || style.isEmpty;

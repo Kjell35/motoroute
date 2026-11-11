@@ -1,4 +1,5 @@
 import 'package:flutter_tts/flutter_tts.dart';
+import '../../core/network/error_reporter.dart';
 
 /// Abstraktion über flutter_tts - die Trigger-Logik des Announcers kann
 /// so ohne Plattform-Kanal getestet werden (Unit-Tests mit Fake-Engine).
@@ -35,7 +36,11 @@ class FlutterTtsEngine implements TtsEngine {
   Future<void> speak(String text) async {
     try {
       await _tts.speak(text);
-    } catch (_) {}
+    } catch (e) {
+      // Stille Ansagen sind im Betrieb nicht von "abgeschaltet" zu
+      // unterscheiden - deshalb ins Reporting.
+      ErrorReporter.instance.report('voice.tts', e);
+    }
   }
 
   @override

@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:motoroute_app/core/i18n/i18n.dart';
 import 'package:motoroute_app/core/state/app_providers.dart';
 import 'package:motoroute_app/core/theme/app_colors.dart';
+import 'package:motoroute_app/core/theme/app_theme.dart';
 import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/core/utils/formatters.dart';
@@ -19,6 +22,9 @@ import 'package:motoroute_app/features/tour_diary/tour_recorder.dart';
 import 'package:motoroute_app/features/traffic/traffic_providers.dart';
 import 'package:motoroute_app/features/weather/route_weather_providers.dart';
 import 'package:motoroute_app/features/weather/route_weather_widget.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import '../../core/network/error_reporter.dart';
 
 /// Screen 8: Aktive Navigation - der sicherheitskritischste Screen.
 /// Echt verdrahtet: Start schreibt die aktive Route in den Navigation-
@@ -54,19 +60,129 @@ class _ActiveNavigationScreenState
   ComputedRoute? _lastDrawnRoute;
   int _lastDrawnIdx = -1;
 
+  /// Merkt sich, ob die Display-Sperre gerade aktiv ist - so wird das
+  /// Plattform-Plugin nur bei echten Zustandswechseln aufgerufen.
+  bool _screenKeptOn = false;
+
+  /// True, wenn die Benachrichtigungs-Erlaubnis fehlt: der Foreground-
+  /// Service läuft dann zwar, seine Notification bleibt aber unsichtbar -
+  /// der Fahrer muss das wissen, sonst wirkt das Tracking heimlich.
+  bool _notificationsDenied = false;
+  ProviderSubscription<bool>? _navSubscription;
+  // Im initState gegriffen: in dispose() ist `ref` bereits ungueltig
+  // (Riverpod wirft dort "Cannot use ref after the widget was disposed").
+  late final NavigationController _navigationController;
+  late final RouteWeatherController _routeWeatherController;
+
   @override
   void initState() {
     super.initState();
+    _navigationController = ref.read(navigationControllerProvider.notifier);
+    _routeWeatherController =
+        ref.read(routeWeatherControllerProvider.notifier);
     _loadStyle();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Display-Sperre an den Navigationszustand koppeln: nur während der
+    // Fahrt bleibt der Bildschirm an, nach dem Beenden gibt die App ihn
+    // wieder frei. Ohne das schaltet Android nach der System-Timeout-Zeit
+    // ab und die Abbiegehinweise verschwinden mitten in der Fahrt.
+    _navSubscription = ref.listenManual(
+      navigationControllerProvider.select((s) => s.isNavigating),
+      (_, isNavigating) => _setKeepScreenOn(isNavigating),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final route = ref.read(activeRouteProvider);
       if (route != null) {
+        // Vor dem Start fragen: ohne Benachrichtigungs-Erlaubnis bleibt die
+        // Notification des Foreground-Service unter Android 13+ unsichtbar -
+        // der Fahrer wüsste dann nicht, dass die App noch trackt.
+        await _ensureNotificationPermission();
+        if (!mounted) return;
         ref.read(navigationControllerProvider.notifier).start(route);
+        _setKeepScreenOn(true);
       }
+      if (!mounted) return;
       // Tour-Aufzeichnung läuft parallel zur Navigation - jede Fahrt
       // wird aufgezeichnet und landet nach dem Beenden im Tagebuch.
-      ref.read(tourRecorderProvider.notifier).start();
+      // Best effort: ein fehlschlagender Recorder (Plugin fehlt, kein
+      // Schreibrecht) darf die laufende Navigation nicht mitreissen.
+      try {
+        ref.read(tourRecorderProvider.notifier).start();
+      } catch (e) {
+        ErrorReporter.instance.report('tour_recorder.start', e);
+      }
     });
+  }
+
+  /// Fragt einmalig die Benachrichtigungs-Erlaubnis ab (Android 13+).
+  /// Bereits erteilt oder dauerhaft abgelehnt: kein Dialog, kein Warten.
+  Future<void> _ensureNotificationPermission() async {
+    if (!Platform.isAndroid) return;
+    try {
+      var status = await Permission.notification.status;
+      if (status.isGranted) return;
+      if (!status.isPermanentlyDenied) {
+        status = await Permission.notification.request();
+      }
+      // Auch nach der Abfrage nicht erteilt: Hinweis im Screen zeigen,
+      // statt den Fahrer im Unklaren zu lassen.
+      if (!status.isGranted && mounted) {
+        setState(() => _notificationsDenied = true);
+      }
+    } catch (_) {
+      // Plugin nicht verfügbar (Widget-Tests, Desktop) - die Navigation
+      // startet trotzdem, nur eben ohne sichtbare Notification.
+    }
+  }
+
+  /// Sichtbarer Hinweis, wenn die Notification unsichtbar bleibt. Ohne ihn
+  /// trackt die App im Hintergrund, ohne dass der Fahrer es merken kann.
+  Widget _buildNotificationWarning() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: scheme.tertiary),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.notifications_off_outlined,
+              size: 18, color: scheme.onTertiaryContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Benachrichtigungen sind aus: Die Navigation läuft im '
+              'Hintergrund weiter, du siehst es aber nicht.',
+              style: TextStyle(fontSize: 12, color: scheme.onTertiaryContainer),
+            ),
+          ),
+          TextButton(
+            onPressed: () => openAppSettings(),
+            child: Text(
+              'Erlauben',
+              style: TextStyle(color: scheme.onTertiaryContainer),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Hält das Display während der Navigation an. Best effort: fehlt die
+  /// Plattform-Implementierung (Widget-Tests, Desktop), darf das die Fahrt
+  /// nicht stören - die Navigation bleibt in jedem Fall funktionsfähig.
+  void _setKeepScreenOn(bool keepOn) {
+    if (_screenKeptOn == keepOn) return;
+    _screenKeptOn = keepOn;
+    unawaited(() async {
+      try {
+        await (keepOn ? WakelockPlus.enable() : WakelockPlus.disable());
+      } catch (_) {
+        // Plugin nicht verfügbar - kein Grund, den Screen zu verlassen.
+      }
+    }());
   }
 
   /// Gleicher Stil wie die Hauptkarte (geteilter Loader) - die Navigation
@@ -83,8 +199,10 @@ class _ActiveNavigationScreenState
   void dispose() {
     // Wichtig: GPS-Stream stoppen, wenn der Screen verlassen wird -
     // sonst läuft Standort-Abfrage im Hintergrund weiter (Akkueffizienz).
-    ref.read(navigationControllerProvider.notifier).stop();
-    ref.read(routeWeatherControllerProvider.notifier).stop();
+    _navSubscription?.close();
+    _navigationController.stop();
+    _routeWeatherController.stop();
+    _setKeepScreenOn(false);
     super.dispose();
   }
 
@@ -114,9 +232,9 @@ class _ActiveNavigationScreenState
           CircleOptions(
             geometry: LatLng(point[1], point[0]),
             circleRadius: incident.isBlocking ? 10 : 7,
-            circleColor: incident.isBlocking ? '#E5484D' : '#F5A623',
+            circleColor: incident.isBlocking ? AppColors.statusDanger.mapHex : AppColors.statusWarning.mapHex,
             circleStrokeWidth: 2,
-            circleStrokeColor: '#0B0E11',
+            circleStrokeColor: AppColors.bgBaseDark.mapHex,
             circleOpacity: 0.85,
           ),
           {'incidentId': incident.id},
@@ -164,10 +282,21 @@ class _ActiveNavigationScreenState
         .toList();
     if (remaining.length >= 2) {
       try {
+        // Casing zuerst: breitere dunkle Linie unter der Route. Ohne sie liegt
+        // Orange auf der hellen Positron-Karte bei 2,12:1; mit Rand steht der
+        // Kontrast zum Untergrund bei 18,4:1.
+        _routeLines.add(await controller.addLine(
+          LineOptions(
+            geometry: remaining,
+            lineColor: AppColors.bgBaseDark.mapHex,
+            lineWidth: 10.0,
+            lineOpacity: 0.9,
+          ),
+        ));
         final line = await controller.addLine(
           LineOptions(
             geometry: remaining,
-            lineColor: '#FF5A1F',
+            lineColor: AppColors.accentPrimaryDark.mapHex,
             lineWidth: 6.0,
             lineOpacity: 0.95,
           ),
@@ -184,10 +313,18 @@ class _ActiveNavigationScreenState
           .toList();
       if (traveled.length >= 2) {
         try {
+          _routeLines.add(await controller.addLine(
+            LineOptions(
+              geometry: traveled,
+              lineColor: AppColors.bgBaseDark.mapHex,
+              lineWidth: 8.0,
+              lineOpacity: 0.9,
+            ),
+          ));
           final line = await controller.addLine(
             LineOptions(
               geometry: traveled,
-              lineColor: '#6B7280',
+              lineColor: AppColors.mapRouteTraveled.mapHex,
               lineWidth: 4.0,
               lineOpacity: 0.55,
             ),
@@ -209,11 +346,14 @@ class _ActiveNavigationScreenState
             geometry: LatLng(wp.lat, wp.lng),
             iconImage: 'circle-15',
             iconSize: isFirst || isLast ? 1.4 : 1.1,
+            // Halo: der Randlos-Marker haelt sonst nur 1,28:1 auf Positron.
+            iconHaloColor: AppColors.bgBaseDark.mapHex,
+            iconHaloWidth: 2.0,
             iconColor: isFirst
-                ? '#3DD68C'
+                ? AppColors.mapRouteStart.mapHex
                 : isLast
-                    ? '#E5484D'
-                    : '#FF5A1F',
+                    ? AppColors.statusDanger.mapHex
+                    : AppColors.accentPrimaryDark.mapHex,
             textField: wp.label ??
                 (isFirst
                     ? 'Start'
@@ -222,8 +362,8 @@ class _ActiveNavigationScreenState
                         : '${i + 1}'),
             textOffset: const Offset(0, 1.2),
             textSize: 12,
-            textColor: '#FFFFFF',
-            textHaloColor: '#0B0E11',
+            textColor: AppColors.textPrimaryDark.mapHex,
+            textHaloColor: AppColors.bgBaseDark.mapHex,
             textHaloWidth: 1.2,
           ),
         );
@@ -241,7 +381,9 @@ class _ActiveNavigationScreenState
             geometry: pos,
             iconImage: 'circle-15',
             iconSize: 1.2,
-            iconColor: '#3B82F6',
+            iconHaloColor: AppColors.bgBaseDark.mapHex,
+            iconHaloWidth: 2.0,
+            iconColor: AppColors.mapUserPosition.mapHex,
           ),
         );
         _routeSymbols.add(sym);
@@ -291,61 +433,69 @@ class _ActiveNavigationScreenState
     }
     _drawIncidents(traffic.incidents);
 
-    return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopZone(route, state),
-            const RouteWeatherWidget(),
-            if (state.energySaverCritical) _buildEnergySaverWarning(),
-            if (state.isRerouting ||
-                state.error != null ||
-                state.rerouteReason != null)
-              _buildReroutingBanner(state),
-            _buildSpeedCameraBanner(),
-            Expanded(
-              child: _styleString == null
-                  // Stil lädt (Millisekunden, gebündelt): Ladeanzeige statt
-                  // schwarzer Karte - gleiche Logik wie die Hauptkarte.
-                  ? const Center(child: CircularProgressIndicator())
-                  : Stack(
-                      children: [
-                        MapLibreMap(
-                          // Gleicher Stil wie Hauptkarte (geteilter
-                          // Loader); leerer Stil nur als Fallback, wenn
-                          // das Asset fehlt.
-                          styleString: isPlaceholderStyle(_styleString!)
-                              ? emptyMapStyle
-                              : _styleString!,
-                          initialCameraPosition: CameraPosition(
-                            target: route == null || route.geometry.isEmpty
-                                ? const LatLng(48.1351, 11.5820)
-                                : LatLng(route.geometry.first[1],
-                                    route.geometry.first[0]),
-                            zoom: 14,
+    // Der Navigationsscreen ist immer dunkel (Nachtfahrt-Tauglichkeit),
+    // die Statusleiste liegt ueber dem dunklen Scaffold-Hintergrund:
+    // helle Symbole, unabhaengig vom App-Schema.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.statusOverlayDark,
+      child: Scaffold(
+        backgroundColor: AppColors.bgBaseDark,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildTopZone(route, state),
+              const RouteWeatherWidget(),
+              if (state.energySaverCritical) _buildEnergySaverWarning(),
+              if (state.isRerouting ||
+                  state.error != null ||
+                  state.rerouteReason != null)
+                _buildReroutingBanner(state),
+              _buildSpeedCameraBanner(),
+              if (_notificationsDenied && state.isNavigating)
+                _buildNotificationWarning(),
+              Expanded(
+                child: _styleString == null
+                    // Stil lädt (Millisekunden, gebündelt): Ladeanzeige statt
+                    // schwarzer Karte - gleiche Logik wie die Hauptkarte.
+                    ? const Center(child: CircularProgressIndicator())
+                    : Stack(
+                        children: [
+                          MapLibreMap(
+                            // Gleicher Stil wie Hauptkarte (geteilter
+                            // Loader); leerer Stil nur als Fallback, wenn
+                            // das Asset fehlt.
+                            styleString: isPlaceholderStyle(_styleString!)
+                                ? emptyMapStyle
+                                : _styleString!,
+                            initialCameraPosition: CameraPosition(
+                              target: route == null || route.geometry.isEmpty
+                                  ? const LatLng(48.1351, 11.5820)
+                                  : LatLng(route.geometry.first[1],
+                                      route.geometry.first[0]),
+                              zoom: 14,
+                            ),
+                            myLocationEnabled: true,
+                            myLocationTrackingMode:
+                                MyLocationTrackingMode.tracking,
+                            onMapCreated: (controller) {
+                              _mapController = controller;
+                              if (route != null) _drawRoute(route);
+                            },
                           ),
-                          myLocationEnabled: true,
-                          myLocationTrackingMode:
-                              MyLocationTrackingMode.tracking,
-                          onMapCreated: (controller) {
-                            _mapController = controller;
-                            if (route != null) _drawRoute(route);
-                          },
-                        ),
-                        if (state.isOffRoute)
-                          const Positioned(
-                            top: AppSpacing.md,
-                            left: AppSpacing.lg,
-                            right: AppSpacing.lg,
-                            child: _OffRouteBadge(),
-                          ),
-                      ],
-                    ),
-            ),
-            _buildBottomZone(state, unit),
-            _buildControlButtons(context),
-          ],
+                          if (state.isOffRoute)
+                            const Positioned(
+                              top: AppSpacing.md,
+                              left: AppSpacing.lg,
+                              right: AppSpacing.lg,
+                              child: _OffRouteBadge(),
+                            ),
+                        ],
+                      ),
+              ),
+              _buildBottomZone(state, unit),
+              _buildControlButtons(context),
+            ],
+          ),
         ),
       ),
     );
@@ -452,7 +602,9 @@ class _ActiveNavigationScreenState
             icon: Icon(
               voiceOn ? Icons.volume_up : Icons.volume_off,
               color:
-                  voiceOn ? AppColors.accentSecondary : AppColors.textMutedDark,
+                  voiceOn
+                      ? AppColors.accentSecondary
+                      : AppColors.stateIdleDark,
               size: 28,
             ),
           ),
@@ -668,7 +820,11 @@ class _ActiveNavigationScreenState
         if (tour.id != null) {
           try {
             await ref.read(tourDatabaseProvider).deleteTour(tour.id!);
-          } catch (_) {}
+          } catch (e) {
+            // Fahrt bleibt sonst in der Datenbank, obwohl der Nutzer sie
+            // geloescht hat.
+            ErrorReporter.instance.report('tour_diary.write', e);
+          }
         }
         return;
       }
@@ -677,7 +833,10 @@ class _ActiveNavigationScreenState
           await ref
               .read(tourDatabaseProvider)
               .updateTour(tour.copyWith(title: name));
-        } catch (_) {}
+        } catch (e) {
+          // Umbenennung still verloren: der alte Titel steht weiter da.
+          ErrorReporter.instance.report('tour_diary.write', e);
+        }
       }
       ref.read(tourDiaryProvider.notifier).refresh();
       // Auto-Sync der beendeten Fahrt ins Profil (best-effort, nur mit
