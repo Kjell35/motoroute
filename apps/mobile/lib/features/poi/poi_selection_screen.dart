@@ -17,9 +17,9 @@ class PoiSelectionScreen extends ConsumerWidget {
     final active = ref.watch(activePoiCategoriesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('POIs auf Karte', style: AppTypography.title),
       ),
       body: SafeArea(
@@ -33,16 +33,18 @@ class PoiSelectionScreen extends ConsumerWidget {
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.bgSurfaceDark,
+                  color: context.palette.bgSurface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isActive ? AppColors.accentSecondary : AppColors.borderHairlineDark,
+                    color: isActive ? context.palette.accentSecondary : context.palette.borderHairline,
                   ),
                 ),
                 child: ListTile(
                   leading: Icon(
                     _iconFor(category),
-                    color: isActive ? AppColors.accentSecondary : AppColors.textMutedDark,
+                    color: isActive
+                        ? context.palette.accentSecondary
+                        : context.palette.stateIdle,
                     size: 24,
                   ),
                   title: Text(category.label, style: AppTypography.bodyStrong),
@@ -53,9 +55,13 @@ class PoiSelectionScreen extends ConsumerWidget {
                       value ? updated.add(category) : updated.remove(category);
                       ref.read(activePoiCategoriesProvider.notifier).state = updated;
                     },
-                    activeThumbColor: AppColors.accentSecondary,
-                    inactiveThumbColor: AppColors.textMutedDark,
-                    inactiveTrackColor: AppColors.bgSurfaceRaisedDark,
+                    // Aktiver Schalter: Knopf und Spur kommen aus der
+                    // Palette, damit das helle Schema 3:1 zwischen Griff
+                    // und Spur schafft und das dunkle unveraendert bleibt.
+                    activeThumbColor: context.palette.switchActiveThumb,
+                    activeTrackColor: context.palette.switchActiveTrack,
+                    inactiveThumbColor: context.palette.stateIdle,
+                    inactiveTrackColor: context.palette.bgSurfaceRaised,
                   ),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),

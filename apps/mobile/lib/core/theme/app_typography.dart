@@ -43,6 +43,12 @@ class AppTypography {
     color: AppColors.textSecondaryDark,
   );
 
+  /// Sekundaerstil des aktiven Schemas: [caption] traegt die feste dunkle
+  /// Sekundaerfarbe und waere im hellen Schema zu blass, deshalb wird die
+  /// Farbe hier aus der Palette des Schemas gesetzt.
+  static TextStyle captionOf(BuildContext context) =>
+      caption.copyWith(color: context.palette.textSecondary);
+
   static const TextStyle navInstruction = TextStyle(
     fontSize: 28,
     fontWeight: FontWeight.w600,

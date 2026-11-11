@@ -125,7 +125,7 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.accentPrimaryDark,
+          backgroundColor: context.palette.accentPrimary,
           content: Text('Route mit ${points.length} Punkten übernommen.'),
         ),
       );
@@ -153,9 +153,9 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
               const Text('Route am Computer planen',
                   style: AppTypography.title),
               const SizedBox(height: AppSpacing.xs),
-              const Text(
+              Text(
                 'Am Computer bequemer tippen? Öffne den Link, plane dort — mit „Plan abrufen" landet die Route wieder hier.',
-                style: AppTypography.caption,
+                style: AppTypography.captionOf(context),
               ),
               const SizedBox(height: AppSpacing.md),
               if (start != null) ...[
@@ -165,7 +165,7 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
                     height: 220,
                     padding: const EdgeInsets.all(AppSpacing.sm),
                     decoration: BoxDecoration(
-                      color: AppColors.bgSurfaceRaisedDark,
+                      color: context.palette.bgSurfaceRaised,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: PrettyQrView.data(
@@ -175,31 +175,31 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                const Text(
+                Text(
                   'Mit der Handy-Kamera scannen — der Plan-Editor öffnet sich im Browser.',
-                  style: AppTypography.caption,
+                  style: AppTypography.captionOf(context),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 SelectableText(start.planUrl,
                     style: AppTypography.title
-                        .copyWith(color: AppColors.accentPrimaryDark)),
+                        .copyWith(color: context.palette.accentText)),
                 if (start.planUrls.length > 1) ...[
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Weitere Adressen (z. B. Hotspot): ${start.planUrls.skip(1).join(' · ')}',
-                    style: AppTypography.caption
-                        .copyWith(color: AppColors.textSecondaryDark),
+                    style: AppTypography.captionOf(context)
+                        .copyWith(color: context.palette.textSecondary),
                   ),
                 ],
                 const SizedBox(height: AppSpacing.sm),
-                Text('Token: ${start.token}', style: AppTypography.caption),
+                Text('Token: ${start.token}', style: AppTypography.captionOf(context)),
                 const SizedBox(height: AppSpacing.md),
               ],
               if (_error != null)
                 Text(_error!,
-                    style: AppTypography.caption
-                        .copyWith(color: AppColors.statusDanger)),
+                    style: AppTypography.captionOf(context)
+                        .copyWith(color: context.palette.statusDanger)),
               const SizedBox(height: AppSpacing.sm),
               FilledButton.icon(
                 onPressed: _busy || start == null ? null : () => _fetchPlan(),
@@ -220,6 +220,10 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
                   Navigator.of(context).pop();
                   Navigator.of(context).pushNamed('/scan');
                 },
+                // Weiss auf der Teal-Flaeche kaeme nur auf 3,46:1; der
+                // Primaertext des Schemas schafft im hellen Schema 5,29:1.
+                style: FilledButton.styleFrom(
+                    foregroundColor: context.palette.textPrimary),
                 icon: const Icon(Icons.qr_code_scanner),
                 label: const Text('Route von anderer App scannen'),
               ),

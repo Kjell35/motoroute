@@ -49,6 +49,9 @@ void main() {
         chatRealtimeProvider.overrideWithValue(realtime),
         chatSessionTokenProvider.overrideWith((ref) => 'token-1'),
       ]);
+      // autoDispose-Provider: ohne Listener wird der Controller sofort
+      // verworfen - fuer die Testdauer offen halten.
+      addTearDown(container.listen(groupRideProvider('r1'), (_, __) {}).close);
       addTearDown(container.dispose);
     });
 

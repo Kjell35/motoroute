@@ -83,7 +83,7 @@ class _RouteScanScreenState extends ConsumerState<RouteScanScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.accentPrimaryDark,
+          backgroundColor: context.palette.accentPrimary,
           content: Text('Route mit ${points.length} Punkten übernommen.'),
         ),
       );
@@ -102,9 +102,9 @@ class _RouteScanScreenState extends ConsumerState<RouteScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: context.palette.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: context.palette.bgBase,
         title: const Text('Route scannen'),
       ),
       body: Column(children: [
@@ -124,7 +124,7 @@ class _RouteScanScreenState extends ConsumerState<RouteScanScreen> {
                 height: 240,
                 decoration: BoxDecoration(
                   border:
-                      Border.all(color: AppColors.accentPrimaryDark, width: 2),
+                      Border.all(color: context.palette.accentPrimary, width: 2),
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
@@ -137,8 +137,8 @@ class _RouteScanScreenState extends ConsumerState<RouteScanScreen> {
             _error ?? 'QR-Code der anderen App ins Feld halten.',
             style: AppTypography.caption.copyWith(
               color: _error != null
-                  ? AppColors.statusDanger
-                  : AppColors.textSecondaryDark,
+                  ? context.palette.statusDanger
+                  : context.palette.textSecondary,
             ),
             textAlign: TextAlign.center,
           ),
