@@ -182,31 +182,58 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
 
   Future<void> _editOdometer() async {
     final i18n = ref.read(i18nProvider);
-    final ctrl = TextEditingController(text: '${_vehicle!.odometerKm}');
+    final current = _vehicle!.odometerKm;
+    final ctrl = TextEditingController(text: '$current');
+    String? error;
     final newKm = await showDialog<int>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.palette.bgSurface,
-        title: Text(i18n.gUpdateKm, style: TextStyle(color: context.palette.textPrimary)),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: i18n.gOdometer, filled: true, fillColor: context.palette.bgSurfaceRaised),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          backgroundColor: context.palette.bgSurface,
+          title: Text(i18n.gUpdateKm, style: TextStyle(color: context.palette.textPrimary)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: i18n.gOdometer, filled: true, fillColor: context.palette.bgSurfaceRaised),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!,
+                  key: const ValueKey('odometer-error'),
+                  style: TextStyle(color: context.palette.statusDanger, fontSize: 12)),
+            ],
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(i18n.gCancel)),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
+              onPressed: () {
+                final value = parseOdometerKm(ctrl.text);
+                final message = odometerProblem(value, currentKm: current);
+                if (message != null) {
+                  setDialog(() => error = message);
+                  return;
+                }
+                Navigator.pop(ctx, value);
+              },
+              child: Text(i18n.gSave),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(i18n.gCancel)),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
-            onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text.trim())),
-            child: Text(i18n.gSave),
-          ),
-        ],
       ),
     );
-    if (newKm == null || newKm == _vehicle!.odometerKm) return;
-    final ctx = await _callCtx();
-    await ref.read(garageRepositoryProvider).updateOdometer(ctx['baseUrl']!, ctx['token']!, widget.vehicleId, newKm);
-    await _reload();
+    if (newKm == null || newKm == current) return;
+    try {
+      final ctx = await _callCtx();
+      await ref.read(garageRepositoryProvider).updateOdometer(ctx['baseUrl']!, ctx['token']!, widget.vehicleId, newKm);
+      await _reload();
+    } catch (e) {
+      ErrorReporter.instance.report('garage.odometer', e);
+      _showGarageError(garageMessageFor(e,
+          loginFailed: i18n.gLoginFailed,
+          unreachable: i18n.gServerUnreachable));
+    }
   }
 
   // -- Erinnerungen -----------------------------------------------------------

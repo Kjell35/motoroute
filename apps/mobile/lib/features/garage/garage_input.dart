@@ -90,3 +90,19 @@ double? parseDecimal(String raw) {
   if (value == null || value < 0) return null;
   return value;
 }
+
+/// Prueft einen neuen Kilometerstand gegen den bisherigen Stand.
+///
+/// `null` = in Ordnung, sonst der Hinweistext fuer den Dialog. Ein
+/// Rueckschritt wird abgelehnt: er wuerde Wartungsintervalle und den
+/// Verbrauch verfaelschen.
+String? odometerProblem(int? value, {required int currentKm}) {
+  if (value == null) return 'Kilometerstand bitte als Zahl angeben.';
+  if (value > 999999) {
+    return 'Kilometerstand ist zu hoch (höchstens 999.999 km).';
+  }
+  if (value < currentKm) {
+    return 'Der neue Stand darf nicht unter dem bisherigen ($currentKm km) liegen.';
+  }
+  return null;
+}
