@@ -586,10 +586,113 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
 
   // -- Reifen --------------------------------------------------------------------
 
+  Future<void> _addTire() async {
+    final i18n = ref.read(i18nProvider);
+    var position = 'front';
+    final brandCtrl = TextEditingController();
+    final modelCtrl = TextEditingController();
+    final sizeCtrl = TextEditingController();
+    final dateCtrl = TextEditingController(text: isoDate(DateTime.now()));
+    final kmCtrl = TextEditingController(text: '${_vehicle!.odometerKm}');
+    final treadCtrl = TextEditingController();
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          backgroundColor: context.palette.bgSurface,
+          title: Text('Reifen hinzufügen', style: TextStyle(color: context.palette.textPrimary)),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              initialValue: position,
+              items: const [
+                DropdownMenuItem(value: 'front', child: Text('Vorne')),
+                DropdownMenuItem(value: 'rear', child: Text('Hinten')),
+              ],
+              onChanged: (v) => setDialog(() => position = v ?? position),
+              dropdownColor: context.palette.bgSurfaceRaised,
+              decoration: _deco(label: 'Position'),
+            ),
+            const SizedBox(height: 10),
+            TextField(controller: brandCtrl, decoration: _deco(label: 'Marke')),
+            const SizedBox(height: 10),
+            TextField(controller: modelCtrl, decoration: _deco(label: 'Modell')),
+            const SizedBox(height: 10),
+            TextField(controller: sizeCtrl, decoration: _deco(label: 'Größe (z. B. 120/70 ZR 17)')),
+            const SizedBox(height: 10),
+            TextField(controller: dateCtrl, decoration: _deco(label: 'Montagedatum')),
+            const SizedBox(height: 10),
+            TextField(controller: kmCtrl, keyboardType: TextInputType.number, decoration: _deco(label: 'Kilometerstand bei Montage')),
+            const SizedBox(height: 10),
+            TextField(controller: treadCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _deco(label: 'Profiltiefe (mm, optional)')),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!,
+                  key: const ValueKey('tire-error'),
+                  style: TextStyle(color: context.palette.statusDanger, fontSize: 12)),
+            ],
+          ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(i18n.gCancel)),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
+              onPressed: () {
+                final message = tireProblem(
+                  brand: brandCtrl.text,
+                  model: modelCtrl.text,
+                  size: sizeCtrl.text,
+                  mountedAtRaw: dateCtrl.text,
+                  mountedAtKmRaw: kmCtrl.text,
+                  treadDepthRaw: treadCtrl.text,
+                );
+                if (message != null) {
+                  setDialog(() => error = message);
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: Text(i18n.gSave),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final mountedAt = isoDate(parseGarageDate(dateCtrl.text)!);
+    final mountedAtKm = parseOdometerKm(kmCtrl.text)!;
+    final tread = parseDecimal(treadCtrl.text);
+    try {
+      final ctx = await _callCtx();
+      await ref.read(garageRepositoryProvider).addTire(
+            ctx['baseUrl']!,
+            ctx['token']!,
+            widget.vehicleId,
+            position: position,
+            brand: brandCtrl.text.trim(),
+            modelName: modelCtrl.text.trim(),
+            size: sizeCtrl.text.trim(),
+            mountedAt: mountedAt,
+            mountedAtKm: mountedAtKm,
+            treadDepthMm: tread,
+          );
+      await _reload();
+    } catch (e) {
+      ErrorReporter.instance.report('garage.tire', e);
+      _showGarageError(garageMessageFor(e,
+          loginFailed: i18n.gLoginFailed,
+          unreachable: i18n.gServerUnreachable));
+    }
+  }
+
   Widget _buildTires(I18n i18n) {
     final tires = _tires ?? const <GarageTireSet>[];
-    return _section(
+    return _sectionWithAction(
       i18n.gTires,
+      IconButton(
+        tooltip: 'Reifen hinzufügen',
+        icon: Icon(Icons.add_circle_outline, color: context.palette.accentPrimary),
+        onPressed: _addTire,
+      ),
       tires.isEmpty
           ? [Text(i18n.gNoTires, style: TextStyle(color: context.palette.textSecondary))]
           : tires.map((t) => Row(children: [

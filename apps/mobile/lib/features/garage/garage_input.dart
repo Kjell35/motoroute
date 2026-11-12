@@ -106,3 +106,39 @@ String? odometerProblem(int? value, {required int currentKm}) {
   }
   return null;
 }
+
+/// Prueft die Reifenfelder im Dialog. `null` = in Ordnung.
+///
+/// Pflicht sind Marke, Modell, Groesse, Montagedatum und der Kilometerstand
+/// bei Montage; die Profiltiefe ist optional, muss aber plausibel sein.
+String? tireProblem({
+  required String brand,
+  required String model,
+  required String size,
+  required String mountedAtRaw,
+  required String mountedAtKmRaw,
+  required String treadDepthRaw,
+}) {
+  if (brand.trim().isEmpty) return 'Bitte die Reifenmarke angeben.';
+  if (model.trim().isEmpty) return 'Bitte das Reifenmodell angeben.';
+  if (size.trim().isEmpty) {
+    return 'Bitte die Reifengröße angeben, z. B. 120/70 ZR 17.';
+  }
+  final mountedAt = parseGarageDate(mountedAtRaw);
+  if (mountedAt == null) {
+    return 'Montagedatum bitte als JJJJ-MM-TT oder TT.MM.JJJJ angeben.';
+  }
+  if (mountedAt.isAfter(DateTime.now())) {
+    return 'Das Montagedatum liegt in der Zukunft.';
+  }
+  final km = parseOdometerKm(mountedAtKmRaw);
+  if (km == null) return 'Kilometerstand bei Montage bitte als Zahl angeben.';
+  if (km > 999999) return 'Kilometerstand ist zu hoch (höchstens 999.999 km).';
+  if (treadDepthRaw.trim().isNotEmpty) {
+    final tread = parseDecimal(treadDepthRaw);
+    if (tread == null || tread <= 0 || tread > 20) {
+      return 'Profiltiefe bitte in mm zwischen 0 und 20 angeben.';
+    }
+  }
+  return null;
+}
