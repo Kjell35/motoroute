@@ -27,6 +27,20 @@ const publicConversationId = '00000000-0000-0000-0000-000000000001';
 /// Performance (Abschnitt 36): Pagination per Cursor (ältere Nachrichten
 /// werden beim Scrollen nachgeladen), Realtime-Anhängen ohne Re-Fetch der
 /// Historie, Listen virtualisiert via ListView.builder (default).
+/// Meldung nach fehlgeschlagenem Senden: der Text steht wieder im
+/// Eingabefeld, und die Meldung bietet den zweiten Versuch direkt an,
+/// damit der Nutzer nicht erst den Sendeknopf suchen muss.
+SnackBar chatSendFailedSnackBar({
+  required String message,
+  required VoidCallback onRetry,
+}) =>
+    SnackBar(
+      // Etwas laenger als der Standard, damit die Aktion lesbar bleibt.
+      duration: const Duration(seconds: 6),
+      content: Text(message),
+      action: SnackBarAction(label: 'Erneut senden', onPressed: onRetry),
+    );
+
 class ConversationScreen extends ConsumerStatefulWidget {
   final String conversationId;
   final String title;
@@ -347,11 +361,18 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       ErrorReporter.instance.report('chat.send', e);
       if (!mounted) return;
       _inputController.text = text; // Text zurück ins Feld (nichts verloren)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-                'Senden fehlgeschlagen: ${friendlyErrorMessage(e, ref.read(i18nProvider))}')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(chatSendFailedSnackBar(
+        message:
+            'Senden fehlgeschlagen: ${friendlyErrorMessage(e, ref.read(i18nProvider))}',
+        onRetry: () {
+          // Nur wiederherstellen, wenn der Nutzer das Feld inzwischen nicht
+          // selbst gefuellt hat - sonst ginge seine Eingabe verloren.
+          if (_inputController.text.trim().isEmpty) {
+            _inputController.text = text;
+          }
+          _send();
+        },
+      ));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
