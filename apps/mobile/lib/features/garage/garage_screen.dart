@@ -36,6 +36,19 @@ String garageMessageFor(
   return '$unreachable: ${msg.split('\n').first}';
 }
 
+/// Liest den Kilometerstand aus dem Eingabefeld.
+///
+/// `null` heisst "keine Angabe" oder "nicht lesbar" - der Aufrufer
+/// unterscheidet die Faelle ueber den Feldtext, damit ein leeres Feld
+/// weiterhin erlaubt bleibt, "12a" aber als Fehler gemeldet wird.
+int? parseOdometerKm(String raw) {
+  final cleaned = raw.trim().replaceAll('.', '').replaceAll(' ', '');
+  if (cleaned.isEmpty) return null;
+  final value = int.tryParse(cleaned);
+  if (value == null || value < 0) return null;
+  return value;
+}
+
 class _GarageScreenState extends ConsumerState<GarageScreen> {
   bool _busy = false;
 
@@ -510,6 +523,19 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
       setState(() => _error = i18n.gErrPickModel);
       return;
     }
+    // Kilometerstand vor dem Absenden pruefen: ein Tippfehler soll hier
+    // auffallen und nicht als Serverfehler zurueckkommen.
+    final odometerKm = parseOdometerKm(_kmCtrl.text);
+    if (_kmCtrl.text.trim().isNotEmpty && odometerKm == null) {
+      setState(() =>
+          _error = 'Kilometerstand bitte als ganze Zahl angeben, z. B. 12500.');
+      return;
+    }
+    if (odometerKm != null && odometerKm > 999999) {
+      setState(() => _error =
+          'Kilometerstand ist zu hoch (höchstens 999.999 km). Bitte prüfe die Eingabe.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -525,7 +551,7 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             modelName: _model!.name,
             variantId: _variant?.id,
             variantName: _variant?.name,
-            odometerKm: int.tryParse(_kmCtrl.text.trim().replaceAll('.', '')),
+            odometerKm: odometerKm,
             nickname: _nicknameCtrl.text.trim().isEmpty
                 ? null
                 : _nicknameCtrl.text.trim(),
