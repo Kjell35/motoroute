@@ -81,18 +81,22 @@ void main() {
 
   group('computeMonthlyKm', () {
         test('bucketed Distanzen in die letzten Monate (inkl. leerer)', () {
+          // Datum relativ zu heute: computeMonthlyKm rechnet gegen
+          // DateTime.now(), feste Kalenderdaten machen den Test zu einer
+          // Zeitbombe (er fiel im Folgemonat um).
+          final now = DateTime.now();
           final tours = [
             tour(
-              startedAt: DateTime(2026, 9, 15),
+              startedAt: DateTime(now.year, now.month - 1, 15),
               distanceMeters: 640000,
             ),
             tour(
-              startedAt: DateTime(2026, 10, 2),
+              startedAt: DateTime(now.year, now.month, 2),
               distanceMeters: 278500,
             ),
-            // Aelter als der 6-Monats-Fenster: faellt raus.
+            // Aelter als das 6-Monats-Fenster: faellt raus.
             tour(
-              startedAt: DateTime(2025, 3, 1),
+              startedAt: DateTime(now.year - 1, now.month, 1),
               distanceMeters: 999000,
             ),
           ];

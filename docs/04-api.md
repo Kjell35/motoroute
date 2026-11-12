@@ -70,6 +70,70 @@ Verkehrs-Störungen als GeoJSON (Typ: jam, roadwork, accident, closure). Quelle 
 ### POST /api/v1/tour *(Phase 2, Architektur vorgesehen)*
 Rundtour-Generator: Start, Ziel-Distanz, Fahrstil, Vermeidungen → Tour-Plan (Loop zurück zum Start), intern mehrere Routing-Aufrufe + PostGIS-Auswahl kurvenreicher Korridore.
 
+### POST /api/v1/chat/media/images *(Community-Phase, offen)*
+Nimmt **ein** Bild auf und liefert die URL, die danach in `POST /v1/chat/groups`
+bzw. `PUT /v1/chat/groups/{groupId}` als `imageUrl` gesetzt wird. Der Upload ist
+bewusst vom Gruppen-Call getrennt: ein fehlgeschlagener Upload darf das Erstellen
+der Gruppe nicht verhindern, und derselbe Endpunkt bedient später Profilbilder.
+
+```json
+// Request: multipart/form-data
+//   file  = Binärdaten (Pflicht)
+//   scope = "group" | "avatar" (optional, Default "group" - nur für Quota/Aufbewahrung)
+
+// Response 201
+{
+  "url": "https://media.motoroute.app/i/7f3c….webp",
+  "width": 1024,
+  "height": 768,
+  "bytes": 210331,
+  "content_type": "image/webp"
+}
+```
+
+Regeln:
+
+- **Formate:** JPEG, PNG, WebP. Prüfung über Magic Bytes, nicht über den
+  `Content-Type`-Header des Clients.
+- **Größe:** max. 5 MB Request, max. 12 MP Ausgangsbild.
+- **Serverseitige Normalisierung:** EXIF (inkl. GPS!) entfernen, längste Kante
+  auf 1024 px, Re-Encode nach WebP (Fallback JPEG). Das Original wird nicht
+  gespeichert - sonst wandern Standortdaten in den Storage.
+- **Objektnamen:** zufällig (UUIDv4), kein Nutzerbezug im Pfad.
+- **Antwort-URL:** absolut, https, ausschließlich der eigene Media-Host. Fremde
+  Hosts werden beim Setzen von `imageUrl` abgelehnt (`INVALID_IMAGE_URL`), damit
+  die App keine beliebigen externen Bilder in Gruppen zieht.
+- **Berechtigung:** jeder angemeldete Nutzer darf hochladen; wer das Bild an eine
+  Gruppe hängt, muss Owner/Moderator sein (bestehende Regel von
+  `PUT /v1/chat/groups/{id}`).
+- **Aufräumen:** nicht referenzierte Uploads werden nach 24 h gelöscht; beim
+  Löschen einer Gruppe verschwindet ihr Bild mit.
+- **Missbrauch:** Rate-Limit pro Nutzer (z. B. 20 Uploads/Stunde).
+
+Fehler im Format aus Abschnitt 1:
+
+| Status | code | Ursache |
+|---|---|---|
+| 400 | `INVALID_IMAGE` | Datei fehlt, leer oder nicht dekodierbar |
+| 400 | `INVALID_IMAGE_URL` | `imageUrl` zeigt nicht auf den Media-Host |
+| 413 | `IMAGE_TOO_LARGE` | Request > 5 MB |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | Format nicht JPEG/PNG/WebP |
+| 429 | `RATE_LIMITED` | Upload-Limit erreicht |
+| 503 | `UPLOAD_UNAVAILABLE` | Storage/CDN nicht erreichbar |
+
+Client-Flow (Flutter, heute noch nicht implementiert):
+
+1. Bild mit `image_picker` wählen (`imageQuality: 80`, `maxWidth: 1600`) -
+   Vorab-Verkleinerung spart Mobilfunk-Traffic.
+2. Vorschau zeigen; die Auswahl lässt sich vor dem Absenden wieder entfernen.
+3. Upload beim Absenden; bei Fehler **nicht** die ganze Gruppe verwerfen,
+   sondern das Bild weglassen und einen Hinweis zeigen.
+4. Erfolgreiche `url` als `imageUrl` an `POST /v1/chat/groups` übergeben.
+
+> Solange dieser Endpunkt fehlt, zeigt das Gruppen-Formular bewusst kein
+> Bild-Feld: ein Multipart-Body an einen JSON-Endpunkt würde das Erstellen der
+> Gruppe scheitern lassen.
+
 ## 3. Nicht-Endpoints (bewusst)
 
 - **Kein** „Positions-Reporting“-Endpoint. Die App sendet Standort nie persistierend; Reroute-Requests enthalten die Position nur transient zur Verarbeitung.

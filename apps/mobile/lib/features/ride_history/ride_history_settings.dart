@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/network/error_reporter.dart';
 import '../auth/auth_providers.dart';
 import 'ride_history_repository.dart';
 
@@ -81,7 +82,11 @@ class RideHistorySettingsController extends StateNotifier<RideHistorySettings> {
           sharePlaces: j['sharePlaces'] as bool? ?? false,
           hideStartEnd: j['hideStartEnd'] as bool? ?? true,
         );
-      } catch (_) {}
+      } catch (e) {
+        // Server-Stand der Freigabe-Einstellungen: schlaegt er fehl, gilt
+        // still der lokale Stand - koennte die Privatsphaere betreffen.
+        ErrorReporter.instance.report('ride_history.settings', e);
+      }
     }
 
     final token = _ref.read(authControllerProvider.notifier).accessToken;

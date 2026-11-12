@@ -64,7 +64,10 @@ void main() {
   setUp(() async {
     location = _MockLocationRepository();
     positionStream = StreamController<Position>();
-    when(() => location.watchPosition(tuning: any(named: 'tuning')))
+    when(() => location.watchPosition(
+          tuning: any(named: 'tuning'),
+          backgroundNavigation: false,
+        ))
         .thenAnswer((_) => positionStream.stream);
 
     // ALLE Overrides statisch bei Container-Erstellung - Riverpod

@@ -28,7 +28,14 @@ val keystoreFilePath = System.getenv("MOTOROUTE_KEYSTORE_PATH")
 val keystorePasswordValue = System.getenv("MOTOROUTE_KEYSTORE_PASSWORD")
 val keyAliasValue = System.getenv("MOTOROUTE_KEY_ALIAS")
 val keyPasswordValue = System.getenv("MOTOROUTE_KEY_PASSWORD")
-val hasReleaseKeystore = !keystoreFilePath.isNullOrBlank() &&
+val keystoreFile = keystoreFilePath?.takeIf { it.isNotBlank() }?.let { file(it) }
+// Ein gesetzter, aber falscher Pfad darf NICHT still auf Debug-Signierung
+// zurückfallen: sonst verteilt die CI unbemerkt APKs, die sich nicht über
+// eine signierte Version installieren lassen.
+if (keystoreFile != null && !keystoreFile.exists()) {
+    throw GradleException("MOTOROUTE_KEYSTORE_PATH zeigt auf keine Datei: $keystoreFile")
+}
+val hasReleaseKeystore = keystoreFile != null &&
         !keystorePasswordValue.isNullOrBlank() &&
         !keyAliasValue.isNullOrBlank() &&
         !keyPasswordValue.isNullOrBlank()
@@ -54,7 +61,7 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                storeFile = file(keystoreFilePath!!)
+                storeFile = keystoreFile
                 storePassword = keystorePasswordValue
                 keyAlias = keyAliasValue
                 keyPassword = keyPasswordValue

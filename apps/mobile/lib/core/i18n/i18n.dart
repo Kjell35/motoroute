@@ -225,6 +225,9 @@ class I18n {
   String get navOffRoute => tr('nav.offRoute');
   String get navRerouting => tr('nav.rerouting');
   String get navMapOffline => tr('nav.mapOffline');
+  String get navResumeTitle => tr('nav.resume.title');
+  String get navResumeHint => tr('nav.resume.hint');
+  String get navResumeContinue => tr('nav.resume.continue');
 
   // Auth
   String get login => tr('auth.login');
@@ -287,7 +290,7 @@ const _catalog = <String, Map<String, String>>{
     'settings.saved': 'Gespeichert',
     'errors.saveFailed':
         'Speichern fehlgeschlagen - bitte später erneut versuchen',
-    'settings.themeMode': 'Erscheinungsbild (UI)',
+    'settings.themeMode': 'Erscheinungsbild',
     'settings.themeMode.system': 'Auto',
     'settings.themeMode.light': 'Hell',
     'settings.themeMode.dark': 'Dunkel',
@@ -297,6 +300,94 @@ const _catalog = <String, Map<String, String>>{
         'Kartenbereich für offline Navigation speichern',
     'settings.offlineMaps.dialogTitle': 'Offline-Karte herunterladen',
     'settings.offlineMaps.radius': 'Radius um die aktuelle Position',
+    // Anonyme Fehlerberichte: Diagnosezeile (Einstellungen > Community).
+    'settings.telemetry.none': 'Noch kein Bericht gesendet.',
+    'settings.telemetry.accepted': '{accepted} von {attempted} bestätigt',
+    'settings.telemetry.queued': '{queued} warten auf Versand',
+    'settings.telemetry.failed': '{failed} fehlgeschlagen',
+    'settings.telemetry.lastFailure': 'zuletzt: {reason}',
+    'settings.telemetry.since': 'Seit {date}:',
+    'settings.telemetry.userNone':
+        'Noch kein Fehlerbericht beim Support angekommen.',
+    'settings.telemetry.userOne':
+        'Ein Fehlerbericht beim Support angekommen{when}.',
+    'settings.telemetry.userMany':
+        '{n} Fehlerberichte beim Support angekommen{when}.',
+    'settings.telemetry.userWhen': ' · zuletzt am {date}',
+    'settings.telemetry.resetTitle': 'Diagnose zurücksetzen?',
+    'settings.telemetry.resetBody':
+        '{n} wartende Berichte werden dabei verworfen. Sie wurden noch nicht '
+        'angenommen und sind dann endgültig weg.',
+    'settings.telemetry.resetConfirm': 'Verwerfen',
+    'settings.telemetry.resetTooltip': 'Zähler zurücksetzen',
+    'settings.telemetry.copyTooltip': 'Status kopieren',
+    'settings.telemetry.copied': 'Status kopiert.',
+    // Community-Sektion: Benachrichtigungen, Fehlerberichte, Chat.
+    'settings.community': 'Community',
+    'settings.notifyUnreadTitle': 'Ungelesen-Hinweis am Chat-Tab',
+    'settings.notifyUnreadHint':
+        'Es gibt keine Push-Benachrichtigungen von Google - Hinweise '
+        'erscheinen direkt in der App.',
+    'settings.telemetry.toggle': 'Anonyme Fehlerberichte senden',
+    'settings.telemetry.toggleHint':
+        'Hilft dem Support, Ausfälle zu finden - ganz ohne Namen, E-Mail oder '
+        'Standort. Jederzeit abschaltbar.',
+    'settings.chatAccount.notConnectedHint':
+        'Nicht verbunden - Anmeldung in der App nötig',
+    'settings.chatAccount.connectedAs': 'Verbunden als {name}',
+    'settings.saveOfflineFailed': 'Konnte nicht gespeichert werden - offline?',
+    // Restliche Sektionen: Navigation, Konto, Karte, Recht & Info.
+    'settings.vehicleDefault': 'Fahrzeugstandard',
+    'settings.vehicleDefaultHint': 'Beeinflusst Routing und Dauer',
+    'settings.units': 'Einheiten',
+    'settings.units.km': 'Kilometer',
+    'settings.units.mi': 'Meilen',
+    'settings.energySaver': 'Energiesparmodus',
+    'settings.energySaver.onHint':
+        'Energiesparmodus aktiv - GPS wird während der Navigation gedrosselt.',
+    'settings.energySaver.offHint':
+        'Energiesparmodus aus - volle GPS-Genauigkeit.',
+    'settings.energySaver.critical':
+        'Kritischer Akku - minimale GPS-Genauigkeit',
+    'settings.energySaver.throttled': 'GPS gedrosselt',
+    'settings.energySaver.battery': 'Akkustand: {level} %',
+    'settings.map': 'Karte',
+    'settings.offlineMaps.defaultName': 'Meine Region',
+    'settings.offlineMaps.fallbackName': 'Region',
+    'settings.account.loggedOut': 'Nicht angemeldet',
+    'settings.account.loggedOutHint': 'Chat und Gruppen brauchen ein Konto',
+    'settings.account.signIn': 'Anmelden',
+    'settings.account.editName': 'Anzeigename ändern',
+    'settings.account.changePassword': 'Passwort ändern',
+    'settings.account.delete': 'Konto löschen',
+    'settings.account.deleteHint': 'Endgültig - alle Daten werden entfernt',
+    'settings.account.logoutConfirm': 'Abmelden?',
+    'settings.account.logoutHint':
+        'Gespeicherte Routen und Einstellungen bleiben auf dem Gerät.',
+    'settings.account.nameHint': 'z. B. Vati auf zwei Rädern',
+    'settings.account.savedAs': 'Gespeichert: {name}',
+    'settings.account.serverUnreachable':
+        'Server nicht erreichbar - später erneut versuchen',
+    'settings.account.currentPassword': 'Aktuelles Passwort',
+    'settings.account.newPassword': 'Neues Passwort',
+    'settings.account.sessionsHint':
+        'Mind. 8 Zeichen. Alte Sitzungen bleiben gültig - danach ggf. überall abmelden.',
+    'settings.account.change': 'Ändern',
+    'settings.account.passwordTooShort':
+        'Das neue Passwort muss mindestens 8 Zeichen haben',
+    'settings.account.passwordChanged': 'Passwort geändert ✓',
+    'settings.account.deleteConfirmTitle': 'Konto endgültig löschen?',
+    'settings.account.deleteConfirmBody':
+        'Es werden gelöscht: Profil, Chat-Nachrichten, Gruppen-Mitgliedschaften '
+        'und gespeicherte Gruppenrouten-Anteile. Das kann nicht rückgängig '
+        'gemacht werden.',
+    'settings.account.deleteKeyword': 'LÖSCHEN',
+    'settings.account.deleteTypeHint': 'Tippe {keyword} zur Bestätigung',
+    'settings.account.deleteForever': 'Endgültig löschen',
+    'settings.legal.privacyHint': 'Welche Daten MotoRoute verarbeitet',
+    'settings.legal.imprintHint': 'Betreiber der Instanz',
+    'settings.legal.aboutHint': 'Version, Datenquellen, Danksagung',
+    'common.name': 'Name',
     'tab.map': 'Karte',
     'tab.marketplace': 'Marktplatz',
     'tab.tours': 'Touren',
@@ -435,7 +526,7 @@ const _catalog = <String, Map<String, String>>{
     'settings.chatName.mode': 'Name in Chats',
     'settings.chatName.username': 'Benutzername',
     'settings.chatName.firstName': 'Vorname',
-    'settings.chatName.custom': 'Benutzerdefinierter Anzeigename',
+    'settings.chatName.custom': 'Eigener Name',
     'settings.chatName.customLabel': 'Eigener Anzeigename',
     'settings.firstName': 'Vorname',
     'settings.navigation': 'Navigation',
@@ -508,6 +599,9 @@ const _catalog = <String, Map<String, String>>{
     'nav.offRoute': 'Von der Route abgewichen',
     'nav.rerouting': 'Route wird angepasst…',
     'nav.mapOffline': 'Karte offline',
+    'nav.resume.title': 'Navigation fortsetzen',
+    'nav.resume.hint': 'Die letzte Fahrt wurde unterbrochen.',
+    'nav.resume.continue': 'Fortsetzen',
     // Auth
     'auth.login': 'Anmelden',
     'auth.register': 'Konto erstellen',
@@ -657,7 +751,7 @@ const _catalog = <String, Map<String, String>>{
     'mp.submitFailed': 'Einreichen fehlgeschlagen',
   },
   'en': {
-    'settings.themeMode': 'Appearance (UI)',
+    'settings.themeMode': 'Appearance',
     'settings.themeMode.system': 'Auto',
     'settings.themeMode.light': 'Light',
     'settings.themeMode.dark': 'Dark',
@@ -666,6 +760,87 @@ const _catalog = <String, Map<String, String>>{
     'settings.offlineMaps.addHint': 'Save a map area for offline navigation',
     'settings.offlineMaps.dialogTitle': 'Download offline map',
     'settings.offlineMaps.radius': 'Radius around the current position',
+    // Anonymous error reports: diagnostics line (Settings > Community).
+    'settings.telemetry.none': 'No report sent yet.',
+    'settings.telemetry.accepted': '{accepted} of {attempted} confirmed',
+    'settings.telemetry.queued': '{queued} waiting to be sent',
+    'settings.telemetry.failed': '{failed} failed',
+    'settings.telemetry.lastFailure': 'last: {reason}',
+    'settings.telemetry.since': 'Since {date}:',
+    'settings.telemetry.userNone': 'No error report has reached support yet.',
+    'settings.telemetry.userOne': 'One error report reached support{when}.',
+    'settings.telemetry.userMany': '{n} error reports reached support{when}.',
+    'settings.telemetry.userWhen': ' · last on {date}',
+    'settings.telemetry.resetTitle': 'Reset diagnostics?',
+    'settings.telemetry.resetBody':
+        '{n} pending reports will be discarded. They have not been accepted '
+        'yet and will be gone for good.',
+    'settings.telemetry.resetConfirm': 'Discard',
+    'settings.telemetry.resetTooltip': 'Reset counters',
+    'settings.telemetry.copyTooltip': 'Copy status',
+    'settings.telemetry.copied': 'Status copied.',
+    // Community section: notifications, error reports, chat.
+    'settings.community': 'Community',
+    'settings.notifyUnreadTitle': 'Unread hint on the chat tab',
+    'settings.notifyUnreadHint':
+        'There are no Google push notifications - hints appear directly in '
+        'the app.',
+    'settings.telemetry.toggle': 'Send anonymous error reports',
+    'settings.telemetry.toggleHint':
+        'Helps support find outages - without name, email or location. '
+        'Can be turned off at any time.',
+    'settings.chatAccount.notConnectedHint':
+        'Not connected - sign-in in the app required',
+    'settings.chatAccount.connectedAs': 'Connected as {name}',
+    'settings.saveOfflineFailed': 'Could not be saved - offline?',
+    // Remaining sections: navigation, account, map, legal.
+    'settings.vehicleDefault': 'Default vehicle',
+    'settings.vehicleDefaultHint': 'Affects routing and duration',
+    'settings.units': 'Units',
+    'settings.units.km': 'Kilometers',
+    'settings.units.mi': 'Miles',
+    'settings.energySaver': 'Power saving',
+    'settings.energySaver.onHint':
+        'Power saving on - GPS is throttled during navigation.',
+    'settings.energySaver.offHint': 'Power saving off - full GPS accuracy.',
+    'settings.energySaver.critical': 'Critical battery - minimal GPS accuracy',
+    'settings.energySaver.throttled': 'GPS throttled',
+    'settings.energySaver.battery': 'Battery: {level} %',
+    'settings.map': 'Map',
+    'settings.offlineMaps.defaultName': 'My region',
+    'settings.offlineMaps.fallbackName': 'Region',
+    'settings.account.loggedOut': 'Not signed in',
+    'settings.account.loggedOutHint': 'Chat and groups need an account',
+    'settings.account.signIn': 'Sign in',
+    'settings.account.editName': 'Change display name',
+    'settings.account.changePassword': 'Change password',
+    'settings.account.delete': 'Delete account',
+    'settings.account.deleteHint': 'Permanent - all data will be removed',
+    'settings.account.logoutConfirm': 'Sign out?',
+    'settings.account.logoutHint': 'Saved routes and settings stay on this device.',
+    'settings.account.nameHint': 'e.g. Dad on two wheels',
+    'settings.account.savedAs': 'Saved: {name}',
+    'settings.account.serverUnreachable':
+        'Server unreachable - please try again later',
+    'settings.account.currentPassword': 'Current password',
+    'settings.account.newPassword': 'New password',
+    'settings.account.sessionsHint':
+        'Min. 8 characters. Old sessions stay valid - sign out afterwards if needed.',
+    'settings.account.change': 'Change',
+    'settings.account.passwordTooShort':
+        'The new password must be at least 8 characters long',
+    'settings.account.passwordChanged': 'Password changed ✓',
+    'settings.account.deleteConfirmTitle': 'Delete account permanently?',
+    'settings.account.deleteConfirmBody':
+        'This deletes: profile, chat messages, group memberships and saved '
+        'group route shares. This cannot be undone.',
+    'settings.account.deleteKeyword': 'DELETE',
+    'settings.account.deleteTypeHint': 'Type {keyword} to confirm',
+    'settings.account.deleteForever': 'Delete permanently',
+    'settings.legal.privacyHint': 'What data MotoRoute processes',
+    'settings.legal.imprintHint': 'Instance operator',
+    'settings.legal.aboutHint': 'Version, data sources, credits',
+    'common.name': 'Name',
     // Tabs
     'settings.languageAndAppearance': 'Language & appearance',
     'settings.saved': 'Saved',
@@ -806,7 +981,7 @@ const _catalog = <String, Map<String, String>>{
     'settings.chatName.mode': 'Name in chats',
     'settings.chatName.username': 'Username',
     'settings.chatName.firstName': 'First name',
-    'settings.chatName.custom': 'Custom display name',
+    'settings.chatName.custom': 'Custom',
     'settings.chatName.customLabel': 'Custom name',
     'settings.firstName': 'First name',
     'settings.navigation': 'Navigation',
@@ -878,6 +1053,9 @@ const _catalog = <String, Map<String, String>>{
     'nav.offRoute': 'Off route',
     'nav.rerouting': 'Recalculating…',
     'nav.mapOffline': 'Map offline',
+    'nav.resume.title': 'Resume navigation',
+    'nav.resume.hint': 'Your last ride was interrupted.',
+    'nav.resume.continue': 'Resume',
     // Auth
     'auth.login': 'Sign in',
     'auth.register': 'Create account',

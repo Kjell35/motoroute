@@ -7,6 +7,7 @@ import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/error_reporter.dart';
 import '../chat/chat_providers.dart';
 
 /// App-weite Anmeldung (E-Mail/Passwort) gegen das eigene Backend
@@ -358,7 +359,11 @@ class AuthController extends StateNotifier<AuthState> {
         authenticated = user.copyWith(
           isAdmin: (me.data?['role'] as String?) == 'admin',
         );
-      } catch (_) {}
+      } catch (e) {
+        // Rollenwechsel kann jederzeit serverseitig passieren; scheitert der
+        // Abruf dauerhaft, bliebe ein entzogener Admin still Admin.
+        ErrorReporter.instance.report('auth.role', e);
+      }
 
       final prefs = await SharedPreferences.getInstance();
       if (remember) {
@@ -420,7 +425,11 @@ class AuthController extends StateNotifier<AuthState> {
       try {
         final prefs = await SharedPreferences.getInstance();
         await _forgetPersistedSession(prefs);
-      } catch (_) {}
+      } catch (e) {
+        // Lokale Sitzung liess sich nicht loeschen: der Nutzer gilt nach
+        // einem Fehlschlag sonst beim naechsten Start wieder als angemeldet.
+        ErrorReporter.instance.report('auth.cleanup', e);
+      }
       state = AuthState(error: error.message);
       rethrow;
     } catch (error) {
@@ -429,7 +438,9 @@ class AuthController extends StateNotifier<AuthState> {
       try {
         final prefs = await SharedPreferences.getInstance();
         await _forgetPersistedSession(prefs);
-      } catch (_) {}
+      } catch (e) {
+        ErrorReporter.instance.report('auth.cleanup', e);
+      }
       // Expose only the exception class, never its message: plugin/Dio errors
       // can include request details. This replaces an opaque fallback so the
       // user can report whether the failure came from storage or parsing.
@@ -488,7 +499,9 @@ class AuthController extends StateNotifier<AuthState> {
     } catch (_) {
       try {
         await _forgetPersistedSession(prefs);
-      } catch (_) {}
+      } catch (e) {
+        ErrorReporter.instance.report('auth.cleanup', e);
+      }
       rethrow;
     }
   }
@@ -514,7 +527,11 @@ class AuthController extends StateNotifier<AuthState> {
     // false, so this token cannot be restored; restore retries cleanup later.
     try {
       await _secureRemover(_kRefreshToken);
-    } catch (_) {}
+    } catch (e) {
+      // Kaputter Keystore: das Token kann beim naechsten Start wieder
+      // auftauchen - sichtbar machen, statt es still zu schlucken.
+      ErrorReporter.instance.report('auth.cleanup', e);
+    }
   }
 
   Future<void> _persistRotatedRefreshToken(String refresh) async {

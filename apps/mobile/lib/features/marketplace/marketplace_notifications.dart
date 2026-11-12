@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/network/error_reporter.dart';
 import 'marketplace_repository.dart';
 
 /// In-App-Benachrichtigungen für Verkäufer: jemand hat dein Angebot
@@ -47,8 +48,10 @@ class MarketplaceNotificationsController
           .notifications(token: token);
       if (_ref.read(marketplaceTokenProvider) != token) return;
       state = data;
-    } catch (_) {
-      // Netz-Fehler still ignorieren - nächster Poll versucht es erneut.
+    } catch (e) {
+      // Nächster Poll versucht es erneut - gemeldet wird trotzdem, sonst
+      // bliebe eine dauerhaft kaputte Inbox unsichtbar.
+      ErrorReporter.instance.report('mp.notifications', e);
     }
   }
 
@@ -72,8 +75,10 @@ class MarketplaceNotificationsController
             .toList(growable: false),
         unread: 0,
       );
-    } catch (_) {
-      // Beim nächsten Poll konsistieren.
+    } catch (e) {
+      // Beim nächsten Poll konsistieren; der Ausfall selbst bleibt sonst
+      // unbemerkt.
+      ErrorReporter.instance.report('mp.notifications', e);
     }
   }
 

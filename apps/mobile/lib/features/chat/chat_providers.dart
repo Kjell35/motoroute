@@ -187,7 +187,10 @@ class ChatOverviewController extends StateNotifier<ChatOverviewState> {
     if (token == null) return;
     try {
       await _repo.markRead(token, conversationId);
-    } catch (_) {}
+    } catch (e) {
+      // Ungelesen-Zaehler bleibt sonst stehen, obwohl der Nutzer gelesen hat.
+      ErrorReporter.instance.report('chat.mark_read', e);
+    }
     state = state.copyWith(
       conversations: state.conversations
           .map((c) => c.id == conversationId

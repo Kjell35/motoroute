@@ -17,6 +17,11 @@ import 'package:motoroute_app/core/theme/app_typography.dart';
 ///  - Externe Dienste: OpenStreetMap/CARTO-Kacheln (keyless),
 ///    TomTom (Suche/Verkehr, Key nur im Backend), Open-Meteo (Wetter)
 
+/// Farben des aktiven Schemas - die Seiten faerben Flaechen und Karten
+/// selbst, deshalb loesen sie die Tokens hier auf.
+AppPalette _paletteOf(BuildContext context) =>
+    AppPalette.of(Theme.of(context).brightness);
+
 class PrivacyScreen extends StatelessWidget {
   const PrivacyScreen({super.key});
 
@@ -86,19 +91,21 @@ class PrivacyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _paletteOf(context);
+    final caption = AppTypography.caption.copyWith(color: colors.textSecondary);
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: colors.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: colors.bgBase,
         title: const Text('Datenschutz', style: AppTypography.title),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           children: [
-            const Text(
+            Text(
               'Stand: September 2026 - gilt für die private Testphase (v0.3.0).',
-              style: AppTypography.caption,
+              style: caption,
             ),
             const SizedBox(height: AppSpacing.md),
             for (final section in _sections) ...[
@@ -106,25 +113,25 @@ class PrivacyScreen extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: AppColors.bgSurfaceDark,
+                  color: colors.bgSurface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.borderHairlineDark),
+                  border: Border.all(color: colors.borderHairline),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(section.title, style: AppTypography.body),
                     const SizedBox(height: AppSpacing.sm),
-                    Text(section.body, style: AppTypography.caption),
+                    Text(section.body, style: caption),
                   ],
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
             ],
-            const Text(
+            Text(
               'Fragen zum Datenschutz? Sprich den Betreiber an (siehe Impressum) - '
               'in der Testphase ist das der private Betreiber der MotoRoute-Instanz.',
-              style: AppTypography.caption,
+              style: caption,
             ),
           ],
         ),
@@ -138,10 +145,11 @@ class ImprintScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = _paletteOf(context);
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: colors.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: colors.bgBase,
         title: const Text('Impressum', style: AppTypography.title),
       ),
       body: SafeArea(
@@ -152,9 +160,9 @@ class ImprintScreen extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: AppColors.bgSurfaceDark,
+                color: colors.bgSurface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.borderHairlineDark),
+                border: Border.all(color: colors.borderHairline),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,10 +197,11 @@ class AboutScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = _paletteOf(context);
     return Scaffold(
-      backgroundColor: AppColors.bgBaseDark,
+      backgroundColor: colors.bgBase,
       appBar: AppBar(
-        backgroundColor: AppColors.bgBaseDark,
+        backgroundColor: colors.bgBase,
         title: const Text('Über MotoRoute', style: AppTypography.title),
       ),
       body: SafeArea(
@@ -203,18 +212,18 @@ class AboutScreen extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: AppColors.bgSurfaceDark,
+                color: colors.bgSurface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.borderHairlineDark),
+                border: Border.all(color: colors.borderHairline),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.two_wheeler, color: AppColors.accentPrimaryDark, size: 40),
-                  SizedBox(height: AppSpacing.md),
-                  Text('MotoRoute', style: AppTypography.title),
-                  SizedBox(height: AppSpacing.xs),
-                  Text(
+                  Icon(Icons.two_wheeler, color: colors.accentPrimary, size: 40),
+                  const SizedBox(height: AppSpacing.md),
+                  const Text('MotoRoute', style: AppTypography.title),
+                  const SizedBox(height: AppSpacing.xs),
+                  const Text(
                     'Motorrad-Navigation für kurvige Touren - gebaut für '
                     'kleine Gruppen: gemeinsame Routenplanung, Live-Fahrt '
                     'und Biker-Community.\n\n'
@@ -232,9 +241,9 @@ class AboutScreen extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: AppColors.bgSurfaceDark,
+                color: colors.bgSurface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.borderHairlineDark),
+                border: Border.all(color: colors.borderHairline),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

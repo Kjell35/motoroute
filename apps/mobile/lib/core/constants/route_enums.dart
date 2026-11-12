@@ -37,3 +37,27 @@ extension AvoidOptionApi on AvoidOption {
         AvoidOption.toll => 'TOLL',
       };
 }
+
+// Rueckweg von gespeicherten Werten (persistierte Navigationssitzung).
+// Bewusst null statt Exception: ein unbekannter Wert bedeutet, dass die
+// Datei von einer neueren Version stammt - der Aufrufer verwirft sie.
+RouteStyle? routeStyleFromApiValue(String? value) {
+  for (final style in RouteStyle.values) {
+    if (style.apiValue == value) return style;
+  }
+  return null;
+}
+
+VehicleType? vehicleTypeFromApiValue(String? value) {
+  for (final type in VehicleType.values) {
+    if (type.apiValue == value) return type;
+  }
+  return null;
+}
+
+AvoidOption? avoidOptionFromApiValue(String? value) {
+  for (final option in AvoidOption.values) {
+    if (option.apiValue == value) return option;
+  }
+  return null;
+}
