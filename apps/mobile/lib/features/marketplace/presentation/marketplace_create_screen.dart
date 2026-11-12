@@ -42,6 +42,13 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
   bool _submitting = false;
   MpListing? _result;
 
+  /// Fortschritt des Absendens: erst die lokalen Fotos (Datei lesen), dann
+  /// die Uebertragung selbst. Beides sichtbar, damit ein grosser Upload
+  /// nicht wie ein haengender Knopf wirkt.
+  int _photoDone = 0;
+  int _photoTotal = 0;
+  double? _sendProgress;
+
   MpCatalog? _catalog;
 
   @override
@@ -159,6 +166,41 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
     return candidates.isEmpty ? null : candidates.first.key;
   }
 
+  void _onPhotoProgress(int done, int total) {
+    if (!mounted) return;
+    setState(() {
+      _photoDone = done;
+      _photoTotal = total;
+      // Fotos sind vorbereitet, ab jetzt laeuft die Uebertragung.
+      _sendProgress = null;
+    });
+  }
+
+  void _onSendProgress(int sent, int total) {
+    if (!mounted || total <= 0) return;
+    final value = sent / total;
+    setState(() => _sendProgress = value.clamp(0.0, 1.0));
+  }
+
+  /// 0..1 fuer die Leiste; null laesst sie unbestimmt laufen.
+  double? get _progressValue {
+    final send = _sendProgress;
+    if (send != null) return send;
+    if (_photoTotal > 0) return _photoDone / _photoTotal;
+    return null;
+  }
+
+  String get _progressLabel {
+    final send = _sendProgress;
+    if (send != null) {
+      return 'Angebot wird gesendet … ${(send * 100).round()} %';
+    }
+    if (_photoTotal > 0 && _photoDone < _photoTotal) {
+      return 'Bild $_photoDone von $_photoTotal wird vorbereitet …';
+    }
+    return 'Angebot wird geprüft …';
+  }
+
   Future<void> _submit() async {
     final i18n = ref.read(i18nProvider);
     if (!_formKey.currentState!.validate()) return;
@@ -176,7 +218,20 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
       return;
     }
 
-    setState(() => _submitting = true);
+    // Nur lokale Dateien werden hochgeladen; bestehende URLs (Bearbeiten
+    // eines Angebots) bleiben, wie sie sind.
+    final localPhotos = _photos
+        .where((p) =>
+            !p.path.startsWith('http://') && !p.path.startsWith('https://'))
+        .map((p) => p.path)
+        .toList();
+
+    setState(() {
+      _submitting = true;
+      _photoDone = 0;
+      _photoTotal = localPhotos.length;
+      _sendProgress = null;
+    });
     final repo = ref.read(marketplaceRepositoryProvider);
     try {
       final priceCents = ((double.tryParse(_price.text.trim().replaceAll(',', '.')) ?? -1) * 100).round();
@@ -200,16 +255,17 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
           token: token,
           id: widget.editListing!.id,
           fields: fields,
-          imagePaths: _photos
-              .where((p) => !p.path.startsWith('http://') && !p.path.startsWith('https://'))
-              .map((p) => p.path)
-              .toList(),
+          imagePaths: localPhotos,
+          onPhotoProgress: _onPhotoProgress,
+          onSendProgress: _onSendProgress,
         );
       } else {
         listing = await repo.create(
           token: token,
           fields: fields,
-          imagePaths: _photos.map((p) => p.path).toList(),
+          imagePaths: localPhotos,
+          onPhotoProgress: _onPhotoProgress,
+          onSendProgress: _onSendProgress,
         );
       }
 
@@ -217,19 +273,42 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
       setState(() {
         _result = listing;
         _submitting = false;
+        _sendProgress = null;
       });
+    } on MpPhotoUploadException catch (e) {
+      // Ein einzelnes Foto klemmt: das benennen, statt den ganzen Vorgang
+      // als "fehlgeschlagen" zu verbuchen. Formular und Fotos bleiben.
+      ErrorReporter.instance.report('mp.create.photo', e);
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _sendProgress = null;
+      });
+      _showSnack(
+        'Bild ${e.index} von ${e.total} konnte nicht gelesen werden. '
+        'Bitte prüfe, ob die Datei noch auf dem Gerät liegt, und versuche es erneut.',
+        error: true,
+      );
     } catch (e) {
       ErrorReporter.instance.report('mp.create', e);
       if (!mounted) return;
-      setState(() => _submitting = false);
-      _showSnack('${i18n.mpSubmitFailed}: ${friendlyErrorMessage(e, i18n)}', error: true);
+      setState(() {
+        _submitting = false;
+        _sendProgress = null;
+      });
+      _showSnack('${i18n.mpSubmitFailed}: ${friendlyErrorMessage(e, i18n)}',
+          error: true,
+          action: SnackBarAction(
+              label: 'Erneut versuchen', onPressed: _submit));
     }
   }
 
-  void _showSnack(String message, {bool error = false}) {
+  void _showSnack(String message,
+      {bool error = false, SnackBarAction? action}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       backgroundColor: error ? context.palette.statusDanger : context.palette.bgSurfaceRaised,
       content: Text(message, style: TextStyle(color: context.palette.textPrimary)),
+      action: action,
     ));
   }
 
@@ -495,6 +574,19 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
                       child: CircularProgressIndicator(strokeWidth: 2, color: context.palette.textPrimary))
                   : Text(i18n.mpSubmitForReview, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             ),
+            if (_submitting) ...[
+              const SizedBox(height: 10),
+              LinearProgressIndicator(
+                value: _progressValue,
+                minHeight: 6,
+                backgroundColor: scheme.surfaceContainerHigh,
+                color: context.palette.accentPrimary,
+              ),
+              const SizedBox(height: 6),
+              Text(_progressLabel,
+                  style:
+                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
           ],
         ),
       ),

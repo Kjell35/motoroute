@@ -247,6 +247,55 @@ class MpSubcategoryDef {
       );
 }
 
+/// Ein lokales Foto liess sich nicht fuer den Upload vorbereiten (Datei
+/// geloescht, kein Zugriff). Index und Gesamtzahl erlauben der Oberflaeche,
+/// das betroffene Bild zu benennen statt nur "Fehler" zu zeigen.
+class MpPhotoUploadException implements Exception {
+  /// 1-basiert, wie in der Meldung angezeigt.
+  final int index;
+  final int total;
+  final String path;
+  final Object cause;
+
+  const MpPhotoUploadException({
+    required this.index,
+    required this.total,
+    required this.path,
+    required this.cause,
+  });
+
+  @override
+  String toString() => 'MpPhotoUploadException($index/$total): $path ($cause)';
+}
+
+/// Baut die Multipart-Daten eines Angebots.
+///
+/// Ausgelagert, damit Fortschritt und der Fall "ein Foto klemmt" ohne
+/// Netzwerk pruefbar sind: die Datei wird pro position gelesen, und der
+/// Fortschritt zaehlt nur wirklich fertige Fotos.
+Future<FormData> buildListingFormData(
+  Map<String, dynamic> fields,
+  List<String> imagePaths, {
+  void Function(int done, int total)? onPhotoProgress,
+}) async {
+  final formData = FormData();
+  fields.forEach(
+      (key, value) => formData.fields.add(MapEntry(key, value.toString())));
+  final total = imagePaths.length;
+  for (var i = 0; i < total; i++) {
+    final path = imagePaths[i];
+    try {
+      final file = await MultipartFile.fromFile(path);
+      formData.files.add(MapEntry('images', file));
+    } catch (e) {
+      throw MpPhotoUploadException(
+          index: i + 1, total: total, path: path, cause: e);
+    }
+    onPhotoProgress?.call(i + 1, total);
+  }
+  return formData;
+}
+
 /// REST-Repository gegen /v1/marketplace (authentifiziert).
 class MarketplaceRepository {
   final Dio _dio;
@@ -317,18 +366,16 @@ class MarketplaceRepository {
     required String token,
     required Map<String, dynamic> fields,
     List<String> imagePaths = const [],
+    void Function(int done, int total)? onPhotoProgress,
+    ProgressCallback? onSendProgress,
   }) async {
-    final formData = FormData();
-    fields.forEach(
-        (key, value) => formData.fields.add(MapEntry(key, value.toString())));
-    for (final path in imagePaths) {
-      final multipart = await MultipartFile.fromFile(path);
-      formData.files.add(MapEntry('images', multipart));
-    }
+    final formData = await buildListingFormData(fields, imagePaths,
+        onPhotoProgress: onPhotoProgress);
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/marketplace/listings',
       data: formData,
       options: _authOptions(token),
+      onSendProgress: onSendProgress,
     );
     final body = res.data ?? const {};
     return MpListing.fromJson(
@@ -342,18 +389,16 @@ class MarketplaceRepository {
     required String id,
     required Map<String, dynamic> fields,
     List<String> imagePaths = const [],
+    void Function(int done, int total)? onPhotoProgress,
+    ProgressCallback? onSendProgress,
   }) async {
-    final formData = FormData();
-    fields.forEach(
-        (key, value) => formData.fields.add(MapEntry(key, value.toString())));
-    for (final path in imagePaths) {
-      final multipart = await MultipartFile.fromFile(path);
-      formData.files.add(MapEntry('images', multipart));
-    }
+    final formData = await buildListingFormData(fields, imagePaths,
+        onPhotoProgress: onPhotoProgress);
     final res = await _dio.put<Map<String, dynamic>>(
       '/v1/marketplace/listings/$id',
       data: formData,
       options: _authOptions(token),
+      onSendProgress: onSendProgress,
     );
     final body = res.data ?? const {};
     return MpListing.fromJson(
