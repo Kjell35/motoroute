@@ -18,17 +18,31 @@ class GarageScreen extends ConsumerStatefulWidget {
   ConsumerState<GarageScreen> createState() => _GarageScreenState();
 }
 
+/// Einheitliche Garage-Fehlermeldung fuer Liste und Anlegen-Dialog.
+///
+/// 401/AUTH heisst "Anmeldung abgelaufen"; sonst traegt der erste
+/// Zeilen-Text der Server-Meldung die Ursache - Stacktraces und
+/// DioException-Header sind fuer Nutzer unlesbar.
+String garageMessageFor(
+  Object? e, {
+  required String loginFailed,
+  required String unreachable,
+}) {
+  final msg = e.toString();
+  if (msg.contains('GarageApiException') &&
+      (msg.contains('401') || msg.contains('AUTH'))) {
+    return loginFailed;
+  }
+  return '$unreachable: ${msg.split('\n').first}';
+}
+
 class _GarageScreenState extends ConsumerState<GarageScreen> {
   bool _busy = false;
 
   String _friendly(Object? e) {
-    final msg = e.toString();
-    if (msg.contains('GarageApiException')) {
-      if (msg.contains('401') || msg.contains('AUTH')) {
-        return ref.read(i18nProvider).gLoginFailed;
-      }
-    }
-    return '${ref.read(i18nProvider).gServerUnreachable}: ${e.toString().split('\n').first}';
+    final i18n = ref.read(i18nProvider);
+    return garageMessageFor(e,
+        loginFailed: i18n.gLoginFailed, unreachable: i18n.gServerUnreachable);
   }
 
   Future<void> _openCreateDialog() async {
@@ -521,9 +535,12 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       ErrorReporter.instance.report('garage.write', e);
+      final i18n = ref.read(i18nProvider);
       setState(() {
         _busy = false;
-        _error = e.toString().split('\n').first;
+        _error = garageMessageFor(e,
+            loginFailed: i18n.gLoginFailed,
+            unreachable: i18n.gServerUnreachable);
       });
     }
   }

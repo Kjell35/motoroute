@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../marketplace_repository.dart';
 
@@ -64,18 +65,25 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
   Future<void> _toggleFavorite() async {
     final token = ref.read(marketplaceTokenProvider);
     if (token == null || _listing == null || _busy) return;
-    setState(() => _busy = true);
+    final previous = _isFavorite;
+    // Optimistisch: der Stern reagiert sofort; scheitert der Request,
+    // springt er zurueck statt einen Zustand zu zeigen, den es nicht gibt.
+    setState(() {
+      _busy = true;
+      _isFavorite = !previous;
+    });
     final repo = ref.read(marketplaceRepositoryProvider);
     try {
-      if (_isFavorite) {
+      if (previous) {
         await repo.removeFavorite(token: token, id: _listing!.id);
       } else {
         await repo.addFavorite(token: token, id: _listing!.id);
       }
-      if (!mounted) return;
-      setState(() => _isFavorite = !_isFavorite);
     } catch (e) {
-      if (mounted) _snack('Fehler: $e', error: true);
+      ErrorReporter.instance.report('mp.favorite', e);
+      if (!mounted) return;
+      setState(() => _isFavorite = previous);
+      _snack('Fehler: $e', error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
