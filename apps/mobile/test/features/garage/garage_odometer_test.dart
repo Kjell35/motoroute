@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motoroute_app/features/garage/garage_screen.dart';
+import 'package:motoroute_app/features/garage/garage_input.dart';
 
 /// Der Dialog soll ungueltige Eingaben abfangen, bevor sie als Serverfehler
 /// zurueckkommen. `null` heisst hier "keine Angabe" - ob das erlaubt ist,

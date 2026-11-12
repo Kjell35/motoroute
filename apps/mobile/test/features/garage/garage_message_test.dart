@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motoroute_app/features/garage/garage_screen.dart';
+import 'package:motoroute_app/features/garage/garage_input.dart';
 
 /// Die Garage meldet Fehler an zwei Stellen (Liste und Anlegen-Dialog).
 /// Beide muessen denselben Text zeigen, sonst sieht der Nutzer je nach

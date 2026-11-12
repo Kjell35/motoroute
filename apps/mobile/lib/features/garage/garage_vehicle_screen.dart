@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n/i18n.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/network/error_reporter.dart';
+import 'garage_input.dart';
 import 'garage_repository.dart';
 
 /// Fahrzeug-Detail: technische Daten (Katalog), Erinnerungs-Ampel,
@@ -315,13 +317,62 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     );
   }
 
+  /// Prueft die Wartungsfelder im Dialog. `null` = alles in Ordnung.
+  String? _maintenanceError(String dateRaw, String kmRaw, String costRaw) {
+    final date = parseGarageDate(dateRaw);
+    if (date == null) {
+      return 'Datum bitte als JJJJ-MM-TT oder TT.MM.JJJJ angeben.';
+    }
+    if (date.isAfter(DateTime.now())) return 'Das Datum liegt in der Zukunft.';
+    if (parseOdometerKm(kmRaw) == null) {
+      return 'Kilometerstand bitte als Zahl angeben.';
+    }
+    if (costRaw.trim().isNotEmpty && parseDecimal(costRaw) == null) {
+      return 'Kosten bitte als Betrag angeben, z. B. 89,90.';
+    }
+    return null;
+  }
+
+  /// Prueft die Tankfelder im Dialog. `null` = alles in Ordnung.
+  String? _fuelError(
+      String dateRaw, String kmRaw, String litersRaw, String euroRaw) {
+    final date = parseGarageDate(dateRaw);
+    if (date == null) {
+      return 'Datum bitte als JJJJ-MM-TT oder TT.MM.JJJJ angeben.';
+    }
+    if (date.isAfter(DateTime.now())) return 'Das Datum liegt in der Zukunft.';
+    if (parseOdometerKm(kmRaw) == null) {
+      return 'Kilometerstand bitte als Zahl angeben.';
+    }
+    final liters = parseDecimal(litersRaw);
+    if (liters == null || liters <= 0) {
+      return 'Getankte Liter bitte als Zahl größer 0 angeben.';
+    }
+    final euro = parseDecimal(euroRaw);
+    if (euro == null || euro <= 0) {
+      return 'Betrag bitte als Zahl größer 0 angeben, z. B. 24,80.';
+    }
+    return null;
+  }
+
+  /// Meldet einen Fehler aus einem Dialog, ohne den Screen zu verlassen.
+  void _showGarageError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: context.palette.statusDanger,
+      content: Text(message,
+          style: TextStyle(color: context.palette.textPrimary)),
+    ));
+  }
+
   Future<void> _addMaintenance() async {
     final i18n = ref.read(i18nProvider);
     const types = ['OIL_CHANGE', 'OIL_FILTER', 'AIR_FILTER', 'BRAKE_PADS', 'BRAKE_DISCS', 'TIRES', 'BATTERY', 'COOLANT', 'BRAKE_FLUID', 'SPARK_PLUGS', 'CHAIN', 'CHAIN_OIL', 'TIMING_BELT', 'INSPECTION', 'HU', 'AU', 'OTHER'];
     var type = types.first;
-    final dateCtrl = TextEditingController(text: DateTime.now().toIso8601String().substring(0, 10));
+    final dateCtrl = TextEditingController(text: isoDate(DateTime.now()));
     final kmCtrl = TextEditingController(text: '${_vehicle!.odometerKm}');
     final costCtrl = TextEditingController();
+    String? error;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -341,13 +392,26 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
             const SizedBox(height: 10),
             TextField(controller: kmCtrl, keyboardType: TextInputType.number, decoration: _deco(label: i18n.gOdometer)),
             const SizedBox(height: 10),
-            TextField(controller: costCtrl, keyboardType: TextInputType.number, decoration: _deco(label: '${i18n.gCost} (€)')),
+            TextField(controller: costCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _deco(label: '${i18n.gCost} (€)')),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!,
+                  key: const ValueKey('maintenance-error'),
+                  style: TextStyle(color: context.palette.statusDanger, fontSize: 12)),
+            ],
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(i18n.gCancel)),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: () {
+                final message = _maintenanceError(dateCtrl.text, kmCtrl.text, costCtrl.text);
+                if (message != null) {
+                  setDialog(() => error = message);
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
               child: Text(i18n.gSave),
             ),
           ],
@@ -355,18 +419,27 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
       ),
     );
     if (ok != true) return;
-    final ctx = await _callCtx();
-    final costEuro = double.tryParse(costCtrl.text.trim().replaceAll(',', '.'));
-    await ref.read(garageRepositoryProvider).addMaintenance(
-          ctx['baseUrl']!,
-          ctx['token']!,
-          widget.vehicleId,
-          type: type,
-          performedAt: dateCtrl.text.trim(),
-          odometerKm: int.tryParse(kmCtrl.text.trim()) ?? _vehicle!.odometerKm,
-          costCents: costEuro == null ? null : (costEuro * 100).round(),
-        );
-    await _reload();
+    final performedAt = isoDate(parseGarageDate(dateCtrl.text)!);
+    final odometerKm = parseOdometerKm(kmCtrl.text)!;
+    final cost = parseDecimal(costCtrl.text);
+    try {
+      final ctx = await _callCtx();
+      await ref.read(garageRepositoryProvider).addMaintenance(
+            ctx['baseUrl']!,
+            ctx['token']!,
+            widget.vehicleId,
+            type: type,
+            performedAt: performedAt,
+            odometerKm: odometerKm,
+            costCents: cost == null ? null : (cost * 100).round(),
+          );
+      await _reload();
+    } catch (e) {
+      ErrorReporter.instance.report('garage.maintenance', e);
+      _showGarageError(garageMessageFor(e,
+          loginFailed: i18n.gLoginFailed,
+          unreachable: i18n.gServerUnreachable));
+    }
   }
 
   // -- Tankbuch ------------------------------------------------------------------
@@ -411,53 +484,77 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
 
   Future<void> _addFuel() async {
     final i18n = ref.read(i18nProvider);
-    final dateCtrl = TextEditingController(text: DateTime.now().toIso8601String().substring(0, 10));
+    final dateCtrl = TextEditingController(text: isoDate(DateTime.now()));
     final kmCtrl = TextEditingController(text: '${_vehicle!.odometerKm}');
     final litersCtrl = TextEditingController();
     final euroCtrl = TextEditingController();
     final stationCtrl = TextEditingController();
+    String? error;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.palette.bgSurface,
-        title: Text(i18n.gAddFuel, style: TextStyle(color: context.palette.textPrimary)),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: dateCtrl, decoration: _deco(label: i18n.gDate)),
-          const SizedBox(height: 10),
-          TextField(controller: kmCtrl, keyboardType: TextInputType.number, decoration: _deco(label: i18n.gOdometer)),
-          const SizedBox(height: 10),
-          TextField(controller: litersCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _deco(label: i18n.gLiters)),
-          const SizedBox(height: 10),
-          TextField(controller: euroCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _deco(label: '${i18n.gCost} (€)')),
-          const SizedBox(height: 10),
-          TextField(controller: stationCtrl, decoration: _deco(label: i18n.gStation)),
-        ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(i18n.gCancel)),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(i18n.gSave),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          backgroundColor: context.palette.bgSurface,
+          title: Text(i18n.gAddFuel, style: TextStyle(color: context.palette.textPrimary)),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: dateCtrl, decoration: _deco(label: i18n.gDate)),
+            const SizedBox(height: 10),
+            TextField(controller: kmCtrl, keyboardType: TextInputType.number, decoration: _deco(label: i18n.gOdometer)),
+            const SizedBox(height: 10),
+            TextField(controller: litersCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _deco(label: i18n.gLiters)),
+            const SizedBox(height: 10),
+            TextField(controller: euroCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _deco(label: '${i18n.gCost} (€)')),
+            const SizedBox(height: 10),
+            TextField(controller: stationCtrl, decoration: _deco(label: i18n.gStation)),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!,
+                  key: const ValueKey('fuel-error'),
+                  style: TextStyle(color: context.palette.statusDanger, fontSize: 12)),
+            ],
+          ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(i18n.gCancel)),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
+              onPressed: () {
+                final message = _fuelError(dateCtrl.text, kmCtrl.text, litersCtrl.text, euroCtrl.text);
+                if (message != null) {
+                  setDialog(() => error = message);
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: Text(i18n.gSave),
+            ),
+          ],
+        ),
       ),
     );
     if (ok != true) return;
-    final ctx = await _callCtx();
-    final liters = double.tryParse(litersCtrl.text.trim().replaceAll(',', '.'));
-    final euro = double.tryParse(euroCtrl.text.trim().replaceAll(',', '.'));
-    if (liters == null || liters <= 0 || euro == null) return;
-    await ref.read(garageRepositoryProvider).addFuel(
-          ctx['baseUrl']!,
-          ctx['token']!,
-          widget.vehicleId,
-          date: dateCtrl.text.trim(),
-          odometerKm: int.tryParse(kmCtrl.text.trim()) ?? _vehicle!.odometerKm,
-          liters: liters,
-          priceCentsTotal: (euro * 100).round(),
-          station: stationCtrl.text.trim().isEmpty ? null : stationCtrl.text.trim(),
-        );
-    await _reload();
+    final date = isoDate(parseGarageDate(dateCtrl.text)!);
+    final odometerKm = parseOdometerKm(kmCtrl.text)!;
+    final liters = parseDecimal(litersCtrl.text)!;
+    final euro = parseDecimal(euroCtrl.text)!;
+    try {
+      final ctx = await _callCtx();
+      await ref.read(garageRepositoryProvider).addFuel(
+            ctx['baseUrl']!,
+            ctx['token']!,
+            widget.vehicleId,
+            date: date,
+            odometerKm: odometerKm,
+            liters: liters,
+            priceCentsTotal: (euro * 100).round(),
+            station: stationCtrl.text.trim().isEmpty ? null : stationCtrl.text.trim(),
+          );
+      await _reload();
+    } catch (e) {
+      ErrorReporter.instance.report('garage.fuel', e);
+      _showGarageError(garageMessageFor(e,
+          loginFailed: i18n.gLoginFailed,
+          unreachable: i18n.gServerUnreachable));
+    }
   }
 
   // -- Reifen --------------------------------------------------------------------

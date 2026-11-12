@@ -5,6 +5,7 @@ import '../../core/i18n/i18n.dart';
 import '../../core/network/error_reporter.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/auth_providers.dart';
+import 'garage_input.dart';
 import 'garage_repository.dart';
 import 'garage_vehicle_screen.dart';
 
@@ -16,51 +17,6 @@ class GarageScreen extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<GarageScreen> createState() => _GarageScreenState();
-}
-
-/// Einheitliche Garage-Fehlermeldung fuer Liste und Anlegen-Dialog.
-///
-/// 401/AUTH heisst "Anmeldung abgelaufen"; sonst traegt der erste
-/// Zeilen-Text der Server-Meldung die Ursache - Stacktraces und
-/// DioException-Header sind fuer Nutzer unlesbar.
-String garageMessageFor(
-  Object? e, {
-  required String loginFailed,
-  required String unreachable,
-}) {
-  final msg = e.toString();
-  if (msg.contains('GarageApiException') &&
-      (msg.contains('401') || msg.contains('AUTH'))) {
-    return loginFailed;
-  }
-  return '$unreachable: ${msg.split('\n').first}';
-}
-
-/// Liest den Kilometerstand aus dem Eingabefeld.
-///
-/// `null` heisst "keine Angabe" oder "nicht lesbar" - der Aufrufer
-/// unterscheidet die Faelle ueber den Feldtext, damit ein leeres Feld
-/// weiterhin erlaubt bleibt, "12a" aber als Fehler gemeldet wird.
-int? parseOdometerKm(String raw) {
-  final cleaned = raw.trim().replaceAll('.', '').replaceAll(' ', '');
-  if (cleaned.isEmpty) return null;
-  final value = int.tryParse(cleaned);
-  if (value == null || value < 0) return null;
-  return value;
-}
-
-/// Liest das Baujahr aus dem Eingabefeld.
-///
-/// `null` heisst "keine Angabe" oder "nicht plausibel" - der Aufrufer
-/// unterscheidet ueber den Feldtext. Erlaubt ist 1900 bis [maxYear]
-/// (aktuelles Jahr + 1, weil neue Modelle oft im Vorjahr erscheinen).
-int? parseModelYear(String raw, {required int maxYear}) {
-  final cleaned = raw.trim();
-  if (cleaned.isEmpty) return null;
-  final value = int.tryParse(cleaned);
-  if (value == null) return null;
-  if (value < 1900 || value > maxYear) return null;
-  return value;
 }
 
 class _GarageScreenState extends ConsumerState<GarageScreen> {
