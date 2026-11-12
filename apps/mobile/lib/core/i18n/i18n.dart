@@ -125,6 +125,7 @@ class I18n {
   String get gNickname => tr('garage.nickname');
   String get gOdometer => tr('garage.odometer');
   String get gColor => tr('garage.color');
+  String get gYear => tr('garage.year');
   String get gLoading => tr('garage.loading');
   String get gErrPickModel => tr('garage.errPickModel');
   String get gSave => tr('common.save');
@@ -463,6 +464,7 @@ const _catalog = <String, Map<String, String>>{
     'garage.nickname': 'Spitzname (z. B. "Lotte")',
     'garage.odometer': 'Kilometerstand',
     'garage.color': 'Farbe',
+    'garage.year': 'Baujahr (z. B. 2019)',
     'garage.loading': 'Lädt…',
     'garage.errPickModel': 'Bitte Hersteller und Modell wählen',
     'garage.vehicle': 'Fahrzeug',
@@ -919,6 +921,7 @@ const _catalog = <String, Map<String, String>>{
     'garage.nickname': 'Nickname (e.g. "Lotte")',
     'garage.odometer': 'Odometer',
     'garage.color': 'Color',
+    'garage.year': 'Model year (e.g. 2019)',
     'garage.loading': 'Loading…',
     'garage.errPickModel': 'Please pick manufacturer and model',
     'garage.vehicle': 'Vehicle',

@@ -49,6 +49,20 @@ int? parseOdometerKm(String raw) {
   return value;
 }
 
+/// Liest das Baujahr aus dem Eingabefeld.
+///
+/// `null` heisst "keine Angabe" oder "nicht plausibel" - der Aufrufer
+/// unterscheidet ueber den Feldtext. Erlaubt ist 1900 bis [maxYear]
+/// (aktuelles Jahr + 1, weil neue Modelle oft im Vorjahr erscheinen).
+int? parseModelYear(String raw, {required int maxYear}) {
+  final cleaned = raw.trim();
+  if (cleaned.isEmpty) return null;
+  final value = int.tryParse(cleaned);
+  if (value == null) return null;
+  if (value < 1900 || value > maxYear) return null;
+  return value;
+}
+
 class _GarageScreenState extends ConsumerState<GarageScreen> {
   bool _busy = false;
 
@@ -438,6 +452,7 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
   final _nicknameCtrl = TextEditingController();
   final _kmCtrl = TextEditingController();
   final _colorCtrl = TextEditingController();
+  final _yearCtrl = TextEditingController();
   bool _busy = false;
   String? _error;
 
@@ -452,6 +467,7 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
     _nicknameCtrl.dispose();
     _kmCtrl.dispose();
     _colorCtrl.dispose();
+    _yearCtrl.dispose();
     super.dispose();
   }
 
@@ -536,6 +552,15 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
           'Kilometerstand ist zu hoch (höchstens 999.999 km). Bitte prüfe die Eingabe.');
       return;
     }
+    // Baujahr: optional, aber plausibel. Das Vorjahr ist erlaubt, weil neue
+    // Modelle dort schon auf dem Markt sind.
+    final maxYear = DateTime.now().year + 1;
+    final modelYear = parseModelYear(_yearCtrl.text, maxYear: maxYear);
+    if (_yearCtrl.text.trim().isNotEmpty && modelYear == null) {
+      setState(() => _error =
+          'Baujahr bitte vierstellig zwischen 1900 und $maxYear angeben.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -552,6 +577,7 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
             variantId: _variant?.id,
             variantName: _variant?.name,
             odometerKm: odometerKm,
+            year: modelYear,
             nickname: _nicknameCtrl.text.trim().isEmpty
                 ? null
                 : _nicknameCtrl.text.trim(),
@@ -671,11 +697,17 @@ class _CreateVehicleSheetState extends ConsumerState<_CreateVehicleSheet> {
               const SizedBox(width: 10),
               Expanded(
                 child: TextField(
-                  controller: _colorCtrl,
-                  decoration: _fieldDeco(i18n.gColor),
+                  controller: _yearCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: _fieldDeco(i18n.gYear),
                 ),
               ),
             ]),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _colorCtrl,
+              decoration: _fieldDeco(i18n.gColor),
+            ),
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!,
