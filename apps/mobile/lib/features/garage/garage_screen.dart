@@ -24,8 +24,9 @@ class _GarageScreenState extends ConsumerState<GarageScreen> {
   String _friendly(Object? e) {
     final msg = e.toString();
     if (msg.contains('GarageApiException')) {
-      if (msg.contains('401') || msg.contains('AUTH'))
+      if (msg.contains('401') || msg.contains('AUTH')) {
         return ref.read(i18nProvider).gLoginFailed;
+      }
     }
     return '${ref.read(i18nProvider).gServerUnreachable}: ${e.toString().split('\n').first}';
   }

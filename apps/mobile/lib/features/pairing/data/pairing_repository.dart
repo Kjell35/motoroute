@@ -206,8 +206,9 @@ class PairingRepository {
   /// Ursprung (Scheme+Host+Port) einer Plan-URL; `null` ohne Host.
   static String? planOriginFromUrl(String value) {
     final Uri? uri = Uri.tryParse(value.trim());
-    if (uri == null || uri.host.isEmpty || !uri.path.contains('/plan/'))
+    if (uri == null || uri.host.isEmpty || !uri.path.contains('/plan/')) {
       return null;
+    }
     return uri.hasPort
         ? '${uri.scheme}://${uri.host}:${uri.port}'
         : '${uri.scheme}://${uri.host}';

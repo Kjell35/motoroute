@@ -81,8 +81,9 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
     } on PairingException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = 'Pairing konnte nicht gestartet werden.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -93,9 +94,10 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
     if (start == null || _fetching) return;
     if (_expiresAt != null && !DateTime.now().isBefore(_expiresAt!)) {
       _poll?.cancel();
-      if (mounted)
+      if (mounted) {
         setState(
             () => _error = 'Der Plan-Link ist abgelaufen. Bitte neu starten.');
+      }
       return;
     }
     _fetching = true;
