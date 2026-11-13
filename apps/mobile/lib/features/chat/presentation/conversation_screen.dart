@@ -9,6 +9,7 @@ import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
+import '../data/chat_outbox.dart';
 import '../data/chat_realtime.dart';
 import '../data/chat_repository.dart';
 import 'widgets/avatar.dart';
@@ -324,7 +325,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     }));
     _subscriptions.add(realtime.connection.listen((up) {
       if (mounted) setState(() => _connected = up);
+      // Wiederverbunden: liegen gebliebene Nachrichten gehen jetzt raus.
+      if (up) _flushOutbox();
     }));
+    // Steht die Verbindung beim Oeffnen schon, gibt es kein neues Event -
+    // dann muss die Warteschlange einmal direkt angestossen werden.
+    if (realtime.isConnected) _flushOutbox();
   }
 
   Future<void> _markRead() async {
@@ -360,18 +366,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     } catch (e) {
       ErrorReporter.instance.report('chat.send', e);
       if (!mounted) return;
-      _inputController.text = text; // Text zurück ins Feld (nichts verloren)
+      // In die Warteschlange statt nur zurueck ins Feld: die Nachricht
+      // ueberlebt das Verlassen des Screens und einen App-Neustart.
+      await ref
+          .read(chatOutboxProvider.notifier)
+          .enqueue(widget.conversationId, text);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(chatSendFailedSnackBar(
         message:
-            'Senden fehlgeschlagen: ${friendlyErrorMessage(e, ref.read(i18nProvider))}',
-        onRetry: () {
-          // Nur wiederherstellen, wenn der Nutzer das Feld inzwischen nicht
-          // selbst gefuellt hat - sonst ginge seine Eingabe verloren.
-          if (_inputController.text.trim().isEmpty) {
-            _inputController.text = text;
-          }
-          _send();
-        },
+            'Nicht gesendet - wartet auf Verbindung: ${friendlyErrorMessage(e, ref.read(i18nProvider))}',
+        onRetry: _flushOutbox,
       ));
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -539,6 +543,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   : _buildMessageList(me),
         ),
         if (_otherTypingUserId != null) _buildTypingIndicator(),
+        _buildOutboxBar(),
         _buildComposer(),
       ],
     );
@@ -659,6 +664,48 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               fontSize: 12),
         ),
       ),
+    );
+  }
+
+  /// Sendet, was in der Warteschlange liegt, und laedt danach die Historie
+  /// nach - so erscheint die eben gesendete Nachricht mit ihrer Server-ID.
+  Future<void> _flushOutbox() async {
+    final token = _token;
+    if (token == null) return;
+    final sent = await ref.read(chatOutboxProvider.notifier).flush(_repo, token);
+    if (!mounted || sent == 0) return;
+    await _pollNewMessages();
+  }
+
+  /// Hinweis ueber dem Eingabefeld, solange Nachrichten warten.
+  Widget _buildOutboxBar() {
+    final pending = ref
+        .watch(chatOutboxProvider)
+        .where((m) => m.conversationId == widget.conversationId)
+        .toList(growable: false);
+    if (pending.isEmpty) return const SizedBox.shrink();
+    final label = pending.length == 1
+        ? '1 Nachricht wartet auf Verbindung'
+        : '${pending.length} Nachrichten warten auf Verbindung';
+    return Container(
+      width: double.infinity,
+      color: context.palette.bgSurfaceRaised,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+      child: Row(children: [
+        Icon(Icons.cloud_upload_outlined,
+            size: 16, color: context.palette.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(label,
+              style: TextStyle(
+                  color: context.palette.textSecondary, fontSize: 12)),
+        ),
+        TextButton(
+          onPressed: _flushOutbox,
+          child: const Text('Jetzt senden', style: TextStyle(fontSize: 12)),
+        ),
+      ]),
     );
   }
 
