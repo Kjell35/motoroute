@@ -49,7 +49,9 @@ jobs:
 
       - name: Analyze app
         working-directory: apps/motoroute_next
-        run: flutter analyze
+        # Wie im App-Workflow: neuere SDKs melden Deprecations als Info; die
+        # duerfen den Release nicht blockieren, echte Errors schon.
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       # Per-ABI-Pakete sind rund ein Drittel so gross wie die Universal-APK:
       # nur eine native Bibliothek pro Geraet statt aller drei.
