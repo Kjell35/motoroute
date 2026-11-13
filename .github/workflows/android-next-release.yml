@@ -1,0 +1,81 @@
+name: MotoRoute Next Android Release
+
+on:
+  push:
+    tags:
+      - 'next-v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to attach the APK to
+        required: true
+        default: next-v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and publish Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      # The rebuilt Flutter project is nested in the monorepo. Flutter
+      # discovers the nearest pubspec only from the current directory.
+      - name: Install packages for shared MotoRoute features
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Install Flutter packages
+        working-directory: apps/motoroute_next
+        run: flutter pub get
+
+      - name: Run tests
+        working-directory: apps/motoroute_next
+        run: flutter test
+
+      - name: Analyze app
+        working-directory: apps/motoroute_next
+        run: flutter analyze
+
+      # Per-ABI-Pakete sind rund ein Drittel so gross wie die Universal-APK:
+      # nur eine native Bibliothek pro Geraet statt aller drei.
+      - name: Build installable release APKs (per ABI)
+        working-directory: apps/motoroute_next
+        run: >-
+          flutter build apk --release --split-per-abi
+          --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com
+
+      - name: Publish GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          name: MotoRoute Next ${{ inputs.release_tag || github.ref_name }}
+          body: |
+            Installierbarer Android-Release der neu aufgebauten MotoRoute-App.
+
+            Welche Datei? `arm64-v8a` passt auf praktisch alle Handys ab 2016,
+            `armeabi-v7a` ist die Altgeraete-Variante, `x86_64` ist fuer
+            Emulatoren gedacht. Jede Datei enthaelt nur die native Bibliothek
+            ihrer Architektur und ist damit deutlich kleiner als eine
+            Universal-APK.
+
+            Hinweis: Die APK ist für die direkte Installation debug-signiert. Für Updates muss derselbe Signaturschlüssel verwendet werden; vor einer Play-Store-Veröffentlichung ist ein privater Upload-Schlüssel einzurichten.
+          files: |
+            apps/motoroute_next/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            apps/motoroute_next/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            apps/motoroute_next/build/app/outputs/flutter-apk/app-x86_64-release.apk
+          generate_release_notes: true

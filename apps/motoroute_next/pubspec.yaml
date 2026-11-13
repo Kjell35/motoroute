@@ -1,0 +1,31 @@
+name: motoroute_next
+description: "MotoRoute rebuild: motorcycle route planning and riding companion"
+publish_to: 'none'
+version: 1.0.2+4
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  dio: ^5.7.0
+  geolocator: ^13.0.1
+  maplibre_gl: ^0.22.0
+  motoroute_app:
+    path: ../mobile
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  shared_preferences: ^2.5.5
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/styles/carto-dark-matter.json
+    - assets/styles/carto-positron-gl-style.json
