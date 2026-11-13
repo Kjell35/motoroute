@@ -42,6 +42,16 @@ SnackBar chatSendFailedSnackBar({
       action: SnackBarAction(label: 'Erneut senden', onPressed: onRetry),
     );
 
+/// Wartezeit des Ersatz-Pollings nach [failures] Fehlschlaegen in Folge.
+///
+/// 8 s, dann 16 s, 32 s und ab drei Fehlschlaegen 60 s. Kleiner Wert, weil
+/// der Chat bei kurzen Funkloechern schnell wieder aktuell sein soll.
+int chatPollIntervalSeconds(int failures) {
+  final step = failures < 0 ? 0 : (failures > 3 ? 3 : failures);
+  final seconds = 8 * (1 << step);
+  return seconds > 60 ? 60 : seconds;
+}
+
 class ConversationScreen extends ConsumerStatefulWidget {
   final String conversationId;
   final String title;
@@ -77,6 +87,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   bool _hasMore = false;
   bool _sending = false;
   bool _connected = true;
+  int _pollFailures = 0;
   String? _error;
   String? _replyToId;
   String? _otherTypingUserId; // Abschnitt 19
@@ -131,10 +142,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     // REST-Fallback: Solange der WebSocket nicht verbunden ist (Funkloch,
     // Render-Kaltstart), holt ein Poller neue Nachrichten - der Chat
     // funktioniert dann verzögert, aber zuverlässig (Vater-tauglich).
-    _fallbackPollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      final realtime = ref.read(chatRealtimeProvider);
-      if (!realtime.isConnected) _pollNewMessages();
-    });
+    // Der Abstand waechst mit jedem Fehlschlag (siehe _scheduleFallbackPoll).
+    _connected = ref.read(chatRealtimeProvider).isConnected;
+    _scheduleFallbackPoll();
   }
 
   @override
@@ -154,18 +164,43 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     super.dispose();
   }
 
+  /// Plant den naechsten Ersatz-Poll.
+  ///
+  /// Der Abstand waechst mit jedem Fehlschlag (8 s → 16 s → 32 s → 60 s):
+  /// im Funkloch soll nicht alle acht Sekunden ein Request ins Leere laufen.
+  /// Nach einem Erfolg oder einer stehenden WebSocket-Verbindung beginnt es
+  /// wieder bei 8 s.
+  void _scheduleFallbackPoll() {
+    _fallbackPollTimer?.cancel();
+    final seconds = chatPollIntervalSeconds(_pollFailures);
+    _fallbackPollTimer = Timer(Duration(seconds: seconds), () async {
+      if (!mounted) return;
+      if (ref.read(chatRealtimeProvider).isConnected) {
+        _pollFailures = 0;
+      } else {
+        final ok = await _pollNewMessages();
+        _pollFailures = ok ? 0 : _pollFailures + 1;
+      }
+      if (mounted) _scheduleFallbackPoll();
+    });
+  }
+
   /// Fallback-Poll (nur wenn WS aus): letzte 30 Nachrichten ziehen und
   /// Unbekannte ergänzen - derselbe Dedupe-Pfad wie beim WS-Empfang.
-  Future<void> _pollNewMessages() async {
+  ///
+  /// `true` = Anfrage kam durch (auch ohne neue Nachrichten), `false` =
+  /// Fehlschlag - daran haengt das Backoff.
+  Future<bool> _pollNewMessages() async {
     final token = _token;
-    if (token == null || _polling) return;
+    if (token == null) return true;
+    if (_polling) return true;
     final generation = _loadGeneration;
     _polling = true;
     try {
       final page =
           await _repo.messages(token, widget.conversationId, limit: 30);
       if (!mounted || _token != token || generation != _loadGeneration) {
-        return;
+        return true;
       }
       final knownIds = _messages.map((m) => m.id).toSet();
       final fresh =
@@ -176,8 +211,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         setState(() => _messages = merged);
         _jumpToBottom();
       }
+      return true;
     } catch (_) {
-      // Offline: nächster Versuch im nächsten Intervall.
+      // Offline: der naechste Versuch wartet laenger (Backoff).
+      return false;
     } finally {
       if (generation == _loadGeneration) {
         _polling = false;
@@ -325,8 +362,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     }));
     _subscriptions.add(realtime.connection.listen((up) {
       if (mounted) setState(() => _connected = up);
-      // Wiederverbunden: liegen gebliebene Nachrichten gehen jetzt raus.
-      if (up) _flushOutbox();
+      if (up) {
+        // Wiederverbunden: Backoff zuruecksetzen und Wartendes rausschicken.
+        _pollFailures = 0;
+        _flushOutbox();
+      }
     }));
     // Steht die Verbindung beim Oeffnen schon, gibt es kein neues Event -
     // dann muss die Warteschlange einmal direkt angestossen werden.
@@ -503,7 +543,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             padding: const EdgeInsets.symmetric(vertical: 6),
             color: context.palette.statusWarning.withValues(alpha: 0.15),
             child: Text(
-              'Keine Internetverbindung.',
+              'Keine Verbindung zum Chat – Nachrichten werden gespeichert und automatisch gesendet.',
               textAlign: TextAlign.center,
               style: TextStyle(color: context.palette.statusWarning, fontSize: 12),
             ),
