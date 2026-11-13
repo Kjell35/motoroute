@@ -707,10 +707,103 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
 
   // -- Dokumente -------------------------------------------------------------------
 
+  Future<void> _addDocument() async {
+    final i18n = ref.read(i18nProvider);
+    const types = <String, String>{
+      'invoice': 'Rechnung',
+      'inspection': 'Inspektion',
+      'tuv': 'TÜV',
+      'service_record': 'Wartung',
+      'other': 'Sonstiges',
+    };
+    var type = 'invoice';
+    final titleCtrl = TextEditingController();
+    final urlCtrl = TextEditingController();
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          backgroundColor: context.palette.bgSurface,
+          title: Text('Dokument hinzufügen', style: TextStyle(color: context.palette.textPrimary)),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              initialValue: type,
+              items: types.entries
+                  .map((e) => DropdownMenuItem(
+                        value: e.key,
+                        child: Text(e.value, style: TextStyle(color: context.palette.textPrimary)),
+                      ))
+                  .toList(),
+              onChanged: (v) => setDialog(() => type = v ?? type),
+              dropdownColor: context.palette.bgSurfaceRaised,
+              decoration: _deco(label: 'Typ'),
+            ),
+            const SizedBox(height: 10),
+            TextField(controller: titleCtrl, decoration: _deco(label: 'Titel')),
+            const SizedBox(height: 10),
+            TextField(
+              controller: urlCtrl,
+              keyboardType: TextInputType.url,
+              decoration: _deco(label: 'Link (https://…)'),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!,
+                  key: const ValueKey('document-error'),
+                  style: TextStyle(color: context.palette.statusDanger, fontSize: 12)),
+            ],
+          ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(i18n.gCancel)),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: context.palette.accentPrimary),
+              onPressed: () {
+                final message = documentProblem(
+                  title: titleCtrl.text,
+                  fileUrl: urlCtrl.text,
+                );
+                if (message != null) {
+                  setDialog(() => error = message);
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: Text(i18n.gSave),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final ctx = await _callCtx();
+      await ref.read(garageRepositoryProvider).addDocument(
+            ctx['baseUrl']!,
+            ctx['token']!,
+            widget.vehicleId,
+            type: type,
+            title: titleCtrl.text.trim(),
+            fileUrl: urlCtrl.text.trim(),
+          );
+      await _reload();
+    } catch (e) {
+      ErrorReporter.instance.report('garage.document', e);
+      _showGarageError(garageMessageFor(e,
+          loginFailed: i18n.gLoginFailed,
+          unreachable: i18n.gServerUnreachable));
+    }
+  }
+
   Widget _buildDocuments(I18n i18n) {
     final docs = _documents ?? const <GarageDocument>[];
-    return _section(
+    return _sectionWithAction(
       i18n.gDocuments,
+      IconButton(
+        tooltip: 'Dokument hinzufügen',
+        icon: Icon(Icons.add_circle_outline, color: context.palette.accentPrimary),
+        onPressed: _addDocument,
+      ),
       docs.isEmpty
           ? [Text(i18n.gNoDocuments, style: TextStyle(color: context.palette.textSecondary))]
           : docs.map((d) => Row(children: [

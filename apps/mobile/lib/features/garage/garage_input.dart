@@ -142,3 +142,20 @@ String? tireProblem({
   }
   return null;
 }
+
+/// Prueft die Dokumentfelder. `null` = in Ordnung.
+///
+/// Bis es einen Upload-Endpunkt gibt, wird ein fertiger Link erfasst - er
+/// muss vollstaendig sein und http(s) verwenden.
+String? documentProblem({required String title, required String fileUrl}) {
+  if (title.trim().isEmpty) return 'Bitte einen Titel angeben.';
+  final text = fileUrl.trim();
+  final uri = Uri.tryParse(text);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    return 'Bitte einen vollständigen Link angeben, z. B. https://example.com/rechnung.pdf';
+  }
+  if (uri.scheme != 'http' && uri.scheme != 'https') {
+    return 'Nur http- und https-Links werden unterstützt.';
+  }
+  return null;
+}
