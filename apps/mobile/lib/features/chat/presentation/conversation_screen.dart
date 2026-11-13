@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/i18n/i18n.dart';
 import '../../../core/network/error_message.dart' show friendlyErrorMessage;
 import '../../../core/network/error_reporter.dart';
+import '../../../core/network/network_status.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../chat_providers.dart';
@@ -535,19 +536,21 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(chatMeProvider).value;
+    // connectivity_plus sagt, ob das Geraet ueberhaupt eine Schnittstelle
+    // hat; der Socket sagt, ob der Chat-Server erreichbar ist. Erst beides
+    // zusammen erlaubt eine ehrliche Meldung - der Socket allein konnte
+    // einen Server-Haenger als fehlendes Netz ausgeben.
+    final online = ref.watch(networkOnlineProvider).valueOrNull ?? true;
+    ref.listen(networkOnlineProvider, (previous, next) {
+      if (next.valueOrNull == true && previous?.valueOrNull != true) {
+        // Netz ist zurueck: Backoff zuruecksetzen und Wartendes rausschicken.
+        _pollFailures = 0;
+        _flushOutbox();
+      }
+    });
     final body = Column(
       children: [
-        if (!_connected)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            color: context.palette.statusWarning.withValues(alpha: 0.15),
-            child: Text(
-              'Keine Verbindung zum Chat – Nachrichten werden gespeichert und automatisch gesendet.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.palette.statusWarning, fontSize: 12),
-            ),
-          ),
+        if (!online || !_connected) _buildConnectionBanner(online),
         Expanded(
           child: _isLoading && _messages.isEmpty
               ? Center(
@@ -715,6 +718,25 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     final sent = await ref.read(chatOutboxProvider.notifier).flush(_repo, token);
     if (!mounted || sent == 0) return;
     await _pollNewMessages();
+  }
+
+  /// Verbindungsbanner: „kein Internet" steht nur da, wenn das Geraet gar
+  /// keine Netz-Schnittstelle hat. Ist das Netz da und nur der Chat-Server
+  /// nicht erreichbar, wird genau das gesagt.
+  Widget _buildConnectionBanner(bool online) {
+    final label = online
+        ? 'Keine Verbindung zum Chat – Nachrichten werden gespeichert und automatisch gesendet.'
+        : 'Kein Internet – Nachrichten werden gespeichert und gesendet, sobald du wieder online bist.';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      color: context.palette.statusWarning.withValues(alpha: 0.15),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: context.palette.statusWarning, fontSize: 12),
+      ),
+    );
   }
 
   /// Hinweis ueber dem Eingabefeld, solange Nachrichten warten.
