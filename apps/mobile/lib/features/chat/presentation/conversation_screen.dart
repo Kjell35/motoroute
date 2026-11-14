@@ -409,9 +409,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       if (!mounted) return;
       // In die Warteschlange statt nur zurueck ins Feld: die Nachricht
       // ueberlebt das Verlassen des Screens und einen App-Neustart.
+      // attempted: der Versuch ging gerade raus und kam nicht bestaetigt
+      // zurueck - vielleicht ist er beim Server angekommen.
       await ref
           .read(chatOutboxProvider.notifier)
-          .enqueue(widget.conversationId, text);
+          .enqueue(widget.conversationId, text, attempted: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(chatSendFailedSnackBar(
         message:
@@ -715,7 +717,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Future<void> _flushOutbox() async {
     final token = _token;
     if (token == null) return;
-    final sent = await ref.read(chatOutboxProvider.notifier).flush(_repo, token);
+    // myUserId aktiviert die Pruefung gegen die Historie: ein Versuch, der
+    // durchging, aber nicht bestaetigt wurde, darf nicht doppelt rausgehen.
+    final sent = await ref.read(chatOutboxProvider.notifier).flush(
+          _repo,
+          token,
+          myUserId: ref.read(chatMeProvider).value?.id,
+        );
     if (!mounted || sent == 0) return;
     await _pollNewMessages();
   }
