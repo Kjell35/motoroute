@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/error_reporter.dart';
 import '../../core/state/app_providers.dart';
 import 'poi_offline_cache.dart';
 import 'poi_offline_sync.dart';
@@ -173,7 +174,10 @@ class BikerPoiSyncController extends StateNotifier<BikerPoiSyncState> {
         isSyncing: false,
         error: null,
       );
-    } catch (_) {
+    } catch (e) {
+      // Die UI sieht nur "konnte nicht synchronisieren" - der Grund
+      // (Datenbank, Parsing, State) landet in der Telemetrie.
+      ErrorReporter.instance.report('bikerpoi.sync', e);
       if (_disposed) return;
       state = state.copyWith(
         isSyncing: false,

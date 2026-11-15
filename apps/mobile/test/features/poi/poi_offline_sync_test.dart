@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:motoroute_app/core/network/error_reporter.dart';
 import 'package:motoroute_app/features/poi/poi_offline_cache.dart';
 import 'package:motoroute_app/features/poi/poi_offline_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -367,5 +368,36 @@ void main() {
           queryParameters: any(named: 'queryParameters')));
       await controller.close();
     });
+  });
+
+  test('Fehlschlag landet als bikerpoi.sync in der Telemetrie', () async {
+    final reports = <Map<String, Object?>>[];
+    ErrorReporter.instance.debugReset();
+    ErrorReporter.instance.debugConfigure(sender: (payload) async {
+      reports.add(payload);
+      return 200;
+    });
+    addTearDown(ErrorReporter.instance.debugReset);
+
+    when(() => dio.get<Map<String, dynamic>>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+        )).thenAnswer((_) async => throw DioException(
+          requestOptions: RequestOptions(path: '/v1/biker-pois/sync'),
+          response: Response<dynamic>(
+            requestOptions: RequestOptions(path: '/v1/biker-pois/sync'),
+            statusCode: 500,
+          ),
+        ));
+
+    final result = await service.sync();
+
+    expect(result, OfflineSyncResult.error);
+    await ErrorReporter.instance.debugIdle();
+    // Vorher verschwand der Grund spurlos - die UI zeigte nur den alten Stand.
+    expect(
+      reports.map((r) => r['category']).toList(),
+      contains('bikerpoi.sync'),
+    );
   });
 }

@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/network/error_reporter.dart';
 import 'poi_offline_cache.dart';
 
 /// Ergebnis eines Sync-Versuchs - unterscheidet bewusst STILL von LAUT:
@@ -132,6 +133,9 @@ class OfflineSyncService {
       if (e.response?.statusCode == 503) {
         return _lastResult = OfflineSyncResult.offline;
       }
+      // Ohne Meldung war im Feld nicht zu sehen, ob ein Sync scheitert:
+      // die UI zeigt nur den alten Bestand.
+      ErrorReporter.instance.report('bikerpoi.sync', e);
       // Nach erfolgreicher Probe trotzdem ein Netzfehler: Abbruch MITTEN
       // IM Delta (_lastChangedData=true, z. B. Funkloch auf Seite 2) hat
       // bereits verarbeitete Seiten persistiert und den Cursor UNVER-
@@ -140,8 +144,10 @@ class OfflineSyncService {
       // bisher ein lauter error - die UI darf warnen.
       if (_lastChangedData) return _lastResult = OfflineSyncResult.offline;
       return _lastResult = OfflineSyncResult.error;
-    } catch (_) {
-      // Kaputter Cursor/Parsing: Bestand bleibt, nächster Zyklus erneut.
+    } catch (e) {
+      // Kaputter Cursor/Parsing: Bestand bleibt, nächster Zyklus erneut -
+      // aber der Grund soll in der Telemetrie stehen, nicht nur hier.
+      ErrorReporter.instance.report('bikerpoi.sync', e);
       return _lastResult = OfflineSyncResult.error;
     } finally {
       _syncing = false;
@@ -169,7 +175,10 @@ class OfflineSyncService {
     try {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getString(cursorKey);
-    } catch (_) {
+    } catch (e) {
+      // Unlesbarer Cursor heisst: naechster Sync laeuft ohne `since` und
+      // zieht mehr als noetig - teuer genug, um es zu melden.
+      ErrorReporter.instance.report('bikerpoi.sync', e);
       return null;
     }
   }
@@ -178,8 +187,10 @@ class OfflineSyncService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(cursorKey, value);
-    } catch (_) {
-      // Persistenz-Fehler: Sync bleibt trotzdem erfolgreich.
+    } catch (e) {
+      // Persistenz-Fehler: Sync bleibt trotzdem erfolgreich, aber jeder
+      // folgende Lauf wiederholt das ganze Delta - das gehoert gemeldet.
+      ErrorReporter.instance.report('bikerpoi.sync', e);
     }
   }
 
@@ -188,8 +199,10 @@ class OfflineSyncService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(cursorKey);
-    } catch (_) {
-      // Ignorierbar: notfalls liefert readCursor den alten Stand weiter.
+    } catch (e) {
+      // Nicht fatal (readCursor liefert dann den alten Stand), aber ein
+      // Reset, der nicht greift, bleibt sonst unbemerkt.
+      ErrorReporter.instance.report('bikerpoi.sync', e);
     }
   }
 
