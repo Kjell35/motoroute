@@ -102,11 +102,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Timer? _readTimer;
 
   ChatRepository get _repo => ref.read(chatRepositoryProvider);
+
+  /// Einmal in initState gelesen: in dispose() ist `ref` schon ungueltig,
+  /// der Aufruf dort wuerde "Cannot use ref after the widget was disposed"
+  /// werfen - also genau beim Verlassen des Chats.
+  late final ChatRealtimeClient _realtime;
   String? get _token => ref.read(chatSessionTokenProvider);
 
   @override
   void initState() {
     super.initState();
+    _realtime = ref.read(chatRealtimeProvider);
     _loadInitial();
     _scrollController.addListener(_onScroll);
     _wireRealtime();
@@ -119,7 +125,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       _loadedForToken = null;
       _polling = false;
       if (next == null) {
-        ref.read(chatRealtimeProvider).unsubscribe(widget.conversationId);
+        _realtime.unsubscribe(widget.conversationId);
         setState(() {
           _isLoadingMore = false;
           _messages = [];
@@ -155,7 +161,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     }
     _loadGeneration++;
     _loadMoreGeneration++;
-    ref.read(chatRealtimeProvider).unsubscribe(widget.conversationId);
+    _realtime.unsubscribe(widget.conversationId);
     _scrollController.dispose();
     _inputController.dispose();
     _composerFocus.dispose();
@@ -320,7 +326,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   }
 
   void _wireRealtime() {
-    final realtime = ref.read(chatRealtimeProvider);
+    final realtime = _realtime;
     _subscriptions.add(realtime.messages.listen((msg) {
       if (!mounted || msg.conversationId != widget.conversationId) return;
       if (_messages.any((m) => m.id == msg.id)) return; // Dedupe (WS + Polling)
