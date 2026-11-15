@@ -126,8 +126,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         setState(() {
           _suggestions = merged.take(8).toList(growable: false);
         });
-      } catch (_) {
-        // Vorschläge sind Best-Effort - Suchfeld bleibt voll funktionsfähig.
+      } catch (e) {
+        // Vorschläge sind Best-Effort - Suchfeld bleibt voll funktionsfähig,
+        // aber ein kaputter Vorschlags-Endpunkt soll auffallen.
+        ErrorReporter.instance.report('mp.load', e);
       }
     });
   }

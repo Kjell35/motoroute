@@ -83,8 +83,10 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
       final catalog = await ref.read(marketplaceRepositoryProvider).catalog(token: token);
       if (!mounted) return;
       setState(() => _catalog = catalog);
-    } catch (_) {
-      // Katalog-Fehlschlag: UI arbeitet mit dem lokalen Enum weiter.
+    } catch (e) {
+      // Katalog-Fehlschlag: UI arbeitet mit dem lokalen Enum weiter - eine
+      // veraltete Taxonomie soll aber in der Telemetrie auftauchen.
+      ErrorReporter.instance.report('mp.load', e);
     }
   }
 

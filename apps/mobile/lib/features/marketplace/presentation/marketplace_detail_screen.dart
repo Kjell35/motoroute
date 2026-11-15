@@ -46,8 +46,10 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
               token: token,
               listingId: widget.listingId,
             );
-      } catch (_) {
-        // Reviews sind Best-Effort - das Detail bleibt auch ohne nutzbar.
+      } catch (e) {
+        // Reviews sind Best-Effort - das Detail bleibt auch ohne nutzbar,
+        // der Grund fuer die fehlenden Bewertungen wird aber gemeldet.
+        ErrorReporter.instance.report('mp.load', e);
       }
       if (!mounted) return;
       setState(() {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/i18n/i18n.dart';
 import '../../../core/network/error_message.dart';
+import '../../../core/network/error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../marketplace_repository.dart';
 
@@ -46,8 +47,10 @@ class _MarketplaceAdminScreenState extends ConsumerState<MarketplaceAdminScreen>
       List<({int id, String reason, String details, String listingTitle})> reports = const [];
       try {
         reports = await repo.adminReports(token: token);
-      } catch (_) {
-        // Reports-Endpunkt ist optional - Pending reicht für den Einstieg.
+      } catch (e) {
+        // Reports-Endpunkt ist optional - Pending reicht für den Einstieg,
+        // ein Fehler dort bleibt aber nicht mehr unsichtbar.
+        ErrorReporter.instance.report('mp.load', e);
       }
       if (!mounted) return;
       setState(() {
