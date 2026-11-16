@@ -21,7 +21,7 @@ dependencies:
   # MapLibre GL Native bindings - see Phase 1/2 Teil B.2 for why
   # MapLibre over Mapbox GL/Google Maps SDK (no vendor lock-in, full
   # style control for the custom dark map style from Phase 3 Teil B.6).
-  maplibre_gl: ^0.22.0
+  maplibre_gl: ^0.28.0
 
   dio: ^5.7.0
 
@@ -40,7 +40,7 @@ dependencies:
   # M3-Feature „Route am Computer planen / QR-Scan“ (aus der neuen Codebasis):
   http: ^1.2.0            # Pairing-HTTP (Vertrag identisch mit dem neuen Backend)
   pretty_qr_code: ^3.6.0  # QR-Code im Pairing-Sheet
-  mobile_scanner: ^6.0.11 # App-zu-App-Routenübernahme per QR
+  mobile_scanner: ^7.5.0 # App-zu-App-Routenübernahme per QR
 
   # connectivity_plus: Verbindungsproben für den POI-Offline-Sync
   # (Funkloch-Erkennung, auto-Resync bei Reconnect). Bereits transitive
