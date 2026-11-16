@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_keychain/flutter_keychain.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/network/api_client.dart';
@@ -106,11 +106,18 @@ typedef SecureValueReader = Future<String?> Function(String key);
 typedef SecureValueWriter = Future<void> Function(String key, String value);
 typedef SecureValueRemover = Future<void> Function(String key);
 
-Future<String?> _readKeychainValue(String key) => FlutterKeychain.get(key: key);
-Future<void> _writeKeychainValue(String key, String value) =>
-    FlutterKeychain.put(key: key, value: value);
-Future<void> _removeKeychainValue(String key) =>
-    FlutterKeychain.remove(key: key);
+/// Token-Ablage über flutter_secure_storage (Android Keystore, iOS Keychain).
+/// Ersetzt flutter_keychain, dessen Paket das Kotlin Gradle Plugin anwendet
+/// und damit einer Umstellung auf built-in Kotlin im Weg steht.
+const _secureStorage = FlutterSecureStorage();
+
+Future<String?> _readSecureValue(String key) => _secureStorage.read(key: key);
+
+Future<void> _writeSecureValue(String key, String value) =>
+    _secureStorage.write(key: key, value: value);
+
+Future<void> _removeSecureValue(String key) =>
+    _secureStorage.delete(key: key);
 
 class AuthController extends StateNotifier<AuthState> {
   AuthController({
@@ -119,9 +126,9 @@ class AuthController extends StateNotifier<AuthState> {
     SecureValueWriter? secureWriter,
     SecureValueRemover? secureRemover,
   })  : _dioFactory = dioFactory ?? ApiClient.create,
-        _secureReader = secureReader ?? _readKeychainValue,
-        _secureWriter = secureWriter ?? _writeKeychainValue,
-        _secureRemover = secureRemover ?? _removeKeychainValue,
+        _secureReader = secureReader ?? _readSecureValue,
+        _secureWriter = secureWriter ?? _writeSecureValue,
+        _secureRemover = secureRemover ?? _removeSecureValue,
         _canMigrateLegacyToken = secureReader == null && secureWriter == null,
         _persistRefreshInPrefsForTesting =
             secureReader != null && secureWriter == null,
