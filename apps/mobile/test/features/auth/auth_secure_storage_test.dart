@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -124,6 +124,74 @@ void main() {
     // Logout loescht die Flags ganz, statt sie auf false zu setzen.
     expect(prefs.getBool('auth.remembered'), isNot(true));
     expect(prefs.getString('auth.user'), isNull);
+  });
+
+  group('Migration aus flutter_keychain', () {
+    Map<String, String> legacyStore(String token) =>
+        <String, String>{'auth.refreshToken': token};
+
+    void rememberUser() => SharedPreferences.setMockInitialValues({
+          'auth.remembered': true,
+          'auth.user': '{"id":"user-1","email":"rider@example.com"}',
+        });
+
+    test('Bestandsnutzer wird ohne neue Anmeldung wiederhergestellt', () async {
+      rememberUser();
+      final legacy = legacyStore('refresh-legacy');
+      final controller = AuthController(
+        dioFactory: () => dio,
+        legacyReader: (key) async => legacy[key],
+        legacyRemover: (key) async => legacy.remove(key),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.restore();
+
+      expect(controller.state.isAuthenticated, isTrue);
+      expect(controller.state.user?.email, 'rider@example.com');
+      // Der Token liegt jetzt in der neuen Ablage (nach Rotation).
+      expect(await storage.read(key: 'auth.refreshToken'), 'refresh-rotated');
+      // Und die alte Kopie ist weg, damit die Migration nicht wieder laeuft.
+      expect(legacy, isEmpty);
+    });
+
+    test('Migration laeuft nicht, wenn die neue Ablage schon ein Token hat',
+        () async {
+      rememberUser();
+      FlutterSecureStorage.setMockInitialValues({
+        'auth.refreshToken': 'refresh-new',
+      });
+      var legacyReads = 0;
+      final controller = AuthController(
+        dioFactory: () => dio,
+        legacyReader: (key) async {
+          legacyReads++;
+          return 'refresh-legacy';
+        },
+        legacyRemover: (key) async {},
+      );
+      addTearDown(controller.dispose);
+
+      await controller.restore();
+
+      expect(legacyReads, 0);
+      expect(controller.state.isAuthenticated, isTrue);
+    });
+
+    test('Fehlender alter Kanal bricht den Start nicht ab', () async {
+      rememberUser();
+      final controller = AuthController(
+        dioFactory: () => dio,
+        legacyReader: (key) async => throw MissingPluginException('kein Kanal'),
+        legacyRemover: (key) async {},
+      );
+      addTearDown(controller.dispose);
+
+      await controller.restore();
+
+      expect(controller.state.isAuthenticated, isFalse);
+      expect(requests, isEmpty);
+    });
   });
 }
 

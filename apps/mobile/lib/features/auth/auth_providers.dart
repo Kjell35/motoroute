@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -119,16 +120,37 @@ Future<void> _writeSecureValue(String key, String value) =>
 Future<void> _removeSecureValue(String key) =>
     _secureStorage.delete(key: key);
 
+/// Einmalige Migration aus flutter_keychain.
+///
+/// Das Paket ist nicht mehr eingebunden (es wendet das Kotlin Gradle Plugin
+/// an), aber Bestandsnutzer haben ihr Refresh-Token noch in dessen Ablage.
+/// Den alten Speicher liest deshalb eigener App-Code: auf Android
+/// `LegacyKeychainChannel` (gleiche SharedPreferences-Datei, gleicher
+/// Keystore-Schlüssel wie das frühere Plugin). Ohne implementierten Kanal
+/// endet der Aufruf in einer MissingPluginException und die Migration ist
+/// schlicht ein No-op.
+const _legacyKeychainChannel = MethodChannel('motoroute/legacy_keychain');
+
+Future<String?> _readLegacyKeychainValue(String key) =>
+    _legacyKeychainChannel.invokeMethod<String>('get', {'key': key});
+
+Future<void> _removeLegacyKeychainValue(String key) =>
+    _legacyKeychainChannel.invokeMethod<void>('remove', {'key': key});
+
 class AuthController extends StateNotifier<AuthState> {
   AuthController({
     Dio Function()? dioFactory,
     SecureValueReader? secureReader,
     SecureValueWriter? secureWriter,
     SecureValueRemover? secureRemover,
+    SecureValueReader? legacyReader,
+    SecureValueRemover? legacyRemover,
   })  : _dioFactory = dioFactory ?? ApiClient.create,
         _secureReader = secureReader ?? _readSecureValue,
         _secureWriter = secureWriter ?? _writeSecureValue,
         _secureRemover = secureRemover ?? _removeSecureValue,
+        _legacyReader = legacyReader ?? _readLegacyKeychainValue,
+        _legacyRemover = legacyRemover ?? _removeLegacyKeychainValue,
         _canMigrateLegacyToken = secureReader == null && secureWriter == null,
         _persistRefreshInPrefsForTesting =
             secureReader != null && secureWriter == null,
@@ -143,6 +165,8 @@ class AuthController extends StateNotifier<AuthState> {
   final SecureValueReader _secureReader;
   final SecureValueWriter _secureWriter;
   final SecureValueRemover _secureRemover;
+  final SecureValueReader _legacyReader;
+  final SecureValueRemover _legacyRemover;
   final bool _canMigrateLegacyToken;
   final bool _persistRefreshInPrefsForTesting;
   Future<Response<Map<String, dynamic>>>? _refreshInFlight;
@@ -194,6 +218,10 @@ class AuthController extends StateNotifier<AuthState> {
         // Plugin access can be temporarily unavailable (e.g. locked device);
         // only a legacy session may fall back to its old stored token.
       }
+      // Bestandsnutzer: Sitzung lag bisher in flutter_keychain. Einmalig in
+      // die neue Ablage übernehmen, damit nach dem Update niemand neu
+      // anmelden muss.
+      secureRefresh ??= await _migrateLegacyKeychainToken();
       final refresh = secureRefresh ??
           (_canMigrateLegacyToken
               ? prefs.getString(_kLegacyRefreshToken)
@@ -526,6 +554,35 @@ class AuthController extends StateNotifier<AuthState> {
       return;
     }
     await _removeSecureRefreshTokenBestEffort();
+  }
+
+  /// Holt das Refresh-Token aus der alten flutter_keychain-Ablage und legt es
+  /// in der neuen sicheren Ablage ab. Die alte Kopie wird erst gelöscht, wenn
+  /// das Schreiben geklappt hat - scheitert es, bleibt sie für den nächsten
+  /// Start liegen, statt die Sitzung endgültig zu verlieren.
+  Future<String?> _migrateLegacyKeychainToken() async {
+    String? legacy;
+    try {
+      legacy = await _legacyReader(_kRefreshToken);
+    } catch (e) {
+      // Kein Kanal (z. B. iOS) oder gesperrter Speicher: kein Grund, den
+      // Start zu stören - sichtbar machen genügt.
+      ErrorReporter.instance.report('auth.cleanup', e);
+      return null;
+    }
+    if (legacy == null || legacy.isEmpty) return null;
+    try {
+      await _secureWriter(_kRefreshToken, legacy);
+    } catch (e) {
+      ErrorReporter.instance.report('auth.cleanup', e);
+      return legacy;
+    }
+    try {
+      await _legacyRemover(_kRefreshToken);
+    } catch (e) {
+      ErrorReporter.instance.report('auth.cleanup', e);
+    }
+    return legacy;
   }
 
   Future<void> _removeSecureRefreshTokenBestEffort() async {
