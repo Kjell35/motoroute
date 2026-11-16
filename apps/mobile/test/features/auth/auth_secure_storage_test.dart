@@ -178,6 +178,50 @@ void main() {
       expect(controller.state.isAuthenticated, isTrue);
     });
 
+    test('Frische Anmeldung entfernt die alte Kopie', () async {
+      final legacy = legacyStore('refresh-old');
+      final controller = AuthController(
+        dioFactory: () => dio,
+        legacyReader: (key) async => legacy[key],
+        legacyRemover: (key) async => legacy.remove(key),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.authenticate(
+        email: 'rider@example.com',
+        password: 'valid-password',
+        remember: true,
+      );
+      await controller.persistCurrentSession();
+
+      expect(await storage.read(key: 'auth.refreshToken'), 'refresh-1');
+      // Der Altbestand liegt nicht mehr in einem Speicher, den niemand liest.
+      expect(legacy, isEmpty);
+    });
+
+    test('Logout laesst keine alte Kopie zurueck', () async {
+      final legacy = legacyStore('refresh-old');
+      final controller = AuthController(
+        dioFactory: () => dio,
+        legacyReader: (key) async => legacy[key],
+        legacyRemover: (key) async => legacy.remove(key),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.authenticate(
+        email: 'rider@example.com',
+        password: 'valid-password',
+        remember: true,
+      );
+      await controller.persistCurrentSession();
+      legacy['auth.refreshToken'] = 'refresh-stale';
+
+      await controller.logout();
+
+      expect(await storage.read(key: 'auth.refreshToken'), isNull);
+      expect(legacy, isEmpty);
+    });
+
     test('Fehlender alter Kanal bricht den Start nicht ab', () async {
       rememberUser();
       final controller = AuthController(

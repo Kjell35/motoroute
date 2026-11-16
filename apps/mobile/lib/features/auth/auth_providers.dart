@@ -531,6 +531,7 @@ class AuthController extends StateNotifier<AuthState> {
         await _secureWriter(_kRefreshToken, refresh);
       }
       await prefs.setBool(_kRemembered, true);
+      await _dropLegacyKeychainTokenBestEffort();
     } catch (_) {
       try {
         await _forgetPersistedSession(prefs);
@@ -565,9 +566,9 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       legacy = await _legacyReader(_kRefreshToken);
     } catch (e) {
-      // Kein Kanal (z. B. iOS) oder gesperrter Speicher: kein Grund, den
-      // Start zu stören - sichtbar machen genügt.
-      ErrorReporter.instance.report('auth.cleanup', e);
+      // Gesperrter Speicher: kein Grund, den Start zu stören - sichtbar
+      // machen genügt. Ein fehlender Kanal ist dagegen der Normalfall.
+      _reportUnlessChannelMissing(e);
       return null;
     }
     if (legacy == null || legacy.isEmpty) return null;
@@ -577,12 +578,32 @@ class AuthController extends StateNotifier<AuthState> {
       ErrorReporter.instance.report('auth.cleanup', e);
       return legacy;
     }
+    await _dropLegacyKeychainTokenBestEffort();
+    return legacy;
+  }
+
+  /// Entfernt die alte flutter_keychain-Kopie, sobald die Sitzung woanders
+  /// liegt oder beendet wurde. Sonst bliebe ein gültiges Refresh-Token in
+  /// einem Speicher liegen, den kein Code mehr liest - etwa nach einer
+  /// frischen Anmeldung, die nie durch die Migration lief.
+  Future<void> _dropLegacyKeychainTokenBestEffort() async {
     try {
       await _legacyRemover(_kRefreshToken);
     } catch (e) {
-      ErrorReporter.instance.report('auth.cleanup', e);
+      _reportUnlessChannelMissing(e);
     }
-    return legacy;
+  }
+
+  /// Ein fehlender Plattform-Kanal ist kein Fehler: auf iOS und Desktop gibt
+  /// es keine alte flutter_keychain-Ablage. Das als Telemetrie zu melden
+  /// würde bei jedem Start dauerhaft Rauschen erzeugen.
+  static bool _isMissingChannel(Object error) =>
+      error is MissingPluginException ||
+      (error is PlatformException && error.code == 'channel-error');
+
+  static void _reportUnlessChannelMissing(Object error) {
+    if (_isMissingChannel(error)) return;
+    ErrorReporter.instance.report('auth.cleanup', error);
   }
 
   Future<void> _removeSecureRefreshTokenBestEffort() async {
@@ -749,6 +770,7 @@ class AuthController extends StateNotifier<AuthState> {
     } catch (_) {
       // Storage kann ausfallen; In-Memory-Logout erfolgt trotzdem sofort.
     }
+    await _dropLegacyKeychainTokenBestEffort();
     if (token != null) {
       try {
         await _dioFactory().post(
