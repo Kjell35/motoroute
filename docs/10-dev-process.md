@@ -50,6 +50,13 @@ motoroute/
 - **contracts:** OpenAPI-Diff-Check (Breaking Changes schlagen CI fehl, bis `/v2` beschlossen).
 - **security:** gitleaks, pip-audit, osv-scanner wöchentlich.
 
+### 5.1 Release-Signierung (Android-APK)
+
+- Jeder Tag `v*` wird aus dem Release-Keystore signiert. Fehlt der Keystore, bricht der Job ab, statt eine debug-signierte APK zu veröffentlichen.
+- Secrets: `MOTOROUTE_KEYSTORE_B64` (Keystore als Base64), `MOTOROUTE_KEYSTORE_PASSWORD`, `MOTOROUTE_KEY_ALIAS`, `MOTOROUTE_KEY_PASSWORD`, `MOTOROUTE_SIGNING_CERT_SHA256` (Soll-Fingerabdruck; der Job vergleicht ihn nach dem Build und schlägt bei Abweichung fehl).
+- Der Keystore liegt nicht im Repo (lokal unter `.artifacts/signing/`, nicht versioniert) und muss zusätzlich extern gesichert werden: Bei Verlust ist kein Update der installierten App mehr möglich, nur eine neue App-Identität.
+- Alle Releases vor dieser Umstellung waren mit dem Zufalls-Debug-Schlüssel des jeweiligen CI-Runners signiert. Für ein Update von einer dieser Versionen ist einmalig eine Neuinstallation nötig.
+
 ## 6. Testing-Pyramide (konkret)
 
 | Ebene | Umfang | Beispiel |

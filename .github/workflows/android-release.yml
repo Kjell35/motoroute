@@ -67,7 +67,45 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
-      - name: Build APK (release, debug-signed)
+      # Release-Signatur: Ohne echten Keystore bekommt jede APK den
+      # Zufalls-Debug-Schlüssel des jeweiligen Runners - Updates über eine
+      # bestehende Installation scheitern dann an der Signatur.
+      - name: Signaturschlüssel bereitstellen
+        id: signing
+        working-directory: apps/mobile
+        env:
+          KEYSTORE_B64: ${{ secrets.MOTOROUTE_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.MOTOROUTE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MOTOROUTE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.MOTOROUTE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::MOTOROUTE_KEYSTORE_B64 fehlt - ein Release waere nur debug-signiert und nicht update-faehig."
+              exit 1
+            fi
+            echo "::warning::Kein Release-Keystore hinterlegt - dieser Build ist nur debug-signiert (kein Release-Tag)."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/signing"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/signing/motoroute-release.jks"
+          # Früh und eindeutig scheitern, wenn Keystore, Passwort und Alias
+          # nicht zusammenpassen - sonst bricht erst Gradle mit kryptischem
+          # Fehler ab. Passwort über die Umgebung, nicht über argv.
+          STOREPASS="$KEYSTORE_PASSWORD" keytool -list             -keystore "$RUNNER_TEMP/signing/motoroute-release.jks"             -storepass:env STOREPASS -alias "$KEY_ALIAS" > /dev/null || {
+            echo "::error::Keystore, Passwort oder Alias aus den Secrets passen nicht zusammen."
+            exit 1
+          }
+          {
+            echo "MOTOROUTE_KEYSTORE_PATH=$RUNNER_TEMP/signing/motoroute-release.jks"
+            echo "MOTOROUTE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "MOTOROUTE_KEY_ALIAS=$KEY_ALIAS"
+            echo "MOTOROUTE_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK (release, signiert)
         working-directory: apps/mobile
         env:
           # Haupt-API (Login, Profile, Chat usw.) der wiederhergestellten App.
@@ -96,6 +134,30 @@ jobs:
             echo 'Release-APK enthält nicht die erwartete Produktions-API-URL.' >&2
             exit 1
           }
+
+      # Beweist pro Lauf, dass wirklich der Release-Schlüssel signiert hat:
+      # debug-signierte APKs wären für Nutzer nicht installierbar (Update).
+      - name: Signatur der Release-APK prüfen
+        if: success() && steps.signing.outputs.signed == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPECTED_CERT: ${{ secrets.MOTOROUTE_SIGNING_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=$(ls "$SDK"/build-tools/*/apksigner | sort -V | tail -n1)
+          CERTS=$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk)
+          echo "$CERTS"
+          if grep -q "CN=Android Debug" <<<"$CERTS"; then
+            echo "::error::APK ist debug-signiert - sie laesst sich nicht ueber eine bestehende Installation legen."
+            exit 1
+          fi
+          DIGEST=$(grep -m1 "SHA-256 digest" <<<"$CERTS" | sed 's/.*digest: //' | tr 'A-F' 'a-f')
+          if [ -n "${EXPECTED_CERT:-}" ] && [ "$DIGEST" != "$(echo "$EXPECTED_CERT" | tr 'A-F' 'a-f')" ]; then
+            echo "::error::Signaturzertifikat weicht ab: erwartet $EXPECTED_CERT, gefunden $DIGEST."
+            exit 1
+          fi
+          echo "Signiert mit $DIGEST"
 
       # Diagnostik: Log-Tail in die Job-Summary — der ist öffentlich auf der
       # Run-Seite lesbar, ohne Admin-Token (Job-Logs-Download braucht Admin).

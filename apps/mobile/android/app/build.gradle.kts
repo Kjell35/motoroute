@@ -72,11 +72,11 @@ android {
     buildTypes {
         release {
             // Signiert, wenn Keystore-Umgebungsvariablen gesetzt sind
-            // (CI-Release); sonst Debug-Keys, damit `flutter run --release`
-            // ohne Setup funktioniert. Diese Fallback-APK ist für Tests -
-            // sie installiert NICHT über eine früher signierte Version
-            // (Signaturwechsel = Deinstallation nötig), das ist bewusst
-            // so und wird in docs/ANDROID_INSTALL.md erklärt.
+            // (CI-Release, siehe .github/workflows/android-release.yml);
+            // sonst Debug-Keys, damit `flutter run --release` ohne Setup
+            // funktioniert. Die Fallback-APK ist nur für lokale Tests -
+            // sie lässt sich NICHT über eine Release-APK installieren
+            // (anderer Signaturschlüssel = Deinstallation nötig).
             signingConfig = if (hasReleaseKeystore) {
                 signingConfigs.getByName("release")
             } else {
