@@ -153,7 +153,24 @@ jobs:
             exit 1
           fi
           DIGEST=$(grep -m1 "SHA-256 digest" <<<"$CERTS" | sed 's/.*digest: //' | tr 'A-F' 'a-f')
-          if [ -n "${EXPECTED_CERT:-}" ] && [ "$DIGEST" != "$(echo "$EXPECTED_CERT" | tr 'A-F' 'a-f')" ]; then
+          # Sollwert normalisieren: keytool zeigt Fingerabdruecke mit Doppelpunkten.
+          EXPECTED=$(printf '%s' "${EXPECTED_CERT:-}" | tr -d '[:space:]:' | tr 'A-F' 'a-f')
+          # Ohne Sollwert ist der Vergleich wirkungslos - bei einem Tag also
+          # lieber scheitern als still nichts zu pruefen.
+          if [ -z "$EXPECTED" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - ohne Sollwert prueft dieser Schritt nichts."
+              exit 1
+            fi
+            echo "::warning::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - Digest wird nur angezeigt, nicht verglichen (kein Release-Tag)."
+            echo "Signiert mit $DIGEST"
+            exit 0
+          fi
+          if [ "${#EXPECTED}" -ne 64 ]; then
+            echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 ist kein SHA-256-Digest (${#EXPECTED} statt 64 Hex-Zeichen)."
+            exit 1
+          fi
+          if [ "$DIGEST" != "$EXPECTED" ]; then
             echo "::error::Signaturzertifikat weicht ab: erwartet $EXPECTED_CERT, gefunden $DIGEST."
             exit 1
           fi
