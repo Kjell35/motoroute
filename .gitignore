@@ -42,3 +42,12 @@ apps/.backend.log
 # Lokale Tool-/Agenten-Ordner (nicht Teil des Produkts)
 .artifacts/
 .freebuff/
+
+# Signierte Builds gehoeren nicht ins Repo (eine APK ist ~110 MB)
+*.apk
+
+# Eigenstaendiges Android-Projekt des Nutzers, nicht Teil von MotoRoute
+faithflow/
+
+# Importierte Chat-Anhaenge (Agenten-Artefakte)
+.cloud-attachments/
