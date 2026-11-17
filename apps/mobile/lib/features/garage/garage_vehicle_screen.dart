@@ -229,7 +229,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
       await ref.read(garageRepositoryProvider).updateOdometer(ctx['baseUrl']!, ctx['token']!, widget.vehicleId, newKm);
       await _reload();
     } catch (e) {
-      ErrorReporter.instance.report('garage.odometer', e);
+      ErrorReporter.instance.report('garage.write', e);
       _showGarageError(garageMessageFor(e,
           loginFailed: i18n.gLoginFailed,
           unreachable: i18n.gServerUnreachable));
@@ -462,7 +462,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
           );
       await _reload();
     } catch (e) {
-      ErrorReporter.instance.report('garage.maintenance', e);
+      ErrorReporter.instance.report('garage.write', e);
       _showGarageError(garageMessageFor(e,
           loginFailed: i18n.gLoginFailed,
           unreachable: i18n.gServerUnreachable));
@@ -577,7 +577,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
           );
       await _reload();
     } catch (e) {
-      ErrorReporter.instance.report('garage.fuel', e);
+      ErrorReporter.instance.report('garage.write', e);
       _showGarageError(garageMessageFor(e,
           loginFailed: i18n.gLoginFailed,
           unreachable: i18n.gServerUnreachable));
@@ -677,7 +677,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
           );
       await _reload();
     } catch (e) {
-      ErrorReporter.instance.report('garage.tire', e);
+      ErrorReporter.instance.report('garage.write', e);
       _showGarageError(garageMessageFor(e,
           loginFailed: i18n.gLoginFailed,
           unreachable: i18n.gServerUnreachable));
@@ -788,7 +788,7 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
           );
       await _reload();
     } catch (e) {
-      ErrorReporter.instance.report('garage.document', e);
+      ErrorReporter.instance.report('garage.write', e);
       _showGarageError(garageMessageFor(e,
           loginFailed: i18n.gLoginFailed,
           unreachable: i18n.gServerUnreachable));

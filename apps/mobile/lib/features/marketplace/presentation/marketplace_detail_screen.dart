@@ -82,7 +82,7 @@ class _MarketplaceDetailScreenState extends ConsumerState<MarketplaceDetailScree
         await repo.addFavorite(token: token, id: _listing!.id);
       }
     } catch (e) {
-      ErrorReporter.instance.report('mp.favorite', e);
+      ErrorReporter.instance.report('mp.other', e);
       if (!mounted) return;
       setState(() => _isFavorite = previous);
       _snack('Fehler: $e', error: true);

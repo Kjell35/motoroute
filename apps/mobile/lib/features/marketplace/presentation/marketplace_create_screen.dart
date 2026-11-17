@@ -280,7 +280,7 @@ class _MarketplaceCreateScreenState extends ConsumerState<MarketplaceCreateScree
     } on MpPhotoUploadException catch (e) {
       // Ein einzelnes Foto klemmt: das benennen, statt den ganzen Vorgang
       // als "fehlgeschlagen" zu verbuchen. Formular und Fotos bleiben.
-      ErrorReporter.instance.report('mp.create.photo', e);
+      ErrorReporter.instance.report('mp.create', e);
       if (!mounted) return;
       setState(() {
         _submitting = false;

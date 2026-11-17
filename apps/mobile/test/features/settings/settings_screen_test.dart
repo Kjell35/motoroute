@@ -91,8 +91,10 @@ void main() {
     // Bewusst ohne init(): das laedt PackageInfo ueber einen Plattform-Kanal,
     // auf den Fake-Async in Widget-Tests nie antwortet - der Test wuerde
     // haengen. Der injizierte Sender reicht fuer den Versand.
+    // 500 ist voruebergehend: der Bericht bleibt in der Warteschlange
+    // (ein 400 waere endgueltig und wuerde verworfen).
     ErrorReporter.instance.debugConfigure(
-      sender: (payload) async => 400,
+      sender: (payload) async => 500,
       appVersion: '1.0.3',
     );
     ErrorReporter.instance.report('chat.load', StateError('test'));

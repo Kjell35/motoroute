@@ -44,8 +44,9 @@ void main() {
 
   test('abgelehnter Bericht wird gemerkt und beim naechsten Start nachgeliefert',
       () async {
+    // 500 ist ein voruebergehender Fehler; 400 waere endgueltig.
     ErrorReporter.instance.debugConfigure(
-      sender: (payload) async => 400,
+      sender: (payload) async => 500,
       appVersion: '1.0.3',
     );
     await ErrorReporter.instance.init();
@@ -53,7 +54,7 @@ void main() {
     await ErrorReporter.instance.debugIdle();
 
     expect(ErrorReporter.instance.diagnostics.failed, 1);
-    expect(ErrorReporter.instance.diagnostics.lastFailureReason, 'HTTP 400');
+    expect(ErrorReporter.instance.diagnostics.lastFailureReason, 'HTTP 500');
     final raw = (await prefs()).getString(_outboxKey);
     expect(raw, isNotNull);
     expect(raw, contains('auth.role'));
@@ -72,6 +73,50 @@ void main() {
     await ErrorReporter.instance.debugIdle();
 
     expect(replayed.map((p) => p['category']), contains('auth.role'));
+    expect(ErrorReporter.instance.diagnostics.accepted, 1);
+    expect(ErrorReporter.instance.diagnostics.queued, 0);
+    expect((await prefs()).getString(_outboxKey), isNull);
+  });
+
+  test('endgueltig abgelehnter Bericht (400) wird nicht eingereiht', () async {
+    ErrorReporter.instance.debugConfigure(
+      sender: (payload) async => 400,
+      appVersion: '1.0.3',
+    );
+    await ErrorReporter.instance.init();
+    ErrorReporter.instance.report('auth.cleanup', StateError('kaputt'));
+    await ErrorReporter.instance.debugIdle();
+
+    expect(ErrorReporter.instance.diagnostics.failed, 1);
+    expect(
+      ErrorReporter.instance.diagnostics.lastFailureReason,
+      contains('endgültig verworfen'),
+    );
+    expect(ErrorReporter.instance.diagnostics.queued, 0);
+    expect((await prefs()).getString(_outboxKey), isNull);
+  });
+
+  test('endgueltig abgelehnter Kopf blockiert die Warteschlange nicht',
+      () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      _outboxKey: jsonEncode([
+        {'c': 'chat.outbox.flush', 'e': 'alte, ungueltige Kategorie'},
+        {'c': 'auth.role', 'e': 'verboten'},
+      ]),
+    });
+    final sent = <Map<String, Object?>>[];
+    ErrorReporter.instance.debugConfigure(
+      sender: (payload) async {
+        sent.add(payload);
+        return payload['category'] == 'auth.role' ? 202 : 400;
+      },
+      appVersion: '1.0.4',
+    );
+    await ErrorReporter.instance.init();
+    await ErrorReporter.instance.debugIdle();
+
+    // Beide werden versucht, der gueltige kommt durch, nichts bleibt liegen.
+    expect(sent.map((p) => p['category']), ['chat.outbox.flush', 'auth.role']);
     expect(ErrorReporter.instance.diagnostics.accepted, 1);
     expect(ErrorReporter.instance.diagnostics.queued, 0);
     expect((await prefs()).getString(_outboxKey), isNull);
@@ -165,7 +210,7 @@ void main() {
     ErrorReporter.instance.debugReset();
     expect(ErrorReporter.instance.diagnostics.accepted, 0);
     ErrorReporter.instance.debugConfigure(
-      sender: (payload) async => 400,
+      sender: (payload) async => 500,
       appVersion: '1.0.4',
     );
     await ErrorReporter.instance.init();
@@ -177,14 +222,14 @@ void main() {
     await ErrorReporter.instance.debugIdle();
     expect(ErrorReporter.instance.diagnostics.attempted, 2);
     expect(ErrorReporter.instance.diagnostics.failed, 1);
-    expect(ErrorReporter.instance.diagnostics.lastFailureReason, 'HTTP 400');
+    expect(ErrorReporter.instance.diagnostics.lastFailureReason, 'HTTP 500');
     expect((await prefs()).getString('telemetry.diagnostics.v1'), contains('"failed":1'));
   });
 
   test('Zuruecksetzen nullt die Zaehler und kann wartende Berichte verwerfen',
       () async {
     ErrorReporter.instance.debugConfigure(
-      sender: (payload) async => 400,
+      sender: (payload) async => 500,
       appVersion: '1.0.3',
     );
     await ErrorReporter.instance.init();

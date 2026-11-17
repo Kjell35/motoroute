@@ -95,7 +95,7 @@ class ChatOutbox extends StateNotifier<List<PendingChatMessage>> {
           .toList();
       state = list;
     } catch (e) {
-      ErrorReporter.instance.report('chat.outbox.load', e);
+      ErrorReporter.instance.report('chat.other', e);
       // Ein kaputter Stand darf die Warteschlange nicht dauerhaft blockieren.
       await prefs.remove(storageKey);
     }
@@ -159,7 +159,7 @@ class ChatOutbox extends StateNotifier<List<PendingChatMessage>> {
           sent += 1;
           await remove(message.localId);
         } catch (e) {
-          ErrorReporter.instance.report('chat.outbox.flush', e);
+          ErrorReporter.instance.report('chat.send', e);
           await _bumpAttempts(message.localId);
           break;
         }
@@ -189,7 +189,7 @@ class ChatOutbox extends StateNotifier<List<PendingChatMessage>> {
       } catch (e) {
         // Keine Historie heisst keine Aussage: dann lieber erneut senden
         // (das Verhalten von vorher) als die Nachricht still zu verlieren.
-        ErrorReporter.instance.report('chat.outbox.reconcile', e);
+        ErrorReporter.instance.report('chat.send', e);
         return false;
       }
     }

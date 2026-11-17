@@ -114,6 +114,10 @@ class TelemetryDiagnostics {
 ///   6. SICHTBAR: Nicht angekommene Berichte werden im Debug-Build
 ///      geloggt und in [diagnostics] gezählt (persistent über Neustarts),
 ///      statt still zu verschwinden.
+///   7. ENDGÜLTIG ABGELEHNTE Berichte (4xx, außer 408/429) werden verworfen
+///      statt wiederholt: der Server lehnt sie wegen ihres Inhalts ab, nicht
+///      wegen des Netzes. In der Warteschlange würden sie sonst für immer am
+///      Kopf stehen und alle späteren Berichte blockieren.
 class ErrorReporter {
   ErrorReporter._();
   static final ErrorReporter instance = ErrorReporter._();
@@ -259,15 +263,25 @@ class ErrorReporter {
   }
 
   Future<void> _send(_PendingReport entry) async {
-    if (await _post(entry)) {
-      // Das Netz ist offensichtlich da: liegen gebliebene Berichte nachliefern.
-      await _flush();
-    } else {
-      await _enqueue(entry);
+    switch (await _post(entry)) {
+      case _PostResult.accepted:
+        // Das Netz ist offensichtlich da: liegen gebliebene Berichte
+        // nachliefern.
+        await _flush();
+      case _PostResult.retry:
+        await _enqueue(entry);
+      case _PostResult.rejected:
+        // Nicht einreihen - der Server will diesen Bericht nicht dauerhaft.
+        break;
     }
   }
 
-  Future<bool> _post(_PendingReport entry) async {
+  /// 4xx heißt: der Server lehnt den Bericht wegen seines Inhalts ab (z. B.
+  /// Kategorie nicht auf der Whitelist). 408 und 429 sind vorübergehend.
+  static bool _isPermanentRejection(int status) =>
+      status >= 400 && status < 500 && status != 408 && status != 429;
+
+  Future<_PostResult> _post(_PendingReport entry) async {
     final payload = <String, Object?>{
       'category': entry.category,
       'cause': entry.cause,
@@ -283,13 +297,17 @@ class ErrorReporter {
         _diagnostics.accepted++;
         _diagnostics.lastAcceptedAt = DateTime.now();
         await _commit();
-        return true;
+        return _PostResult.accepted;
+      }
+      if (_isPermanentRejection(status)) {
+        await _fail('HTTP $status (endgültig verworfen)');
+        return _PostResult.rejected;
       }
       await _fail('HTTP $status');
-      return false;
+      return _PostResult.retry;
     } catch (e) {
       await _fail(e.toString());
-      return false;
+      return _PostResult.retry;
     }
   }
 
@@ -327,7 +345,9 @@ class ErrorReporter {
     if (_outbox.isEmpty || !_enabled) return;
     final batch = _outbox.take(_maxFlushPerRun).toList();
     for (final entry in batch) {
-      if (await _post(entry)) {
+      // Angenommene und endgültig abgelehnte Einträge verlassen die
+      // Warteschlange; nur vorübergehende Fehler bleiben liegen.
+      if (await _post(entry) != _PostResult.retry) {
         _outbox.remove(entry);
       }
     }
@@ -425,6 +445,18 @@ class ErrorReporter {
   /// Nur für Tests: wartet, bis alle offenen Sendungen abgeschlossen sind.
   @visibleForTesting
   Future<void> debugIdle() => _activity;
+}
+
+/// Ergebnis eines Sendeversuchs.
+enum _PostResult {
+  /// 2xx: angekommen.
+  accepted,
+
+  /// Netzfehler, Timeout, 5xx, 408, 429: beim nächsten Mal erneut.
+  retry,
+
+  /// 4xx: der Server lehnt genau diesen Bericht dauerhaft ab.
+  rejected,
 }
 
 /// Ein Bericht, der noch nicht bestätigt angenommen wurde.
