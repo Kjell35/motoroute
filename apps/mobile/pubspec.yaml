@@ -31,7 +31,6 @@ dependencies:
   dartz: ^0.10.1
   geolocator: ^13.0.1
   permission_handler: ^11.3.1
-  flutter_tts: ^4.2.0 # Sprachansagen
   freezed_annotation: ^2.4.4
   json_annotation: ^4.9.0
   battery_plus: ^7.1.1

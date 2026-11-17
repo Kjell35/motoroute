@@ -12,5 +12,12 @@ class MainActivity : FlutterActivity() {
             this,
             flutterEngine.dartExecutor.binaryMessenger,
         )
+        // Eigene Sprachansage statt flutter_tts (KGP-Blocker).
+        TtsChannel.attach(this, flutterEngine.dartExecutor.binaryMessenger)
+    }
+
+    override fun onDestroy() {
+        TtsChannel.shutdown()
+        super.onDestroy()
     }
 }

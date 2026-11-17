@@ -1,4 +1,5 @@
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:flutter/services.dart';
+
 import '../../core/network/error_reporter.dart';
 
 /// Abstraktion über flutter_tts - die Trigger-Logik des Announcers kann
@@ -9,36 +10,39 @@ abstract class TtsEngine {
   Future<void> stop();
 }
 
-/// Produktions-Engine: dünner Adapter um das flutter_tts-Plugin (in der
-/// pubspec seit dem Scaffold vorhanden, hier erstmals genutzt).
-/// Fehler werden bewusst verschluckt UND geloggt über den Aufrufer - TTS
-/// darf die Navigation niemals crashen (Helmet-UX: kein Ton ist besser
-/// als ein Absturz).
-class FlutterTtsEngine implements TtsEngine {
-  final FlutterTts _tts = FlutterTts();
+/// Produktions-Engine: eigener Plattform-Kanal auf Androids TextToSpeech
+/// (`TtsChannel.kt`). Ersetzt das Plugin flutter_tts, das das Kotlin Gradle
+/// Plugin anwendet und damit built-in Kotlin blockiert.
+///
+/// Fehler werden bewusst verschluckt UND gemeldet - TTS darf die Navigation
+/// niemals crashen (Helmet-UX: kein Ton ist besser als ein Absturz).
+class ChannelTtsEngine implements TtsEngine {
+  /// Nur für Tests: derselbe Kanal, den die App spricht.
+  static const MethodChannel channel = MethodChannel('motoroute/tts');
 
   @override
   Future<void> setLanguage(String tag) async {
     try {
-      await _tts.setLanguage(tag);
-      await _tts.setSpeechRate(0.5); // 0.0-1.0, 0.5 = natürliches Tempo
-      await _tts.setVolume(1.0);
-      await _tts.setPitch(1.0);
-      // Fire-and-forget: speak() blockiert nicht - die Trigger-Logik
-      // dedupliziert selbst (siehe VoiceAnnouncer).
-      await _tts.awaitSpeakCompletion(false);
+      await channel.invokeMethod<bool>('setLanguage', {'language': tag});
     } catch (_) {
-      // Sprachpaket fehlt evtl. - weiterer speak() schlägt dann still fehl.
+      // Ohne Plattform-Kanal (iOS) oder ohne Sprachpaket bleibt es still -
+      // der folgende speak()-Aufruf meldet den Fehler.
     }
   }
 
   @override
   Future<void> speak(String text) async {
     try {
-      await _tts.speak(text);
+      final ok = await channel.invokeMethod<bool>('speak', {'text': text});
+      if (ok != true) {
+        // Stille Ansagen sind im Betrieb nicht von "abgeschaltet" zu
+        // unterscheiden - deshalb ins Reporting.
+        ErrorReporter.instance.report(
+          'voice.tts',
+          StateError('TextToSpeech konnte nicht sprechen'),
+        );
+      }
     } catch (e) {
-      // Stille Ansagen sind im Betrieb nicht von "abgeschaltet" zu
-      // unterscheiden - deshalb ins Reporting.
       ErrorReporter.instance.report('voice.tts', e);
     }
   }
@@ -46,7 +50,7 @@ class FlutterTtsEngine implements TtsEngine {
   @override
   Future<void> stop() async {
     try {
-      await _tts.stop();
+      await channel.invokeMethod<void>('stop');
     } catch (_) {}
   }
 }
@@ -70,7 +74,7 @@ class VoiceAnnouncer {
     this.nowMeters = 80,
     this.destinationMeters = 300,
     this.arrivedMeters = 25,
-  })  : _engine = engine ?? FlutterTtsEngine(),
+  })  : _engine = engine ?? ChannelTtsEngine(),
         germanLanguage = german;
 
   final TtsEngine _engine;
