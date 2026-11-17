@@ -1,7 +1,6 @@
 package de.motoroute.app
 
 import android.content.Context
-import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
@@ -20,11 +19,9 @@ import java.util.Locale
  * mit `false` bzw. einem Fehler - die Dart-Seite meldet das als `voice.tts`
  * und schweigt weiter. TTS darf die Navigation nie abbrechen.
  *
- * Die Engine gehört jeweils EINER Activity: attach() liefert eine Session, die
- * der Aufrufer festhält und in onDestroy() abschaltet. Ein globales Feld wäre
- * falsch - die nächste Activity würde es überschreiben, und onDestroy() der
- * alten Activity hätte dann die neue Engine heruntergefahren, wonach die
- * Ansage bis zum nächsten Activity-Wechsel stumm bliebe.
+ * Jede [Session] besitzt ihren eigenen Kanal und ihre eigene Engine. Deshalb
+ * braucht es keine globale Ablage: shutdown() einer alten Activity spricht nur
+ * ihren eigenen Messenger an und kann eine neuere Engine nicht abschalten.
  */
 object TtsChannel {
     private const val CHANNEL = "motoroute/tts"
@@ -33,44 +30,24 @@ object TtsChannel {
     /// 0.0-1.0; 0.5 entspricht dem bisherigen Tempo der App.
     private const val SPEECH_RATE = 0.5f
 
-    private val sessions = HashMap<BinaryMessenger, Session>()
+    /// Hängt eine Engine an diesen Messenger. Die zurückgegebene Session hält
+    /// der Aufrufer (MainActivity) fest und schaltet sie beim Zerstören ab.
+    fun attach(context: Context, messenger: BinaryMessenger): Session =
+        Session(context.applicationContext, messenger)
 
-    /// Hängt eine Engine an diesen Messenger und liefert die dazugehörige
-    /// Session zurück.
-    fun attach(context: Context, messenger: BinaryMessenger): Session {
-        // Wird derselbe Messenger erneut bedient, die alte Engine zuerst
-        // freigeben, statt sie verwaisen zu lassen.
-        sessions.remove(messenger)?.release()
-        return Session(context.applicationContext, messenger)
-            .also { sessions[messenger] = it }
-    }
-
-    class Session internal constructor(
-        context: Context,
-        private val messenger: BinaryMessenger,
-    ) {
+    class Session internal constructor(context: Context, messenger: BinaryMessenger) {
         private val engine = Engine(context)
-        private var released = false
+        private val channel = MethodChannel(messenger, CHANNEL)
 
         init {
-            MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
+            channel.setMethodCallHandler { call, result ->
                 handle(call, result, engine)
             }
         }
 
-        /// Schaltet ausschließlich die eigene Engine ab. Bedient der Messenger
-        /// inzwischen eine neuere Session, bleibt deren Handler unangetastet.
+        /** Nur die eigene Engine; fremde Sessions bleiben unberührt. */
         fun shutdown() {
-            if (sessions[messenger] === this) {
-                sessions.remove(messenger)
-                MethodChannel(messenger, CHANNEL).setMethodCallHandler(null)
-            }
-            release()
-        }
-
-        internal fun release() {
-            if (released) return
-            released = true
+            channel.setMethodCallHandler(null)
             engine.shutdown()
         }
     }
@@ -89,7 +66,6 @@ object TtsChannel {
                 }
                 val status = tts.setLanguage(Locale.forLanguageTag(language))
                 tts.setSpeechRate(SPEECH_RATE)
-                tts.setPitch(1.0f)
                 val supported = status != TextToSpeech.LANG_MISSING_DATA &&
                     status != TextToSpeech.LANG_NOT_SUPPORTED
                 if (!supported) {
@@ -104,13 +80,9 @@ object TtsChannel {
                     return@withEngine
                 }
                 // QUEUE_FLUSH: eine neue Ansage ersetzt die laufende, statt
-                // sich zu stapeln (Fahrhinweise sind zeitkritisch).
-                // TextToSpeech kennt kein setVolume(); die Lautstärke gehört
-                // zu jedem Ausspruch.
-                val params = Bundle().apply {
-                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
-                }
-                val code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, "motoroute")
+                // sich zu stapeln (Fahrhinweise sind zeitkritisch). Lautstärke
+                // und Tonhöhe bleiben auf der Vorgabe (1.0).
+                val code = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "motoroute")
                 result.success(code == TextToSpeech.SUCCESS)
             }
             "stop" -> engine.withEngine(result) { tts ->
@@ -161,10 +133,14 @@ object TtsChannel {
             val queued = waiting.toList()
             waiting.clear()
             if (released) {
-                created?.shutdown()
+                // Aktivität ist beim Warten verschwunden: Engine sofort
+                // abräumen, statt sie ohne Besitzer weiterlaufen zu lassen.
+                runCatching { created?.shutdown() }
                 tts = null
                 queued.forEach { (result, _) ->
-                    result.error(TAG, "TextToSpeech wurde freigegeben", null)
+                    runCatching {
+                        result.error(TAG, "TextToSpeech wurde freigegeben", null)
+                    }
                 }
                 return
             }
@@ -180,17 +156,20 @@ object TtsChannel {
             queued.forEach { (_, action) -> action(created) }
         }
 
+        /**
+         * Mehrfach aufrufbar. Wartende Aufrufe werden beantwortet, statt hängen
+         * zu bleiben; stop()/shutdown() einer halb initialisierten Engine kann
+         * werfen und darf beim Activity-Abbau nicht die App mitnehmen.
+         */
         fun shutdown() {
             released = true
             val queued = waiting.toList()
             waiting.clear()
-            // Noch nicht beantwortete Aufrufe nicht hängen lassen; die
-            // Activity ist ohnehin dabei zu verschwinden.
             queued.forEach { (result, _) ->
                 runCatching { result.error(TAG, "TextToSpeech wurde freigegeben", null) }
             }
-            tts?.stop()
-            tts?.shutdown()
+            runCatching { tts?.stop() }
+            runCatching { tts?.shutdown() }
             tts = null
         }
     }
