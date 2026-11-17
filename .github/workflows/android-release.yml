@@ -72,7 +72,6 @@ jobs:
       # bestehende Installation scheitern dann an der Signatur.
       - name: Signaturschlüssel bereitstellen
         id: signing
-        working-directory: apps/mobile
         env:
           KEYSTORE_B64: ${{ secrets.MOTOROUTE_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.MOTOROUTE_KEYSTORE_PASSWORD }}
@@ -88,17 +87,18 @@ jobs:
             echo "::warning::Kein Release-Keystore hinterlegt - dieser Build ist nur debug-signiert (kein Release-Tag)."
             exit 0
           fi
-          mkdir -p "$RUNNER_TEMP/signing"
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/signing/motoroute-release.jks"
+          KEYSTORE="$RUNNER_TEMP/motoroute-release.jks"
+          mkdir -p "$(dirname "$KEYSTORE")"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
           # Früh und eindeutig scheitern, wenn Keystore, Passwort und Alias
           # nicht zusammenpassen - sonst bricht erst Gradle mit kryptischem
           # Fehler ab. Passwort über die Umgebung, nicht über argv.
-          STOREPASS="$KEYSTORE_PASSWORD" keytool -list             -keystore "$RUNNER_TEMP/signing/motoroute-release.jks"             -storepass:env STOREPASS -alias "$KEY_ALIAS" > /dev/null || {
+          if ! PW="$KEYSTORE_PASSWORD" keytool -list -keystore "$KEYSTORE" -storepass:env PW -alias "$KEY_ALIAS" > /dev/null; then
             echo "::error::Keystore, Passwort oder Alias aus den Secrets passen nicht zusammen."
             exit 1
-          }
+          fi
           {
-            echo "MOTOROUTE_KEYSTORE_PATH=$RUNNER_TEMP/signing/motoroute-release.jks"
+            echo "MOTOROUTE_KEYSTORE_PATH=$KEYSTORE"
             echo "MOTOROUTE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
             echo "MOTOROUTE_KEY_ALIAS=$KEY_ALIAS"
             echo "MOTOROUTE_KEY_PASSWORD=$KEY_PASSWORD"
@@ -158,7 +158,7 @@ jobs:
           # Ohne Sollwert ist der Vergleich wirkungslos - bei einem Tag also
           # lieber scheitern als still nichts zu pruefen.
           if [ -z "$EXPECTED" ]; then
-            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - ohne Sollwert prueft dieser Schritt nichts."
               exit 1
             fi

@@ -28,17 +28,23 @@ val keystoreFilePath = System.getenv("MOTOROUTE_KEYSTORE_PATH")
 val keystorePasswordValue = System.getenv("MOTOROUTE_KEYSTORE_PASSWORD")
 val keyAliasValue = System.getenv("MOTOROUTE_KEY_ALIAS")
 val keyPasswordValue = System.getenv("MOTOROUTE_KEY_PASSWORD")
+val keystoreValues = listOf(keystoreFilePath, keystorePasswordValue, keyAliasValue, keyPasswordValue)
+val keystoreParts = keystoreValues.count { !it.isNullOrBlank() }
+// Eine halb gesetzte Signierung darf NICHT still auf Debug-Keys zurückfallen:
+// sonst entstehen unbemerkt APKs, die sich nicht über eine signierte Version
+// installieren lassen.
+if (keystoreParts != 0 && keystoreParts != keystoreValues.size) {
+    throw GradleException(
+        "Release-Signierung ist unvollständig: MOTOROUTE_KEYSTORE_PATH, " +
+            "MOTOROUTE_KEYSTORE_PASSWORD, MOTOROUTE_KEY_ALIAS und " +
+            "MOTOROUTE_KEY_PASSWORD müssen alle gesetzt sein - oder keiner.",
+    )
+}
 val keystoreFile = keystoreFilePath?.takeIf { it.isNotBlank() }?.let { file(it) }
-// Ein gesetzter, aber falscher Pfad darf NICHT still auf Debug-Signierung
-// zurückfallen: sonst verteilt die CI unbemerkt APKs, die sich nicht über
-// eine signierte Version installieren lassen.
 if (keystoreFile != null && !keystoreFile.exists()) {
     throw GradleException("MOTOROUTE_KEYSTORE_PATH zeigt auf keine Datei: $keystoreFile")
 }
-val hasReleaseKeystore = keystoreFile != null &&
-        !keystorePasswordValue.isNullOrBlank() &&
-        !keyAliasValue.isNullOrBlank() &&
-        !keyPasswordValue.isNullOrBlank()
+val hasReleaseKeystore = keystoreParts == keystoreValues.size
 
 android {
     namespace = appId
