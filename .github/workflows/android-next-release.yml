@@ -31,7 +31,9 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          # Gleiche feste Version wie im App-Workflow: `channel: stable`
+          # haette bei jedem Lauf ein anderes SDK gezogen.
+          flutter-version: '3.47.4'
 
       # The rebuilt Flutter project is nested in the monorepo. Flutter
       # discovers the nearest pubspec only from the current directory.
