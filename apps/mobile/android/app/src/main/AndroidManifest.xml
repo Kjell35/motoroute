@@ -23,10 +23,17 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
+    <!-- Kein Google-Cloud-Backup: Die App sagt zu, keine Standortverlaeufe
+         zu speichern. Auto-Backup wuerde Offline-Cache, Session- und
+         Chat-Ablage in die Google-Cloud kopieren und damit genau das
+         unterlaufen. allowBackup=false schaltet Auto-Backup und den
+         Geraete-zu-Geraete-Transfer (Android 12+) gemeinsam ab; separate
+         Extraktionsregeln waeren dann wirkungslos. -->
     <application
         android:label="MotoRoute"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
