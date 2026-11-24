@@ -45,7 +45,7 @@ jobs:
         run: flutter test
 
   build-apk:
-    name: Release-APK (installierbar)
+    name: Release-APKs (installierbar)
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
@@ -105,7 +105,7 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Build APK (release, signiert)
+      - name: Build APKs (release, signiert)
         working-directory: apps/mobile
         env:
           # Haupt-API (Login, Profile, Chat usw.) der wiederhergestellten App.
@@ -115,10 +115,23 @@ jobs:
         run: |
           set -o pipefail
           set -x
+          rm -rf dist && mkdir -p dist
+          # 1) Universal-APK (alle ABIs, ~110 MB) als Fallback.
           flutter build apk --release \
             --dart-define="API_BASE_URL=$API_BASE_URL" \
             --dart-define="MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL" 2>&1 \
             | tee build-release.log
+          cp build/app/outputs/flutter-apk/app-release.apk dist/
+          # 2) Eine APK pro ABI (~40 MB): arm64 deckt aktuelle Geraete ab,
+          #    armeabi-v7a aeltere, x86_64 Emulator/Chromebook.
+          flutter build apk --release --split-per-abi \
+            --dart-define="API_BASE_URL=$API_BASE_URL" \
+            --dart-define="MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL" 2>&1 \
+            | tee -a build-release.log
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             build/app/outputs/flutter-apk/app-x86_64-release.apk dist/
+          ls -lh dist
 
       - name: Produktions-API erreichbar
         if: success()
@@ -126,18 +139,20 @@ jobs:
           API_BASE_URL: https://motoroute-api-8fi9.onrender.com
         run: curl --fail --silent --show-error --retry 3 --retry-delay 5 "$API_BASE_URL/v1/health"
 
-      - name: APK enthält Produktions-API
+      - name: APKs enthalten Produktions-API
         if: success()
         working-directory: apps/mobile
         run: |
-          strings build/app/outputs/flutter-apk/app-release.apk | grep -Fq 'https://motoroute-api-8fi9.onrender.com' || {
-            echo 'Release-APK enthält nicht die erwartete Produktions-API-URL.' >&2
-            exit 1
-          }
+          for APK in dist/*.apk; do
+            strings "$APK" | grep -Fq 'https://motoroute-api-8fi9.onrender.com' || {
+              echo "Release-APK $APK enthält nicht die erwartete Produktions-API-URL." >&2
+              exit 1
+            }
+          done
 
       # Beweist pro Lauf, dass wirklich der Release-Schlüssel signiert hat:
       # debug-signierte APKs wären für Nutzer nicht installierbar (Update).
-      - name: Signatur der Release-APK prüfen
+      - name: Signatur aller Release-APKs prüfen
         if: success() && steps.signing.outputs.signed == 'true'
         working-directory: apps/mobile
         env:
@@ -146,35 +161,37 @@ jobs:
           set -euo pipefail
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           APKSIGNER=$(ls "$SDK"/build-tools/*/apksigner | sort -V | tail -n1)
-          CERTS=$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk)
-          echo "$CERTS"
-          if grep -q "CN=Android Debug" <<<"$CERTS"; then
-            echo "::error::APK ist debug-signiert - sie laesst sich nicht ueber eine bestehende Installation legen."
-            exit 1
-          fi
-          DIGEST=$(grep -m1 "SHA-256 digest" <<<"$CERTS" | sed 's/.*digest: //' | tr 'A-F' 'a-f')
           # Sollwert normalisieren: keytool zeigt Fingerabdruecke mit Doppelpunkten.
           EXPECTED=$(printf '%s' "${EXPECTED_CERT:-}" | tr -d '[:space:]:' | tr 'A-F' 'a-f')
           # Ohne Sollwert ist der Vergleich wirkungslos - bei einem Tag also
           # lieber scheitern als still nichts zu pruefen.
-          if [ -z "$EXPECTED" ]; then
-            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-              echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - ohne Sollwert prueft dieser Schritt nichts."
-              exit 1
-            fi
-            echo "::warning::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - Digest wird nur angezeigt, nicht verglichen (kein Release-Tag)."
-            echo "Signiert mit $DIGEST"
-            exit 0
+          if [ -z "$EXPECTED" ] && [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - ohne Sollwert prueft dieser Schritt nichts."
+            exit 1
           fi
-          if [ "${#EXPECTED}" -ne 64 ]; then
+          if [ -n "$EXPECTED" ] && [ "${#EXPECTED}" -ne 64 ]; then
             echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 ist kein SHA-256-Digest (${#EXPECTED} statt 64 Hex-Zeichen)."
             exit 1
           fi
-          if [ "$DIGEST" != "$EXPECTED" ]; then
-            echo "::error::Signaturzertifikat weicht ab: erwartet $EXPECTED_CERT, gefunden $DIGEST."
-            exit 1
+          if [ -z "$EXPECTED" ]; then
+            echo "::warning::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - Digest wird nur angezeigt, nicht verglichen (kein Release-Tag)."
           fi
-          echo "Signiert mit $DIGEST"
+          # Jede veroeffentlichte APK einzeln: eine debug-signierte Variante
+          # zwischen vier korrekten faellt sonst nicht auf.
+          for APK in dist/*.apk; do
+            CERTS=$("$APKSIGNER" verify --print-certs "$APK")
+            echo "$CERTS"
+            if grep -q "CN=Android Debug" <<<"$CERTS"; then
+              echo "::error::$APK ist debug-signiert - sie laesst sich nicht ueber eine bestehende Installation legen."
+              exit 1
+            fi
+            DIGEST=$(grep -m1 "SHA-256 digest" <<<"$CERTS" | sed 's/.*digest: //' | tr 'A-F' 'a-f')
+            if [ -n "$EXPECTED" ] && [ "$DIGEST" != "$EXPECTED" ]; then
+              echo "::error::Signaturzertifikat von $APK weicht ab: erwartet $EXPECTED_CERT, gefunden $DIGEST."
+              exit 1
+            fi
+            echo "$APK signiert mit $DIGEST"
+          done
 
       # Diagnostik: Log-Tail in die Job-Summary — der ist öffentlich auf der
       # Run-Seite lesbar, ohne Admin-Token (Job-Logs-Download braucht Admin).
@@ -193,15 +210,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: motoroute-apk
-          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          path: apps/mobile/dist/*.apk
           if-no-files-found: error
 
-      # Release-Seite wie bisher: Titel „MotoRoute X.Y.Z", Asset
-      # „MotoRoute-vX.Y.Z.apk” (Konvention der Releases bis v1.0.3).
-      - name: APK auf Releases-Namen kopieren
+      # Release-Seite wie bisher: Titel „MotoRoute X.Y.Z", Universal-Asset
+      # „MotoRoute-vX.Y.Z.apk“ (Konvention der Releases bis v1.0.3) - dazu je
+      # ABI ein Asset mit Suffix, das nur ~40 MB gross ist.
+      - name: APKs auf Releases-Namen kopieren
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          cp apps/mobile/build/app/outputs/flutter-apk/app-release.apk "MotoRoute-${{ github.ref_name }}.apk"
+          V="${GITHUB_REF_NAME}"
+          cp apps/mobile/dist/app-release.apk "MotoRoute-${V}.apk"
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            cp "apps/mobile/dist/app-${ABI}-release.apk" "MotoRoute-${V}-${ABI}.apk"
+          done
+          ls -lh MotoRoute-*.apk
           # Titel-Konvention der alten Releases: „MotoRoute 1.0.4" (ohne v).
           echo "VERSION_NO_V=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
@@ -219,7 +242,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: MotoRoute ${{ env.VERSION_NO_V }}
-          files: MotoRoute-${{ github.ref_name }}.apk
+          files: |
+            MotoRoute-${{ github.ref_name }}.apk
+            MotoRoute-${{ github.ref_name }}-arm64-v8a.apk
+            MotoRoute-${{ github.ref_name }}-armeabi-v7a.apk
+            MotoRoute-${{ github.ref_name }}-x86_64.apk
           generate_release_notes: true
 
       # action-gh-release setzt den Titel bei bereits existierenden Releases

@@ -51,3 +51,6 @@ faithflow/
 
 # Importierte Chat-Anhaenge (Agenten-Artefakte)
 .cloud-attachments/
+
+# Build-Ausgabe des Release-Workflows
+apps/mobile/dist/
