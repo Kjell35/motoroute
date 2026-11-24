@@ -28,7 +28,10 @@ jobs:
       - name: Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          # Feste Version: `channel: stable` haette bei jedem Lauf ein anderes
+          # SDK gezogen - zusammen mit dem eingecheckten pubspec.lock baut
+          # derselbe Commit dann wirklich dasselbe APK.
+          flutter-version: '3.47.4'
 
       - name: Pub get
         working-directory: apps/mobile
@@ -61,7 +64,7 @@ jobs:
       - name: Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.47.4'
 
       - name: Pub get
         working-directory: apps/mobile

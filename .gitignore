@@ -9,7 +9,6 @@ Thumbs.db
 **/.dart_tool/
 **/.flutter-plugins*
 **/GeneratedPluginRegistrant.*
-**/pubspec.lock
 
 # Android
 **/android/.gradle/
