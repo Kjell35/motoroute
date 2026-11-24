@@ -2,11 +2,22 @@ name: Android Build & Release
 
 on:
   push:
-    branches: [main]
+    # Gepusht wird nach `monorepo`. `main` ist die alte Struktur ohne apps/
+    # und wuerde jeden Job am working-directory scheitern lassen.
+    branches: [monorepo]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    # PRs laufen gegen den Branch, in dem die App liegt - nicht gegen das
+    # Legacy-`main`. Feature-Branches loesen dadurch keinen zusaetzlichen
+    # push-Lauf aus.
+    branches: [monorepo]
   workflow_dispatch:
+
+# Zwei schnelle Pushes auf denselben Ref sollen nicht parallel bauen.
+# Tag-Laeufe werden nie abgebrochen: dort haengen Uploads am selben Lauf.
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 # Tag-Release braucht Schreibrecht auf Contents (v-Release erstellen/anhängen).
 permissions:
