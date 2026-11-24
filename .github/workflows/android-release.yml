@@ -117,7 +117,6 @@ jobs:
           MOTOROUTE_API_BASE_URL: ${{ vars.MOTOROUTE_API_BASE_URL || 'https://motoroute.example' }}
         run: |
           set -o pipefail
-          set -x
           rm -rf dist && mkdir -p dist
           # 1) Universal-APK (alle ABIs, ~110 MB) als Fallback.
           flutter build apk --release \
@@ -126,24 +125,21 @@ jobs:
             | tee build-release.log
           cp build/app/outputs/flutter-apk/app-release.apk dist/
           # 2) Eine APK pro ABI (~40 MB): arm64 deckt aktuelle Geraete ab,
-          #    armeabi-v7a aeltere, x86_64 Emulator/Chromebook.
+          #    armeabi-v7a aeltere, x86_64 Emulator/Chromebook. Der Glob
+          #    haelt die ABI-Liste aus dem Workflow heraus.
           flutter build apk --release --split-per-abi \
             --dart-define="API_BASE_URL=$API_BASE_URL" \
             --dart-define="MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL" 2>&1 \
             | tee -a build-release.log
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-             build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
-             build/app/outputs/flutter-apk/app-x86_64-release.apk dist/
+          cp build/app/outputs/flutter-apk/app-*-release.apk dist/
           ls -lh dist
 
       - name: Produktions-API erreichbar
-        if: success()
         env:
           API_BASE_URL: https://motoroute-api-8fi9.onrender.com
         run: curl --fail --silent --show-error --retry 3 --retry-delay 5 "$API_BASE_URL/v1/health"
 
       - name: APKs enthalten Produktions-API
-        if: success()
         working-directory: apps/mobile
         run: |
           for APK in dist/*.apk; do
@@ -156,7 +152,7 @@ jobs:
       # Beweist pro Lauf, dass wirklich der Release-Schlüssel signiert hat:
       # debug-signierte APKs wären für Nutzer nicht installierbar (Update).
       - name: Signatur aller Release-APKs prüfen
-        if: success() && steps.signing.outputs.signed == 'true'
+        if: steps.signing.outputs.signed == 'true'
         working-directory: apps/mobile
         env:
           EXPECTED_CERT: ${{ secrets.MOTOROUTE_SIGNING_CERT_SHA256 }}
@@ -183,7 +179,6 @@ jobs:
           # zwischen vier korrekten faellt sonst nicht auf.
           for APK in dist/*.apk; do
             CERTS=$("$APKSIGNER" verify --print-certs "$APK")
-            echo "$CERTS"
             if grep -q "CN=Android Debug" <<<"$CERTS"; then
               echo "::error::$APK ist debug-signiert - sie laesst sich nicht ueber eine bestehende Installation legen."
               exit 1
@@ -224,12 +219,13 @@ jobs:
         run: |
           V="${GITHUB_REF_NAME}"
           cp apps/mobile/dist/app-release.apk "MotoRoute-${V}.apk"
-          for ABI in arm64-v8a armeabi-v7a x86_64; do
-            cp "apps/mobile/dist/app-${ABI}-release.apk" "MotoRoute-${V}-${ABI}.apk"
+          for APK in apps/mobile/dist/app-*-release.apk; do
+            ABI="${APK#apps/mobile/dist/app-}"
+            cp "$APK" "MotoRoute-${V}-${ABI%-release.apk}.apk"
           done
           ls -lh MotoRoute-*.apk
           # Titel-Konvention der alten Releases: „MotoRoute 1.0.4" (ohne v).
-          echo "VERSION_NO_V=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "VERSION_NO_V=${V#v}" >> "$GITHUB_ENV"
 
       # Einmaliges Aufräumen: Das erste v1.0.4-Release hieß generisch
       # (app-release.apk) — der Restbestand wird entfernt, falls vorhanden.
