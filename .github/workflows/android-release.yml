@@ -246,6 +246,16 @@ jobs:
             MotoRoute-${{ github.ref_name }}-arm64-v8a.apk
             MotoRoute-${{ github.ref_name }}-armeabi-v7a.apk
             MotoRoute-${{ github.ref_name }}-x86_64.apk
+          # Steht über den automatisch generierten Commit-Notizen (die Action
+          # stellt `body` voran) - sonst laedt weiter jeder die 110-MB-Datei.
+          body: |
+            ### Welche APK herunterladen?
+
+            Für praktisch alle Geräte: **`MotoRoute-${{ github.ref_name }}-arm64-v8a.apk`** (~40 MB).
+
+            `MotoRoute-${{ github.ref_name }}.apk` (~110 MB) ist die Universal-APK mit allen
+            ABIs und nur der Fallback, falls die arm64-Variante nicht installiert werden kann.
+            `-armeabi-v7a` ist für ältere 32-Bit-Geräte, `-x86_64` für Emulator/Chromebook.
           generate_release_notes: true
 
       # action-gh-release setzt den Titel bei bereits existierenden Releases
