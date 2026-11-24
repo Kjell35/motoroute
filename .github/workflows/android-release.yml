@@ -256,6 +256,12 @@ jobs:
             `MotoRoute-${{ github.ref_name }}.apk` (~110 MB) ist die Universal-APK mit allen
             ABIs und nur der Fallback, falls die arm64-Variante nicht installiert werden kann.
             `-armeabi-v7a` ist für ältere 32-Bit-Geräte, `-x86_64` für Emulator/Chromebook.
+
+            **Bitte bei der einmal gewählten Variante bleiben.** Die ABI-Pakete bekommen von
+            Gradle einen Versions-Offset (+1000 armeabi-v7a, +2000 arm64, +4000 x86_64), ihre
+            versionCode ist damit höher als die der Universal-APK. Ein Wechsel zur Universal-APK
+            wäre ein Downgrade und scheitert mit „App nicht installiert" – erst deinstallieren,
+            dann neu installieren.
           generate_release_notes: true
 
       # action-gh-release setzt den Titel bei bereits existierenden Releases
