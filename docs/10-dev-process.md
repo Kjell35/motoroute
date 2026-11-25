@@ -35,7 +35,7 @@ motoroute/
 2. `flutter analyze` / `ruff + mypy` sauber, CI grün.
 3. Doku aktualisiert, wenn Verhalten/Architektur betroffen ist.
 4. Kein `TODO` ohne Issue-Referenz (`TODO(M3): … #12`).
-5. Manueller Smoke-Test auf Android-Gerät und -Emulator.
+5. Manueller Smoke-Test auf Android-Gerät und -Emulator (Punkte: [15-device-checklist.md](15-device-checklist.md)).
 
 ## 4. Branching & Commits
 
@@ -55,7 +55,8 @@ motoroute/
 - Jeder Tag `v*` wird aus dem Release-Keystore signiert. Fehlt der Keystore, bricht der Job ab, statt eine debug-signierte APK zu veröffentlichen.
 - Pro Tag entstehen vier Assets mit demselben Schlüssel: `MotoRoute-vX.Y.Z.apk` (Universal, enthält alle ABIs, ~110 MB), `MotoRoute-vX.Y.Z-arm64-v8a.apk` (~40 MB, richtige Wahl für praktisch alle Geräte), `MotoRoute-vX.Y.Z-armeabi-v7a.apk` (Altgeräte) und `MotoRoute-vX.Y.Z-x86_64.apk` (Emulator/Chromebook).
 - Zu jedem Release-Tag gehört das R8-Mapping (mapping.txt aus dem Gradle-Release-Build): es liegt als eigenes Asset `MotoRoute-vX.Y.Z-mapping.txt` am Release und zusätzlich 90 Tage als CI-Artifact `motoroute-mapping-<ref>`. Ohne Mapping bleiben Stacktraces aus den opt-in-Fehlerberichten unlesbar; fehlt die Datei oder ist sie leer, bricht der Job ab.
-- Ein Schritt prueft vor dem Release beides aus denselben `aapt2`-Metadaten (ein Lookup, ein Durchlauf ueber `dist/`): Der Tag `vX.Y.Z` muss zum `versionName` **aller** gebauten APKs passen - ohne Bump in `apps/mobile/pubspec.yaml` bricht der Job ab, statt eine Release-Seite mit falscher Version anzulegen. Zugleich muss der `versionCode` der Universal-APK (Build-Nummer `+N` aus `pubspec.yaml`, Offset 0; die ABI-APKs tragen +1000/+2000/+4000 und taugen nicht als Vergleichswert) hoeher sein als beim vorherigen Release-Tag; gleicher Wert hiesse, dass Android kein Update anbietet. Der Vergleich liest nur Git-Tags, es wird nichts zwischen Laeufen gespeichert.
+- Ein Schritt prueft vor dem Release beides aus denselben `aapt2`-Metadaten (ein Lookup, ein Durchlauf ueber `dist/`): Der Tag `vX.Y.Z` muss zum `versionName` **aller** gebauten APKs passen - ohne Bump in `apps/mobile/pubspec.yaml` bricht der Job ab, statt eine Release-Seite mit falscher Version anzulegen. Zugleich muss die Build-Nummer `+N` aus `pubspec.yaml` hoeher sein als beim vorherigen Release-Tag; gleicher Wert hiesse, dass Android kein Update anbietet. Die Universal-APK bekommt per `--build-number` denselben `versionCode` wie das arm64-Paket (+2000; `-armeabi-v7a` +1000, `-x86_64` +4000), damit der Wechsel von arm64 auf den Fallback kein Downgrade ist - weicht das ab, bricht der Job ab. Der Vergleich liest nur Git-Tags, es wird nichts zwischen Laeufen gespeichert.
+- Dieselben Pruefungen laufen zusaetzlich bei Branch-Pushes als Warnung (`::warning::`, Job bleibt gruen): Sollwert fuer den `versionName` ist dann `pubspec.yaml`, Vergleichswert fuer den `versionCode` der letzte Release-Tag. Ein vergessener Bump oder eine Universal-APK mit falschem Offset faellt damit vor dem Taggen auf, ohne Zwischenstaende rot zu machen.
 - Secrets: `MOTOROUTE_KEYSTORE_B64` (Keystore als Base64), `MOTOROUTE_KEYSTORE_PASSWORD`, `MOTOROUTE_KEY_ALIAS`, `MOTOROUTE_KEY_PASSWORD`, `MOTOROUTE_SIGNING_CERT_SHA256` (Soll-Fingerabdruck; der Job vergleicht ihn nach dem Build und schlägt bei Abweichung fehl).
 - Der Keystore liegt nicht im Repo (lokal unter `.artifacts/signing/`, nicht versioniert) und muss zusätzlich extern gesichert werden: Bei Verlust ist kein Update der installierten App mehr möglich, nur eine neue App-Identität.
 - Alle Releases vor dieser Umstellung waren mit dem Zufalls-Debug-Schlüssel des jeweiligen CI-Runners signiert. Für ein Update von einer dieser Versionen ist einmalig eine Neuinstallation nötig.
