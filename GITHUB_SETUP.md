@@ -26,7 +26,8 @@ Der Workflow `.github/workflows/android-release.yml` läuft bei jedem Push auf `
 1. GitHub-Repo öffnen → Tab **Actions**
 2. Links „Android Build & Release“ wählen
 3. Neuesten Run öffnen → unten im Abschnitt **Artifacts** → `motoroute-apk` herunterladen
-4. ZIP entpacken → darin liegt die **`app-release.apk`**
+4. ZIP entpacken → darin liegen die drei ABI-APKs: **`app-arm64-v8a-release.apk`**
+   (praktisch alle Geräte), `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`
 
 **Alternative (empfohlen zum Teilen):** Tag setzen, dann landet die APK automatisch als
 **Release-Anhang** mit fixem Download-Link:

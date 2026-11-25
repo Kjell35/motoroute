@@ -20,7 +20,7 @@ bestätigt die gebaute APK auf echter Hardware.
 - [ ] App startet bis zur Karte, ohne Absturz im ersten Bildschirm.
 - [ ] Variante bestätigen:
       `adb shell dumpsys package de.motoroute.app | grep -m1 versionCode`
-      → bei v1.0.14 `2050` (arm64), Universal wäre `50`.
+      → bei v1.0.14 `2050` (Build-Nummer 50 + ABI-Offset 2000).
 - [ ] Anmeldung funktioniert, App-Neustart behält die Sitzung (Secure Storage).
 
 ## 2. Einmalige Neuinstallation aus einer v1.0.13-Installation
@@ -38,8 +38,9 @@ jeweiligen CI-Runners signiert. Ein Update darüber ist technisch unmöglich.
 
 ## 3. Update auf die nächste Version ohne Datenverlust
 
-- [ ] **Gleiche Variante** wie installiert nehmen (arm64 → arm64). Ein Wechsel
-      zur Universal-APK wäre ein Downgrade (versionCode 50 < 2050) und scheitert
+- [ ] **Gleiche Variante** wie installiert nehmen (arm64 → arm64). Die ABI-Pakete
+      tragen unterschiedliche versionCodes (+1000 armeabi-v7a, +2000 arm64,
+      +4000 x86_64); ein Wechsel auf eine Variante mit niedrigerem Code scheitert
       mit "App nicht installiert".
 - [ ] Neue APK über die installierte legen, ohne zu deinstallieren.
 - [ ] Danach prüfen: noch angemeldet, Fahrzeuge/Touren vorhanden, Chat-Verlauf da,

@@ -53,15 +53,15 @@ motoroute/
 ### 5.1 Release-Signierung (Android-APK)
 
 - Jeder Tag `v*` wird aus dem Release-Keystore signiert. Fehlt der Keystore, bricht der Job ab, statt eine debug-signierte APK zu veröffentlichen.
-- Pro Tag entstehen vier Assets mit demselben Schlüssel: `MotoRoute-vX.Y.Z.apk` (Universal, enthält alle ABIs, ~110 MB), `MotoRoute-vX.Y.Z-arm64-v8a.apk` (~40 MB, richtige Wahl für praktisch alle Geräte), `MotoRoute-vX.Y.Z-armeabi-v7a.apk` (Altgeräte) und `MotoRoute-vX.Y.Z-x86_64.apk` (Emulator/Chromebook).
+- Pro Tag entstehen drei Assets mit demselben Schlüssel: `MotoRoute-vX.Y.Z-arm64-v8a.apk` (~40 MB, richtige Wahl für praktisch alle Geräte), `MotoRoute-vX.Y.Z-armeabi-v7a.apk` (~34 MB, Altgeräte) und `MotoRoute-vX.Y.Z-x86_64.apk` (~43 MB, Emulator/Chromebook). Eine Universal-APK mit allen ABIs gibt es bewusst nicht: Sie wäre ein 110-MB-Fallback, und ihr `versionCode` müsste per `--build-number` an das arm64-Paket angeglichen werden - das kostete einen zweiten Gradle-Durchlauf.
 - Zu jedem Release-Tag gehört das R8-Mapping (mapping.txt aus dem Gradle-Release-Build): es liegt als eigenes Asset `MotoRoute-vX.Y.Z-mapping.txt` am Release und zusätzlich 90 Tage als CI-Artifact `motoroute-mapping-<ref>`. Ohne Mapping bleiben Stacktraces aus den opt-in-Fehlerberichten unlesbar; fehlt die Datei oder ist sie leer, bricht der Job ab.
-- Ein Schritt prueft vor dem Release beides aus denselben `aapt2`-Metadaten (ein Lookup, ein Durchlauf ueber `dist/`): Der Tag `vX.Y.Z` muss zum `versionName` **aller** gebauten APKs passen - ohne Bump in `apps/mobile/pubspec.yaml` bricht der Job ab, statt eine Release-Seite mit falscher Version anzulegen. Zugleich muss die Build-Nummer `+N` aus `pubspec.yaml` hoeher sein als beim vorherigen Release-Tag; gleicher Wert hiesse, dass Android kein Update anbietet. Die Universal-APK bekommt per `--build-number` denselben `versionCode` wie das arm64-Paket (+2000; `-armeabi-v7a` +1000, `-x86_64` +4000), damit der Wechsel von arm64 auf den Fallback kein Downgrade ist - weicht das ab, bricht der Job ab. Der Vergleich liest nur Git-Tags, es wird nichts zwischen Laeufen gespeichert.
-- Dieselben Pruefungen laufen zusaetzlich bei Branch-Pushes als Warnung (`::warning::`, Job bleibt gruen): Sollwert fuer den `versionName` ist dann `pubspec.yaml`, Vergleichswert fuer den `versionCode` der letzte Release-Tag. Ein vergessener Bump oder eine Universal-APK mit falschem Offset faellt damit vor dem Taggen auf, ohne Zwischenstaende rot zu machen.
+- **Preflight vor dem Build** (direkt nach dem Checkout, ohne Android-SDK): Der Tag `vX.Y.Z` muss zur Version in `apps/mobile/pubspec.yaml` passen, und die Build-Nummer `+N` muss hoeher sein als beim vorherigen Release-Tag - gleicher Wert hiesse, dass Android kein Update anbietet. Beides faellt damit in Sekunden auf statt nach dem Android-Build. Der Vergleich liest nur Git-Tags, es wird nichts zwischen Laeufen gespeichert; die geprueften Werte (`EXPECTED_VERSION`, `BASE_CODE`) gehen per `$GITHUB_ENV` an den naechsten Schritt.
+- **Am Artefakt** bleibt nur, was die gebauten APKs zeigen: Jede APK muss den `versionName` aus dem Preflight tragen (ein `aapt2`-Lookup pro Paket), und die arm64-APK muss in `dist/` liegen - es ist die Variante, die die Release-Anleitung empfiehlt. Fehlt der Sollwert im Environment (`EXPECTED_VERSION`), bricht der Schritt ab, statt still nichts zu pruefen. Gradle offsetet die ABI-Pakete selbst (+1000 armeabi-v7a, +2000 arm64, +4000 x86_64); ein Wechsel auf ein Paket mit niedrigerem Code bleibt deshalb ein Downgrade.
+- Der Preflight meldet Abweichungen bei Branch-Pushes nur als Warnung (`::warning::`, Job bleibt gruen): Sollwert ist dann die Version aus `pubspec.yaml`, Vergleichswert fuer die Build-Nummer der letzte Release-Tag. Ein vergessener Bump faellt damit vor dem Taggen auf, ohne Zwischenstaende rot zu machen. Der Artefakt-Check danach ist nicht optional: Er vergleicht gegen dieselben Werte und schlaegt fehl, wenn eine APK eine andere Version traegt.
 - Secrets: `MOTOROUTE_KEYSTORE_B64` (Keystore als Base64), `MOTOROUTE_KEYSTORE_PASSWORD`, `MOTOROUTE_KEY_ALIAS`, `MOTOROUTE_KEY_PASSWORD`, `MOTOROUTE_SIGNING_CERT_SHA256` (Soll-Fingerabdruck; der Job vergleicht ihn nach dem Build und schlägt bei Abweichung fehl).
 - Der Keystore liegt nicht im Repo (lokal unter `.artifacts/signing/`, nicht versioniert) und muss zusätzlich extern gesichert werden: Bei Verlust ist kein Update der installierten App mehr möglich, nur eine neue App-Identität.
 - Alle Releases vor dieser Umstellung waren mit dem Zufalls-Debug-Schlüssel des jeweiligen CI-Runners signiert. Für ein Update von einer dieser Versionen ist einmalig eine Neuinstallation nötig.
 
-## 6. Testing-Pyramide (konkret)
 ### 5.2 Keystore-Backup (ausserhalb dieses Rechners)
 
 - Die Arbeitskopie unter `.artifacts/signing/` (nicht versioniert) ist **keine** Sicherung: Sie liegt auf derselben Platte wie das Repo.
@@ -106,6 +106,7 @@ Erwartet wird `95d17c32...`; der Release-Job vergleicht genau diesen Wert und br
 
 **Nicht ins Repo**: Keystore, `.b64` und Passwort - auch nicht in Issues, Chats oder Screenshots; das Repo ist oeffentlich.
 
+## 6. Testing-Pyramide (konkret)
 
 | Ebene | Umfang | Beispiel |
 |---|---|---|
