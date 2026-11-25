@@ -1,0 +1,94 @@
+name: MotoRoute Next CI
+
+# Die next-App hatte vor dem Release keinen Lauf: der Release-Workflow haengt
+# an Tag-Push und workflow_dispatch, eine Aenderung wurde also erst kompiliert,
+# als der Tag schon oeffentlich war. Dieser Workflow prueft sie vorher auf dem
+# Branch und in Pull Requests.
+#
+# Die Pfade sind bewusst breit: apps/mobile enthaelt den geteilten Code, den
+# die next-App mitinstalliert - ein Fehler dort bricht den next-Build genauso.
+on:
+  push:
+    branches: [monorepo]
+    paths:
+      - 'apps/motoroute_next/**'
+      - 'apps/mobile/**'
+      # Die eigene Datei mitzaehlen: sonst laeuft der Workflow auf eine
+      # Aenderung an sich selbst gar nicht erst los.
+      - '.github/workflows/android-next-ci.yml'
+  pull_request:
+    branches: [monorepo]
+    paths:
+      - 'apps/motoroute_next/**'
+      - 'apps/mobile/**'
+      # Die eigene Datei mitzaehlen: sonst laeuft der Workflow auf eine
+      # Aenderung an sich selbst gar nicht erst los.
+      - '.github/workflows/android-next-ci.yml'
+
+permissions:
+  contents: read
+
+# Anders als beim Release darf hier abgebrochen werden: ein neuer Commit macht
+# den laufenden Lauf ueberfluessig, und es wird nichts veroeffentlicht.
+concurrency:
+  group: next-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Dasselbe Skript wie im Release-Workflow, hier ohne Tag und ohne Eingabe:
+  # es erkennt das selbst und meldet Abweichungen als Warnung statt als
+  # Abbruch. Der Job soll vor dem Taggen zeigen, was noch fehlt.
+  preflight:
+    name: Preflight (nur Warnungen)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight (Tag, versionName, Build-Nummer)
+        working-directory: apps/motoroute_next
+        run: bash "$GITHUB_WORKSPACE/scripts/next-preflight.sh"
+
+  # Ohne needs: der Preflight bricht hier nie ab, und ein paralleler Start
+  # spart die Wartezeit. Beide Ergebnisse stehen im selben Lauf.
+  build:
+    name: Testen und Debug-APK bauen
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Gleiche feste Version wie im Release-Workflow.
+          flutter-version: '3.47.4'
+
+      # Geteilter Code liegt als Pfad-Abhaengigkeit in apps/mobile.
+      - name: Install packages for shared MotoRoute features
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Install Flutter packages
+        working-directory: apps/motoroute_next
+        run: flutter pub get
+
+      - name: Run tests
+        working-directory: apps/motoroute_next
+        run: flutter test
+
+      # Nur ein Uebersetzungslauf: kein Splitting, keine Signierung, kein
+      # Upload. Der --dart-define entspricht dem Release-Build, damit hier
+      # nicht an einer anderen Konfiguration vorbeigeprueft wird.
+      - name: Build debug APK
+        working-directory: apps/motoroute_next
+        run: >-
+          flutter build apk --debug
+          --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com
