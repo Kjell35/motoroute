@@ -27,8 +27,33 @@ elif [ -n "${RELEASE_TAG_INPUT:-}" ]; then
   # Release unter einem Tag entstehen, das nicht zur pubspec passt.
   STRICT=1
   RELEASE_TAG="$RELEASE_TAG_INPUT"
+  # Ein Dispatch laesst sich von jedem Branch starten. Ein Release soll aber
+  # nur aus dem Branch entstehen, der auch die getaggte Historie traegt -
+  # sonst veroeffentlicht ein liegengebliebener Feature-Branch unter einem
+  # echten Tag.
+  if [ "$GITHUB_REF" != refs/heads/monorepo ]; then
+    die "workflow_dispatch von '${GITHUB_REF_NAME}' - einen Release loest nur der Branch monorepo aus."
+  fi
   if [[ "$RELEASE_TAG" != next-v* ]]; then
     die "release_tag '$RELEASE_TAG' beginnt nicht mit 'next-v' - der Release wuerde unter einem fremden Tag entstehen."
+  fi
+fi
+# Herkunft des Commits: ein Tag kann auf einem lokalen Waisen-Commit oder auf
+# einem fremden Branch liegen. Ein Build davon waere nicht nachvollziehbar -
+# der Code ist nie durch den Branch-Lauf gegangen. Nur fuer Releases pruefen:
+# in CI auf einem Feature-Branch ist die Frage gegenstandslos.
+if [ "$STRICT" = "1" ]; then
+  BRANCH_REF=refs/remotes/origin/monorepo
+  # actions/checkout holt flach; merge-base braucht die echte Historie.
+  if [ -f "$(git rev-parse --git-dir)/shallow" ]; then
+    if ! git fetch --quiet --unshallow --no-tags origin "+refs/heads/monorepo:$BRANCH_REF"; then
+      die "Die Historie liess sich nicht vervollstaendigen - die Herkunft des Commits waere ungeprueft."
+    fi
+  elif ! git fetch --quiet --no-tags origin "+refs/heads/monorepo:$BRANCH_REF"; then
+    die "origin/monorepo liess sich nicht holen - die Herkunft des Commits waere ungeprueft."
+  fi
+  if ! git merge-base --is-ancestor HEAD "$BRANCH_REF"; then
+    die "Commit $(git rev-parse --short HEAD) liegt nicht auf monorepo - dieser Release kaeme aus einem Commit, der nie auf dem Branch war."
   fi
 fi
 PUBSPEC_VERSION=$(sed -n 's/^version: *//p' pubspec.yaml | head -n1)
