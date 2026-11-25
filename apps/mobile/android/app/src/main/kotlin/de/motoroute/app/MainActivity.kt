@@ -1,9 +1,25 @@
 package de.motoroute.app
 
+import android.os.Bundle
+import de.motoroute.probe.CrashProbe
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
+    /**
+     * Absichtlicher Absturz fuer den R8-Mapping-Beweis: nur im Probe-Build
+     * (BuildConfig.CRASH_PROBE) und nur, wenn der Start das Extra setzt.
+     * Im Normalbau ist die Bedingung konstant false.
+     */
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (BuildConfig.CRASH_PROBE &&
+            intent?.getBooleanExtra(EXTRA_CRASH_PROBE, false) == true
+        ) {
+            CrashProbe.trigger()
+        }
+    }
+
     /**
      * Gehört zu genau dieser Activity; onDestroy() schaltet nur diese Engine
      * ab, nicht die einer bereits neu erzeugten Activity.
@@ -23,6 +39,10 @@ class MainActivity : FlutterActivity() {
             this,
             flutterEngine.dartExecutor.binaryMessenger,
         )
+    }
+
+    private companion object {
+        const val EXTRA_CRASH_PROBE = "crash_probe"
     }
 
     override fun onDestroy() {

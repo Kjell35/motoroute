@@ -56,12 +56,26 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // BuildConfig traegt das Probe-Flag (siehe CRASH_PROBE unten).
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = appId
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Nur fuer den R8-Mapping-Beweis: crashProbe=true in
+        // android/gradle.properties (oder -PcrashProbe=true) baut eine Sonde
+        // ein, die auf ein Intent-Extra hin abstuerzt. Im Normalbau steht hier
+        // false, und R8 entfernt den Zweig samt CrashProbe als toten Code.
+        buildConfigField(
+            "boolean",
+            "CRASH_PROBE",
+            ((project.findProperty("crashProbe") as String?)?.toBoolean() ?: false).toString(),
+        )
     }
 
     signingConfigs {
@@ -97,6 +111,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Probe-Regeln nur im Probe-Build: im Normalbau bleibt die
+            // Sonde toter Code und wird entfernt.
+            if ((project.findProperty("crashProbe") as String?)?.toBoolean() == true) {
+                proguardFile("probe-rules.pro")
+            }
         }
         debug {
             // Debug-Builds tragen die Suffix-ID: Sie können PARALLEL zur
