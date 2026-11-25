@@ -22,6 +22,8 @@
 | 11 | [Kosten & API-Keys](docs/11-costs.md) | Benötigte Keys, monatliche Szenarien, Skalierungs-Trigger |
 | 12 | [Recht & Lizenzen](docs/12-legal.md) | ODbL, Blitzer-Problematik, DSGVO, Launch-Checkliste |
 
+**Release-Prüfung:** Was sich nicht auf dem Rechner prüfen lässt – Installation, Update über eine bestehende Version, TTS, Karte, QR-Scanner, Verhalten im Funkloch – steht in der [Geräte-Checkliste](docs/15-device-checklist.md).
+
 ## Tech-Stack (Kurzfassung)
 
 **Zielplattform MVP: Android.** (Flutter hält die iOS-Option offen – ein Port ist eine spätere, separate Entscheidung.)
