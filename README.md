@@ -21,6 +21,8 @@
 | 10 | [Entwicklungsprozess](docs/10-dev-process.md) | Monorepo, Environments, DoD, CI, Testing |
 | 11 | [Kosten & API-Keys](docs/11-costs.md) | Benötigte Keys, monatliche Szenarien, Skalierungs-Trigger |
 | 12 | [Recht & Lizenzen](docs/12-legal.md) | ODbL, Blitzer-Problematik, DSGVO, Launch-Checkliste |
+| 13 | [Differenzierungskonzept](docs/13-differentiation-concept.md) | Wettbewerbslandschaft, Nutzerbeschwerden, technische Nischen, Empfehlungen |
+| 14 | [M3-Spike](docs/14-m3-spike-avoidance-curvescore.md) | Ortsdurchfahrten-Meidung mit Valhalla, CurveScore v2, Belegqualität |
 
 **Release-Prüfung:** Was sich nicht auf dem Rechner prüfen lässt – Installation, Update über eine bestehende Version, TTS, Karte, QR-Scanner, Verhalten im Funkloch – steht in der [Geräte-Checkliste](docs/15-device-checklist.md).
 
