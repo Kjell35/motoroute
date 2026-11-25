@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   Param,
+  PipeTransform,
   Post,
   Put,
   Req,
@@ -25,6 +27,28 @@ import {
 } from './group-routes.dto';
 
 /**
+ * Prüft einen UUID-Pfadparameter, bevor er in Postgres landet.
+ *
+ * Ohne diese Prüfung ging der String unverändert in die Datenbank:
+ * Postgres antwortet mit 22P02 (invalid input syntax for type uuid) und
+ * der Client bekam 500 statt einer verständlichen 400 (Log: "listRoutes
+ * failed: 22P02 invalid input syntax for type uuid").
+ */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+class UuidParamPipe implements PipeTransform<string, string> {
+  constructor(private readonly field: string) {}
+
+  transform(value: string): string {
+    if (!UUID_PATTERN.test(value ?? '')) {
+      throw new BadRequestException(`${this.field} ist keine gültige UUID`);
+    }
+    return value;
+  }
+}
+
+/**
  * REST-Endpunkte des kollaborativen Gruppen-Routenplaners (Abschnitt 33).
  * Alle Endpunkte strikt authentifiziert; die Autorisierung läuft
  * serverseitig über RLS + RPC-Prüfungen (can_edit_route) - der Controller
@@ -42,12 +66,12 @@ export class GroupRoutesController {
   }
 
   @Get('group/:groupId')
-  listForGroup(@Req() req: AuthenticatedRequest, @Param('groupId') groupId: string): Promise<unknown[]> {
+  listForGroup(@Req() req: AuthenticatedRequest, @Param('groupId', new UuidParamPipe('groupId')) groupId: string): Promise<unknown[]> {
     return this.routes.listRoutes(req.user!, groupId);
   }
 
   @Get(':routeId')
-  get(@Req() req: AuthenticatedRequest, @Param('routeId') routeId: string): Promise<unknown> {
+  get(@Req() req: AuthenticatedRequest, @Param('routeId', new UuidParamPipe('routeId')) routeId: string): Promise<unknown> {
     return this.routes.getRoute(req.user!, routeId);
   }
 
@@ -55,7 +79,7 @@ export class GroupRoutesController {
   @HttpCode(204)
   async update(
     @Req() req: AuthenticatedRequest,
-    @Param('routeId') routeId: string,
+    @Param('routeId', new UuidParamPipe('routeId')) routeId: string,
     @Body() dto: UpdateGroupRouteDto,
   ): Promise<void> {
     await this.routes.updateRoute(req.user!, routeId, dto);
@@ -63,7 +87,7 @@ export class GroupRoutesController {
 
   @Delete(':routeId')
   @HttpCode(204)
-  async delete(@Req() req: AuthenticatedRequest, @Param('routeId') routeId: string): Promise<void> {
+  async delete(@Req() req: AuthenticatedRequest, @Param('routeId', new UuidParamPipe('routeId')) routeId: string): Promise<void> {
     await this.routes.deleteRoute(req.user!, routeId);
   }
 
@@ -71,7 +95,7 @@ export class GroupRoutesController {
   @HttpCode(201)
   duplicate(
     @Req() req: AuthenticatedRequest,
-    @Param('routeId') routeId: string,
+    @Param('routeId', new UuidParamPipe('routeId')) routeId: string,
     @Body() dto: DuplicateRouteDto,
   ): Promise<unknown> {
     return this.routes.duplicateRoute(req.user!, routeId, dto.newName);
@@ -81,7 +105,7 @@ export class GroupRoutesController {
   @HttpCode(204)
   async setPermission(
     @Req() req: AuthenticatedRequest,
-    @Param('routeId') routeId: string,
+    @Param('routeId', new UuidParamPipe('routeId')) routeId: string,
     @Body() dto: SetPermissionDto,
   ): Promise<void> {
     await this.routes.setPermission(req.user!, routeId, dto.permission);
@@ -91,7 +115,7 @@ export class GroupRoutesController {
   @HttpCode(204)
   async setStatus(
     @Req() req: AuthenticatedRequest,
-    @Param('routeId') routeId: string,
+    @Param('routeId', new UuidParamPipe('routeId')) routeId: string,
     @Body() dto: SetStatusDto,
   ): Promise<void> {
     await this.routes.setStatus(req.user!, routeId, dto.status);
@@ -99,13 +123,13 @@ export class GroupRoutesController {
 
   @Post(':routeId/lock')
   @HttpCode(204)
-  async lock(@Req() req: AuthenticatedRequest, @Param('routeId') routeId: string): Promise<void> {
+  async lock(@Req() req: AuthenticatedRequest, @Param('routeId', new UuidParamPipe('routeId')) routeId: string): Promise<void> {
     await this.routes.lock(req.user!, routeId);
   }
 
   @Post(':routeId/unlock')
   @HttpCode(204)
-  async unlock(@Req() req: AuthenticatedRequest, @Param('routeId') routeId: string): Promise<void> {
+  async unlock(@Req() req: AuthenticatedRequest, @Param('routeId', new UuidParamPipe('routeId')) routeId: string): Promise<void> {
     await this.routes.unlock(req.user!, routeId);
   }
 
@@ -115,7 +139,7 @@ export class GroupRoutesController {
   @HttpCode(201)
   addStop(
     @Req() req: AuthenticatedRequest,
-    @Param('routeId') routeId: string,
+    @Param('routeId', new UuidParamPipe('routeId')) routeId: string,
     @Body() dto: AddStopDto,
   ): Promise<unknown> {
     return this.routes.addStop(req.user!, routeId, dto);
@@ -125,7 +149,7 @@ export class GroupRoutesController {
   @HttpCode(204)
   async updateStop(
     @Req() req: AuthenticatedRequest,
-    @Param('stopId') stopId: string,
+    @Param('stopId', new UuidParamPipe('stopId')) stopId: string,
     @Body() dto: UpdateStopDto,
   ): Promise<void> {
     await this.routes.updateStop(req.user!, stopId, dto);
@@ -133,7 +157,7 @@ export class GroupRoutesController {
 
   @Delete('stops/:stopId')
   @HttpCode(204)
-  async deleteStop(@Req() req: AuthenticatedRequest, @Param('stopId') stopId: string): Promise<void> {
+  async deleteStop(@Req() req: AuthenticatedRequest, @Param('stopId', new UuidParamPipe('stopId')) stopId: string): Promise<void> {
     await this.routes.deleteStop(req.user!, stopId);
   }
 
@@ -141,7 +165,7 @@ export class GroupRoutesController {
   @HttpCode(204)
   async reorder(
     @Req() req: AuthenticatedRequest,
-    @Param('routeId') routeId: string,
+    @Param('routeId', new UuidParamPipe('routeId')) routeId: string,
     @Body() dto: ReorderStopsDto,
   ): Promise<void> {
     await this.routes.reorderStops(req.user!, routeId, dto.stopIds);
@@ -153,14 +177,14 @@ export class GroupRoutesController {
   @HttpCode(201)
   async addComment(
     @Req() req: AuthenticatedRequest,
-    @Param('stopId') stopId: string,
+    @Param('stopId', new UuidParamPipe('stopId')) stopId: string,
     @Body() dto: AddCommentDto,
   ): Promise<void> {
     await this.routes.addComment(req.user!, stopId, dto.content);
   }
 
   @Get('stops/:stopId/comments')
-  getComments(@Req() req: AuthenticatedRequest, @Param('stopId') stopId: string): Promise<unknown[]> {
+  getComments(@Req() req: AuthenticatedRequest, @Param('stopId', new UuidParamPipe('stopId')) stopId: string): Promise<unknown[]> {
     return this.routes.getComments(req.user!, stopId);
   }
 
@@ -173,14 +197,14 @@ export class GroupRoutesController {
   @Post(':routeId/start')
   async start(
     @Req() req: AuthenticatedRequest,
-    @Param('routeId') routeId: string,
+    @Param('routeId', new UuidParamPipe('routeId')) routeId: string,
   ): Promise<unknown> {
     return this.routes.getRoute(req.user!, routeId);
   }
 
   @Post(':routeId/complete')
   @HttpCode(204)
-  async complete(@Req() req: AuthenticatedRequest, @Param('routeId') routeId: string): Promise<void> {
+  async complete(@Req() req: AuthenticatedRequest, @Param('routeId', new UuidParamPipe('routeId')) routeId: string): Promise<void> {
     await this.routes.setStatus(req.user!, routeId, 'completed');
   }
 }
