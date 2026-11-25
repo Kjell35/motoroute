@@ -19,9 +19,11 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
-# Tag-Release braucht Schreibrecht auf Contents (v-Release erstellen/anhängen).
+# Standard fuer alle Jobs: nur Lesen. Schreibrecht auf Contents braucht
+# ausschliesslich build-apk (Release anlegen, Assets anhaengen) und holt es
+# sich dort selbst - ein Job, der nur Tests ausfuehrt, soll es nicht erben.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # Laeuft zuerst: ein Fehler im Workflow selbst (Syntax, Ausdruck, Step-ID
@@ -31,9 +33,12 @@ jobs:
   lint:
     name: Workflows (actionlint)
     runs-on: ubuntu-latest
-    # Nur Lesen: dieser Job baut nichts und schreibt nichts.
-    permissions:
-      contents: read
+    # Der Preflight unten prueft Tag, versionName und Build-Nummer; die Werte
+    # gehen als Job-Ausgaben an build-apk weiter (kein Zustand zwischen Laeufen).
+    outputs:
+      expected_version: ${{ steps.preflight.outputs.version }}
+      base_code: ${{ steps.preflight.outputs.build_code }}
+    # Kein eigenes permissions: erbt contents: read vom Workflow-Kopf.
     steps:
       - uses: actions/checkout@v4
 
@@ -46,55 +51,10 @@ jobs:
           version: '1.7.12'
           cache: true
 
-  test:
-    name: Tests (Flutter)
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          # Feste Version: `channel: stable` haette bei jedem Lauf ein anderes
-          # SDK gezogen - zusammen mit dem eingecheckten pubspec.lock baut
-          # derselbe Commit dann wirklich dasselbe APK.
-          flutter-version: '3.47.4'
-          # SDK aus dem Actions-Cache: der Key haengt an der festen Version,
-          # ein fremdes SDK kann also nicht aus dem Cache kommen. Spart pro
-          # Job rund eine Minute Setup.
-          cache: true
-
-      - name: Pub get
-        working-directory: apps/mobile
-        run: flutter pub get
-
-      - name: Analyze
-        working-directory: apps/mobile
-        # Info-/Warning-Meldungen blockieren den Build nicht; echte Errors
-        # führen weiterhin zu exit != 0 → Job fällt.
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-
-      - name: Tests
-        working-directory: apps/mobile
-        run: flutter test
-
-  build-apk:
-    name: Release-APKs (installierbar)
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
       # Tag und Build-Nummer sind ohne Build pruefbar - und zwar in Sekunden.
-      # Der Schritt steht deshalb direkt nach dem Checkout: ein falsch
-      # getaggter Release faellt hier auf, nicht am Ende des Android-Builds.
+      # Der Schritt steht deshalb hier im ersten Job: build-apk haengt an
+      # `needs: test` und wuerde erst nach rund zwei Minuten starten.
+      # Ein falsch getaggter Release faellt damit nach Sekunden auf.
       - name: Preflight (Tag, versionName, Build-Nummer)
         id: preflight
         working-directory: apps/mobile
@@ -176,12 +136,63 @@ jobs:
             fi
             echo "::notice::Preflight: die Abweichungen oben sind auf einem Branch nur Warnungen - bitte vor dem Taggen beheben."
           fi
+          # Ueber Job-Grenzen traegt kein $GITHUB_ENV: build-apk bekommt die
+          # Werte ueber die Job-Ausgaben von lint (needs.lint.outputs.*).
           {
-            echo "EXPECTED_VERSION=$EXPECTED"
-            echo "BASE_CODE=$BASE_CODE"
-          } >> "$GITHUB_ENV"
+            echo "version=$EXPECTED"
+            echo "build_code=$BASE_CODE"
+          } >> "$GITHUB_OUTPUT"
           echo "Preflight ok: versionName $EXPECTED, Build-Nummer $BASE_CODE (Vorgaenger ${PREV:-keiner})."
 
+  test:
+    name: Tests (Flutter)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Feste Version: `channel: stable` haette bei jedem Lauf ein anderes
+          # SDK gezogen - zusammen mit dem eingecheckten pubspec.lock baut
+          # derselbe Commit dann wirklich dasselbe APK.
+          flutter-version: '3.47.4'
+          # SDK aus dem Actions-Cache: der Key haengt an der festen Version,
+          # ein fremdes SDK kann also nicht aus dem Cache kommen. Spart pro
+          # Job rund eine Minute Setup.
+          cache: true
+
+      - name: Pub get
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: apps/mobile
+        # Info-/Warning-Meldungen blockieren den Build nicht; echte Errors
+        # führen weiterhin zu exit != 0 → Job fällt.
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Tests
+        working-directory: apps/mobile
+        run: flutter test
+
+  build-apk:
+    name: Release-APKs (installierbar)
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    # Einziger Job mit Schreibrecht: Release anlegen und Assets anhaengen.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Java 21 (flutter_keychain 3.0.1 target)
         uses: actions/setup-java@v4
@@ -308,13 +319,15 @@ jobs:
 
       # Was nur am gebauten Artefakt pruefbar ist: ob im Paket wirklich die
       # erwartete Version steht und ob die empfohlene arm64-Variante dabei ist.
-      # Version und Build-Nummer selbst hat der Preflight vor dem Build geprueft.
+      # Version und Build-Nummer selbst hat der Preflight im lint-Job geprueft.
       - name: APKs tragen die erwartete Version
         working-directory: apps/mobile
+        env:
+          EXPECTED_VERSION: ${{ needs.lint.outputs.expected_version }}
         run: |
           set -euo pipefail
           # Ohne Sollwert aus dem Preflight waere dieser Vergleich wirkungslos.
-          : "${EXPECTED_VERSION:?Preflight hat EXPECTED_VERSION nicht gesetzt}"
+          : "${EXPECTED_VERSION:?Preflight im lint-Job hat keine expected_version geliefert}"
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           AAPT2=$(find "$SDK/build-tools" -maxdepth 2 -name aapt2 2>/dev/null | sort -V | tail -n1) || AAPT2=""
           if [ -z "$AAPT2" ]; then
