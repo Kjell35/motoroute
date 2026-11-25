@@ -7,7 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing release tag to attach the APK to
+        # Muss zur Version in apps/motoroute_next/pubspec.yaml passen; der
+        # Preflight bricht bei Abweichung ab, statt nur zu warnen.
+        description: Release tag (next-vX.Y.Z) - must match the app version
         required: true
         default: next-v1.0.0
 
@@ -28,12 +30,13 @@ jobs:
 
       - name: Preflight (Tag, versionName, Build-Nummer)
         working-directory: apps/motoroute_next
+        env:
+          # Bei workflow_dispatch entsteht der Release unter genau diesem Tag
+          # (tag_name im Publish-Schritt) - er wird deshalb wie ein gepushter
+          # Tag geprueft und nicht nur als Warnung behandelt.
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          STRICT=0
-          if [[ "$GITHUB_REF" == refs/tags/next-v* ]]; then
-            STRICT=1
-          fi
           FAILED=0
           report() {
             if [ "$STRICT" = "1" ]; then
@@ -50,6 +53,22 @@ jobs:
             fi
             exit 0
           }
+
+          STRICT=0
+          RELEASE_TAG=""
+          if [[ "$GITHUB_REF" == refs/tags/next-v* ]]; then
+            STRICT=1
+            RELEASE_TAG="$GITHUB_REF_NAME"
+          elif [ -n "${RELEASE_TAG_INPUT:-}" ]; then
+            # workflow_dispatch: der Release entsteht unter release_tag. Der Tag wird
+            # hier genauso streng geprueft wie ein gepushter - sonst koennte ein
+            # Release unter einem Tag entstehen, das nicht zur pubspec passt.
+            STRICT=1
+            RELEASE_TAG="$RELEASE_TAG_INPUT"
+            if [[ "$RELEASE_TAG" != next-v* ]]; then
+              die "release_tag '$RELEASE_TAG' beginnt nicht mit 'next-v' - der Release wuerde unter einem fremden Tag entstehen."
+            fi
+          fi
           PUBSPEC_VERSION=$(sed -n 's/^version: *//p' pubspec.yaml | head -n1)
           if [ -z "$PUBSPEC_VERSION" ]; then
             die "apps/motoroute_next/pubspec.yaml hat keine version-Zeile - der Vergleich waere wirkungslos."
@@ -58,17 +77,18 @@ jobs:
             die "version in apps/motoroute_next/pubspec.yaml ist '$PUBSPEC_VERSION' - ohne +versionCode keine Monotoniepruefung."
           fi
           BASE_CODE="${PUBSPEC_VERSION#*+}"
-          # Sollwert fuer den versionName: der Tag, sonst die Version, die als
-          # naechstes getaggt wird.
-          EXPECTED="${GITHUB_REF_NAME#next-v}"
-          if [ "$STRICT" = "0" ]; then
+          # Sollwert fuer den versionName: der Tag (gepusht oder eingegeben), sonst die
+          # Version, die als naechstes getaggt wird.
+          if [ "$STRICT" = "1" ]; then
+            EXPECTED="${RELEASE_TAG#next-v}"
+          else
             EXPECTED="${PUBSPEC_VERSION%%+*}"
           fi
           if [ -z "$EXPECTED" ]; then
             die "versionName-Sollwert nicht bestimmbar - der Vergleich waere wirkungslos."
           fi
           if [ "$STRICT" = "1" ] && [ "${PUBSPEC_VERSION%%+*}" != "$EXPECTED" ]; then
-            report "Tag $GITHUB_REF_NAME passt nicht zu apps/motoroute_next/pubspec.yaml ($PUBSPEC_VERSION) - erst bumpen, dann taggen."
+            report "Tag $RELEASE_TAG passt nicht zu apps/motoroute_next/pubspec.yaml ($PUBSPEC_VERSION) - erst bumpen, dann taggen."
           fi
           # Vergleichswert fuer die Build-Nummer: der Vorgaenger-Tag. Nur
           # Git-Tags, kein Zustand zwischen Laeufen; der Checkout ist flach,
@@ -79,11 +99,19 @@ jobs:
           DESC=$(git tag --list 'next-v*' --sort=-v:refname)
           PREV=""
           if [ "$STRICT" = "1" ]; then
-            if ! grep -qx "$GITHUB_REF_NAME" <<< "$DESC"; then
-              die "Tag $GITHUB_REF_NAME fehlt in der Tag-Liste - Reihenfolge unklar, Build-Nummer waere ungeprueft."
+            if grep -qx "$RELEASE_TAG" <<< "$DESC"; then
+              # Bekannter Tag (auch ein erneuter workflow_dispatch darauf): der
+              # Vergleichswert ist der naechstaeltere Tag.
+              # shellcheck disable=SC2016 # awk-Programm, kein Shell-Ausdruck
+              PREV=$(awk -v cur="$RELEASE_TAG" '$0 == cur { found = 1; next } found { print; exit }' <<< "$DESC")
+            elif [[ "$GITHUB_REF" == refs/tags/next-v* ]]; then
+              die "Tag $RELEASE_TAG fehlt in der Tag-Liste - Reihenfolge unklar, Build-Nummer waere ungeprueft."
+            else
+              # workflow_dispatch auf einen noch nicht existierenden Tag: dieser Lauf
+              # legt ihn an, Vergleichswert ist der neueste vorhandene Tag.
+              PREV=$(head -n1 <<< "$DESC")
+              echo "Tag $RELEASE_TAG existiert noch nicht - verglichen wird mit ${PREV:-keinem}."
             fi
-            # shellcheck disable=SC2016 # awk-Programm, kein Shell-Ausdruck
-            PREV=$(awk -v cur="$GITHUB_REF_NAME" '$0 == cur { found = 1; next } found { print; exit }' <<< "$DESC")
           else
             PREV=$(head -n1 <<< "$DESC")
           fi
@@ -108,7 +136,6 @@ jobs:
           fi
           echo "Preflight-Werte: versionName $EXPECTED, Build-Nummer $BASE_CODE"
           echo "Preflight ok: versionName $EXPECTED, Build-Nummer $BASE_CODE (Vorgaenger ${PREV:-keiner})."
-
   build-and-release:
     name: Build and publish Android APK
     needs: preflight
