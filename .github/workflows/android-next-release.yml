@@ -103,6 +103,44 @@ jobs:
         # duerfen den Release nicht blockieren, echte Errors schon.
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      # Ohne echten Keystore bekommt jede APK den Zufalls-Debug-Schluessel des
+      # jeweiligen Runners - Updates ueber eine bestehende Installation scheitern
+      # dann an der Signatur. Anders als im App-Workflow gibt es hier keinen
+      # Branch-Lauf: jeder Lauf veroeffentlicht, also ist der Keystore Pflicht.
+      - name: Signaturschluessel bereitstellen
+        env:
+          KEYSTORE_B64: ${{ secrets.MOTOROUTE_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.MOTOROUTE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MOTOROUTE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.MOTOROUTE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::error::MOTOROUTE_KEYSTORE_B64 fehlt - ein Release waere nur debug-signiert und nicht update-faehig."
+            exit 1
+          fi
+          # hasReleaseKeystore in android/app/build.gradle.kts verlangt alle vier
+          # Werte; fehlt einer, faellt Gradle still auf Debug-Signierung zurueck.
+          if [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
+            echo "::error::MOTOROUTE_KEYSTORE_PASSWORD, MOTOROUTE_KEY_ALIAS oder MOTOROUTE_KEY_PASSWORD fehlt - der Build waere sonst debug-signiert."
+            exit 1
+          fi
+          KEYSTORE="$RUNNER_TEMP/motoroute-next-release.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          # Frueh und eindeutig scheitern, wenn Keystore, Passwort und Alias nicht
+          # zusammenpassen - sonst bricht erst Gradle mit kryptischem Fehler ab.
+          if ! PW="$KEYSTORE_PASSWORD" keytool -list -keystore "$KEYSTORE" -storepass:env PW -alias "$KEY_ALIAS" > /dev/null; then
+            echo "::error::Keystore, Passwort oder Alias aus den Secrets passen nicht zusammen."
+            exit 1
+          fi
+          {
+            echo "MOTOROUTE_KEYSTORE_PATH=$KEYSTORE"
+            echo "MOTOROUTE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "MOTOROUTE_KEY_ALIAS=$KEY_ALIAS"
+            echo "MOTOROUTE_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "Keystore bereitgestellt: $(basename "$KEYSTORE")"
+
       # Per-ABI-Pakete sind rund ein Drittel so gross wie die Universal-APK:
       # nur eine native Bibliothek pro Geraet statt aller drei.
       - name: Build installable release APKs (per ABI)
@@ -168,6 +206,53 @@ jobs:
             echo "::error::app-arm64-v8a-release.apk fehlt - die Variante, die die Release-Anleitung empfiehlt, waere ungeprueft."
             exit 1
           fi
+
+      # Beweist pro Lauf, dass wirklich der Release-Schluessel signiert hat: eine
+      # debug-signierte APK waere fuer Nutzer nicht installierbar (Update).
+      - name: Signatur der APKs pruefen
+        working-directory: apps/motoroute_next
+        env:
+          EXPECTED_CERT: ${{ secrets.MOTOROUTE_SIGNING_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=$(find "$SDK/build-tools" -maxdepth 2 -name apksigner 2>/dev/null | sort -V | tail -n1) || APKSIGNER=""
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner nicht gefunden unter $SDK/build-tools - die Signatur waere ungeprueft."
+            exit 1
+          fi
+          # Sollwert normalisieren: keytool zeigt Fingerabdruecke mit Doppelpunkten.
+          EXPECTED=$(printf '%s' "${EXPECTED_CERT:-}" | tr -d '[:space:]:' | tr 'A-F' 'a-f')
+          if [ -z "$EXPECTED" ]; then
+            echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 fehlt - ohne Sollwert prueft dieser Schritt nichts."
+            exit 1
+          fi
+          if [ "${#EXPECTED}" -ne 64 ]; then
+            echo "::error::MOTOROUTE_SIGNING_CERT_SHA256 ist kein SHA-256-Digest (${#EXPECTED} statt 64 Hex-Zeichen)."
+            exit 1
+          fi
+          shopt -s nullglob
+          APKS=(build/app/outputs/flutter-apk/*.apk)
+          shopt -u nullglob
+          if [ ${#APKS[@]} -eq 0 ]; then
+            echo "::error::keine APKs unter build/app/outputs/flutter-apk/ - der Check waere wirkungslos."
+            exit 1
+          fi
+          # Jede APK einzeln: eine debug-signierte Variante zwischen drei
+          # korrekten faellt sonst nicht auf.
+          for APK in "${APKS[@]}"; do
+            CERTS=$("$APKSIGNER" verify --print-certs "$APK")
+            if grep -q "CN=Android Debug" <<< "$CERTS"; then
+              echo "::error::$APK ist debug-signiert - sie laesst sich nicht ueber eine bestehende Installation legen."
+              exit 1
+            fi
+            DIGEST=$(grep -m1 "SHA-256 digest" <<< "$CERTS" | sed 's/.*digest: //' | tr 'A-F' 'a-f')
+            if [ "$DIGEST" != "$EXPECTED" ]; then
+              echo "::error::Signaturzertifikat von $APK weicht ab: erwartet $EXPECTED_CERT, gefunden $DIGEST."
+              exit 1
+            fi
+            echo "$APK signiert mit $DIGEST"
+          done
 
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
