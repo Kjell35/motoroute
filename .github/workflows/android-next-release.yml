@@ -25,10 +25,16 @@ jobs:
   preflight:
     name: Preflight (Tag, versionName, Build-Nummer)
     runs-on: ubuntu-latest
+    # Die geprueften Werte gehen an build-and-release; dort prueft der
+    # Artefakt-Check die gebauten APKs gegen denselben Sollwert.
+    outputs:
+      expected_version: ${{ steps.preflight.outputs.version }}
+      base_code: ${{ steps.preflight.outputs.build_code }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Preflight (Tag, versionName, Build-Nummer)
+        id: preflight
         working-directory: apps/motoroute_next
         env:
           # Bei workflow_dispatch entsteht der Release unter genau diesem Tag
@@ -134,6 +140,10 @@ jobs:
             fi
             echo "::notice::Preflight: die Abweichungen oben sind auf einem Branch nur Warnungen - bitte vor dem Taggen beheben."
           fi
+          {
+            echo "version=$EXPECTED"
+            echo "build_code=$BASE_CODE"
+          } >> "$GITHUB_OUTPUT"
           echo "Preflight-Werte: versionName $EXPECTED, Build-Nummer $BASE_CODE"
           echo "Preflight ok: versionName $EXPECTED, Build-Nummer $BASE_CODE (Vorgaenger ${PREV:-keiner})."
   build-and-release:
@@ -187,6 +197,64 @@ jobs:
         run: >-
           flutter build apk --release --split-per-abi
           --dart-define=API_BASE_URL=https://motoroute-api-8fi9.onrender.com
+
+      # Was nur am gebauten Artefakt pruefbar ist: ob im Paket wirklich der
+      # erwartete versionName steht und ob die empfohlene arm64-Variante dabei
+      # ist. Version und Build-Nummer selbst hat der Preflight geprueft.
+      - name: APKs tragen die erwartete Version
+        working-directory: apps/motoroute_next
+        env:
+          EXPECTED_VERSION: ${{ needs.preflight.outputs.expected_version }}
+          EXPECTED_BUILD_CODE: ${{ needs.preflight.outputs.base_code }}
+        run: |
+          set -euo pipefail
+          # Ohne Sollwerte aus dem Preflight waere dieser Vergleich wirkungslos.
+          : "${EXPECTED_VERSION:?Preflight hat keine expected_version geliefert}"
+          : "${EXPECTED_BUILD_CODE:?Preflight hat keinen base_code geliefert}"
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          AAPT2=$(find "$SDK/build-tools" -maxdepth 2 -name aapt2 2>/dev/null | sort -V | tail -n1) || AAPT2=""
+          if [ -z "$AAPT2" ]; then
+            echo "::error::aapt2 nicht gefunden unter $SDK/build-tools - versionName waere ungeprueft."
+            exit 1
+          fi
+          ARM64=0
+          # Ohne Treffer liefert die for-Schleife sonst das Muster selbst an
+          # aapt2 - der Check waere dann still wirkungslos.
+          shopt -s nullglob
+          APKS=(build/app/outputs/flutter-apk/*.apk)
+          shopt -u nullglob
+          if [ ${#APKS[@]} -eq 0 ]; then
+            echo "::error::keine APKs unter build/app/outputs/flutter-apk/ - der Check waere wirkungslos."
+            exit 1
+          fi
+          for APK in "${APKS[@]}"; do
+            BADGING=$("$AAPT2" dump badging "$APK")
+            NAME=$(grep -m1 -o "versionName='[^']*'" <<< "$BADGING" | cut -d"'" -f2) || NAME=""
+            CODE=$(grep -m1 -o "versionCode='[0-9]*'" <<< "$BADGING" | cut -d"'" -f2) || CODE=""
+            if [ -z "$NAME" ] || [ -z "$CODE" ]; then
+              echo "::error::$APK: versionName/versionCode nicht lesbar - ohne Sollwert prueft dieser Schritt nichts."
+              exit 1
+            fi
+            if [ "$NAME" != "$EXPECTED_VERSION" ]; then
+              echo "::error::$APK meldet versionName '$NAME', erwartet '$EXPECTED_VERSION' (Preflight)."
+              exit 1
+            fi
+            # Die ABI-Splits tragen versionCode + Versatz (1000/2000/4000),
+            # deshalb nur die Untergrenze: ein Rest aus einem alten Build hat
+            # die Build-Nummer der aktuellen pubspec noch nicht.
+            if [ "$CODE" -lt "$EXPECTED_BUILD_CODE" ]; then
+              echo "::error::$APK meldet versionCode $CODE, die pubspec verlangt mindestens $EXPECTED_BUILD_CODE - das APK stammt aus einem aelteren Build."
+              exit 1
+            fi
+            case "$APK" in
+              *app-arm64-v8a-release.apk) ARM64=1 ;;
+            esac
+            echo "$APK: versionName $NAME, versionCode $CODE"
+          done
+          if [ "$ARM64" != "1" ]; then
+            echo "::error::app-arm64-v8a-release.apk fehlt - die Variante, die die Release-Anleitung empfiehlt, waere ungeprueft."
+            exit 1
+          fi
 
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
