@@ -24,8 +24,31 @@ permissions:
   contents: write
 
 jobs:
+  # Laeuft zuerst: ein Fehler im Workflow selbst (Syntax, Ausdruck, Step-ID
+  # oder run-Skript) soll in ~20 s auffallen statt erst, wenn ein
+  # 10-Minuten-Android-Build daran scheitert - und erst recht nicht erst bei
+  # einem Release-Tag.
+  lint:
+    name: Workflows (actionlint)
+    runs-on: ubuntu-latest
+    # Nur Lesen: dieser Job baut nichts und schreibt nichts.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Prueft Syntax, ${{ }}-Ausdruecke, Step- und Job-Referenzen und per
+      # shellcheck auch die run-Skripte. actionlint-Version gepinnt, damit ein
+      # neues Release einen gruenen Workflow nicht nachtraeglich rot macht.
+      - name: actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          version: '1.7.12'
+          cache: true
+
   test:
     name: Tests (Flutter)
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +66,10 @@ jobs:
           # SDK gezogen - zusammen mit dem eingecheckten pubspec.lock baut
           # derselbe Commit dann wirklich dasselbe APK.
           flutter-version: '3.47.4'
+          # SDK aus dem Actions-Cache: der Key haengt an der festen Version,
+          # ein fremdes SDK kann also nicht aus dem Cache kommen. Spart pro
+          # Job rund eine Minute Setup.
+          cache: true
 
       - name: Pub get
         working-directory: apps/mobile
@@ -76,6 +103,10 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.4'
+          # SDK aus dem Actions-Cache: der Key haengt an der festen Version,
+          # ein fremdes SDK kann also nicht aus dem Cache kommen. Spart pro
+          # Job rund eine Minute Setup.
+          cache: true
 
       - name: Pub get
         working-directory: apps/mobile
@@ -143,7 +174,32 @@ jobs:
             --dart-define="MOTOROUTE_API_BASE_URL=$MOTOROUTE_API_BASE_URL" 2>&1 \
             | tee -a build-release.log
           cp build/app/outputs/flutter-apk/app-*-release.apk dist/
+          # shellcheck disable=SC2012 # Ausgabe fuer Menschen, kein Parsing
           ls -lh dist
+
+      # R8 ist aktiv (isMinifyEnabled/isShrinkResources in build.gradle.kts):
+      # ohne mapping.txt waere jeder Stacktrace aus einem ausgelieferten Build
+      # unlesbar - und zwar genau dann, wenn Fehlerberichte eintreffen.
+      - name: R8-Mapping prüfen
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          MAPPING=build/app/outputs/mapping/release/mapping.txt
+          if [ ! -s "$MAPPING" ]; then
+            echo "::error::$MAPPING fehlt oder ist leer - Stacktraces der Release-APKs waeren nicht lesbar."
+            exit 1
+          fi
+          echo "$MAPPING: $(wc -l < "$MAPPING") Zeilen, $(wc -c < "$MAPPING") Bytes"
+
+      # 90 Tage statt der 7 der APKs: Fehlerberichte kommen spaeter. Der Name
+      # enthaelt den Ref, damit Tag- und Branch-Laeufe nicht kollidieren.
+      - name: R8-Mapping als Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motoroute-mapping-${{ github.ref_name }}
+          path: apps/mobile/build/app/outputs/mapping/release/mapping.txt
+          retention-days: 90
+          if-no-files-found: error
 
       - name: Produktions-API erreichbar
         env:
@@ -160,6 +216,95 @@ jobs:
             }
           done
 
+      # Tag und versionCode sind zwei Aussagen derselben badging-Metadaten:
+      # der Tag muss zum versionName, und Android vergleicht fuer Updates nur
+      # den versionCode (plus Signatur). Deshalb ein Schritt, ein aapt2-Lookup
+      # und ein Durchlauf ueber dist/ - zwei getrennte Schritte loesten aapt2
+      # doppelt auf und lasen jedes APK zweimal.
+      # Bewusst NUR an Tag-Laeufen: sonst gibt es keinen Sollwert.
+      - name: Tag, versionName und versionCode passen
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          EXPECTED="${GITHUB_REF_NAME#v}"
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          AAPT2=$(find "$SDK/build-tools" -maxdepth 2 -name aapt2 | sort -V | tail -n1)
+          if [ -z "$AAPT2" ]; then
+            echo "::error::aapt2 nicht gefunden unter $SDK/build-tools - Version und versionCode waeren ungeprueft."
+            exit 1
+          fi
+          # Sollwert fuer den versionCode kommt aus dem vorherigen Release-Tag
+          # im selben Repo: dafuer wird nichts zwischen Laeufen gespeichert
+          # (kein Cache, kein Artifact), nur Git-Tags gelesen.
+          # Der Checkout ist flach (fetch-depth 1): Tags einzeln nachladen,
+          # nur Ref + Commit-Baum, keine volle Historie.
+          if ! git fetch --quiet --depth=1 --force origin 'refs/tags/v*:refs/tags/v*'; then
+            echo "::error::Tags liessen sich nicht nachladen - ohne Vorgaenger waere der versionCode ungeprueft."
+            exit 1
+          fi
+          # Absteigend sortiert: der vorherige Release ist der naechste
+          # Eintrag nach dem aktuellen Tag. Damit stimmt auch ein Re-Run
+          # eines aelteren Tags.
+          DESC=$(git tag --list 'v*' --sort=-v:refname)
+          if ! printf '%s\n' "$DESC" | grep -qx "$GITHUB_REF_NAME"; then
+            echo "::error::Tag $GITHUB_REF_NAME fehlt in der Tag-Liste - Reihenfolge unklar, versionCode waere ungeprueft."
+            exit 1
+          fi
+          # shellcheck disable=SC2016 # awk-Programm, kein Shell-Ausdruck
+          PREV=$(printf '%s\n' "$DESC" | awk -v cur="$GITHUB_REF_NAME" '
+            $0 == cur { found = 1; next }
+            found { print; exit }')
+          PREV_CODE=""
+          if [ -z "$PREV" ]; then
+            echo "::warning::Kein vorheriger v*-Tag gefunden - versionCode bleibt ungeprueft (erster Release dieser Art)."
+          else
+            PREV_VERSION=$(git show "$PREV:apps/mobile/pubspec.yaml" | sed -n 's/^version: *//p' | head -n1)
+            if [[ "$PREV_VERSION" != *+* ]]; then
+              echo "::error::version in $PREV ist '$PREV_VERSION' - ohne +versionCode nicht vergleichbar."
+              exit 1
+            fi
+            PREV_CODE="${PREV_VERSION#*+}"
+          fi
+          # aapt2 schreibt pro APK:
+          #   package: name='de.motoroute.app' versionCode='50' versionName='1.0.14' ...
+          # Beide Werte kommen aus demselben badging-Aufruf.
+          UNIVERSAL_CODE=""
+          for APK in dist/*.apk; do
+            BADGING=$("$AAPT2" dump badging "$APK")
+            NAME=$(printf '%s\n' "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n1)
+            CODE=$(printf '%s\n' "$BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n1)
+            # Ohne lesbare Werte waeren beide Vergleiche wirkungslos.
+            if [ -z "$NAME" ] || [ -z "$CODE" ]; then
+              echo "::error::$APK: versionName/versionCode nicht lesbar - ohne Sollwert prueft dieser Schritt nichts."
+              exit 1
+            fi
+            if [ "$NAME" != "$EXPECTED" ]; then
+              echo "::error::$APK meldet versionName '$NAME', der Tag $GITHUB_REF_NAME verspricht '$EXPECTED'. Erst apps/mobile/pubspec.yaml bumpen, dann neu taggen."
+              exit 1
+            fi
+            if [ "$APK" = "dist/app-release.apk" ]; then
+              UNIVERSAL_CODE="$CODE"
+            fi
+            echo "$APK: versionName $NAME, versionCode $CODE"
+          done
+          # Nur die Universal-APK hat Offset 0, ihre versionCode ist die aus
+          # pubspec.yaml; die ABI-APKs tragen +1000/+2000/+4000 und taugen
+          # deshalb nicht als Vergleichswert.
+          if [ -z "$UNIVERSAL_CODE" ]; then
+            echo "::error::Universal-APK dist/app-release.apk fehlt - versionCode waere ungeprueft."
+            exit 1
+          fi
+          if [ -z "$PREV_CODE" ]; then
+            exit 0
+          fi
+          echo "vorher ($PREV): versionCode $PREV_CODE - jetzt ($GITHUB_REF_NAME): $UNIVERSAL_CODE"
+          if [ "$UNIVERSAL_CODE" -le "$PREV_CODE" ]; then
+            echo "::error::$GITHUB_REF_NAME hat versionCode $UNIVERSAL_CODE, $PREV hatte $PREV_CODE - Android bietet dann kein Update an. Bitte in apps/mobile/pubspec.yaml die Build-Nummer erhoehen (1.0.x+N)."
+            exit 1
+          fi
+          echo "versionCode $PREV_CODE -> $UNIVERSAL_CODE: Update wird angeboten."
+
       # Beweist pro Lauf, dass wirklich der Release-Schlüssel signiert hat:
       # debug-signierte APKs wären für Nutzer nicht installierbar (Update).
       - name: Signatur aller Release-APKs prüfen
@@ -170,7 +315,15 @@ jobs:
         run: |
           set -euo pipefail
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          APKSIGNER=$(ls "$SDK"/build-tools/*/apksigner | sort -V | tail -n1)
+          # find statt ls: unabhaengig von Leerzeichen/Sonderzeichen im Pfad,
+          # sort -V nimmt die hoechste Build-Tools-Version.
+          APKSIGNER=$(find "$SDK/build-tools" -maxdepth 2 -name apksigner | sort -V | tail -n1)
+          # Ohne apksigner wuerde die Schleife unten nur mit "command not found"
+          # abbrechen - hier steht der eigentliche Grund.
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner nicht gefunden unter $SDK/build-tools - Signatur waere ungeprueft."
+            exit 1
+          fi
           # Sollwert normalisieren: keytool zeigt Fingerabdruecke mit Doppelpunkten.
           EXPECTED=$(printf '%s' "${EXPECTED_CERT:-}" | tr -d '[:space:]:' | tr 'A-F' 'a-f')
           # Ohne Sollwert ist der Vergleich wirkungslos - bei einem Tag also
@@ -234,6 +387,9 @@ jobs:
             ABI="${APK#apps/mobile/dist/app-}"
             cp "$APK" "MotoRoute-${V}-${ABI%-release.apk}.apk"
           done
+          # Mapping gehört zum Release: es ist der einzige Weg, spätere
+          # Stacktraces genau dieser APKs lesbar zu machen.
+          cp apps/mobile/build/app/outputs/mapping/release/mapping.txt "MotoRoute-${V}-mapping.txt"
           ls -lh MotoRoute-*.apk
           # Titel-Konvention der alten Releases: „MotoRoute 1.0.4" (ohne v).
           echo "VERSION_NO_V=${V#v}" >> "$GITHUB_ENV"
@@ -257,6 +413,7 @@ jobs:
             MotoRoute-${{ github.ref_name }}-arm64-v8a.apk
             MotoRoute-${{ github.ref_name }}-armeabi-v7a.apk
             MotoRoute-${{ github.ref_name }}-x86_64.apk
+            MotoRoute-${{ github.ref_name }}-mapping.txt
           # Steht über den automatisch generierten Commit-Notizen (die Action
           # stellt `body` voran) - sonst laedt weiter jeder die 110-MB-Datei.
           body: |
@@ -273,6 +430,10 @@ jobs:
             versionCode ist damit höher als die der Universal-APK. Ein Wechsel zur Universal-APK
             wäre ein Downgrade und scheitert mit „App nicht installiert" – erst deinstallieren,
             dann neu installieren.
+
+            Zusätzlich liegt `MotoRoute-${{ github.ref_name }}-mapping.txt` bei: das R8-Mapping
+            der Release-APKs. Nur für die Fehleranalyse - damit lassen sich Stacktraces aus
+            genau diesen Builds wieder Klassennamen zuordnen.
           generate_release_notes: true
 
       # action-gh-release setzt den Titel bei bereits existierenden Releases

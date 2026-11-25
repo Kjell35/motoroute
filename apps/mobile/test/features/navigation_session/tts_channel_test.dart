@@ -24,7 +24,11 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     ErrorReporter.instance.debugReset();
-    ErrorReporter.instance.debugConfigure(sender: (payload) async => 202);
+    // Opt-in setzen: ohne den Schalter sendet der Reporter nichts.
+    ErrorReporter.instance.debugConfigure(
+      sender: (payload) async => 202,
+      enabled: true,
+    );
     calls = <MethodCall>[];
     responder = null;
     installHandler();

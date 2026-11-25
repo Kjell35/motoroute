@@ -8,7 +8,11 @@ const _outboxKey = 'telemetry.outbox.v1';
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    // Opt-in: Die Tests stellen einen Nutzer nach, der das Senden
+    // eingeschaltet hat. Der Standard (aus) hat einen eigenen Test.
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'telemetry.enabled': true,
+    });
     ErrorReporter.instance.debugReset();
   });
 
@@ -99,6 +103,9 @@ void main() {
   test('endgueltig abgelehnter Kopf blockiert die Warteschlange nicht',
       () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
+      // Opt-in gesetzt: nur so darf die gespeicherte Warteschlange
+      // ueberhaupt nachgeliefert werden.
+      'telemetry.enabled': true,
       _outboxKey: jsonEncode([
         {'c': 'chat.outbox.flush', 'e': 'alte, ungueltige Kategorie'},
         {'c': 'auth.role', 'e': 'verboten'},
@@ -268,5 +275,54 @@ void main() {
     expect(ErrorReporter.instance.diagnostics.failed, 0);
     expect(ErrorReporter.instance.diagnostics.accepted, 0);
     expect(ErrorReporter.instance.diagnostics.queued, 0);
+  });
+
+  test('Standard ist aus: ohne Opt-in verlaesst kein Bericht das Geraet',
+      () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    ErrorReporter.instance.debugReset();
+    final sent = <Map<String, Object?>>[];
+    ErrorReporter.instance.debugConfigure(
+      sender: (payload) async {
+        sent.add(payload);
+        return 202;
+      },
+      appVersion: '1.0.3',
+    );
+    await ErrorReporter.instance.init();
+
+    expect(ErrorReporter.instance.isEnabled, isFalse);
+    ErrorReporter.instance.report('crash', StateError('abgestuerzt'));
+    await ErrorReporter.instance.debugIdle();
+    expect(sent, isEmpty);
+    expect(ErrorReporter.instance.diagnostics.attempted, 0);
+    expect((await prefs()).getString(_outboxKey), isNull);
+  });
+
+  test('Abschalten verwirft wartende Berichte dauerhaft', () async {
+    ErrorReporter.instance.debugConfigure(
+      sender: (payload) async => 500,
+      appVersion: '1.0.3',
+    );
+    await ErrorReporter.instance.init();
+    ErrorReporter.instance.report('chat.load', StateError('offline'));
+    await ErrorReporter.instance.debugIdle();
+    expect(ErrorReporter.instance.diagnostics.queued, 1);
+
+    await ErrorReporter.instance.setEnabled(false);
+    expect(ErrorReporter.instance.diagnostics.queued, 0);
+    expect((await prefs()).getString(_outboxKey), isNull);
+
+    // Wieder einschalten: der verworfene Bericht kommt nicht zurueck.
+    final sent = <Map<String, Object?>>[];
+    ErrorReporter.instance.debugConfigure(
+      sender: (payload) async {
+        sent.add(payload);
+        return 202;
+      },
+    );
+    await ErrorReporter.instance.setEnabled(true);
+    await ErrorReporter.instance.debugIdle();
+    expect(sent, isEmpty);
   });
 }

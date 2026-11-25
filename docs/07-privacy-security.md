@@ -15,6 +15,8 @@
 
 **Bewusste Nicht-Speicherung:** Positionsverlauf, Suchanfragen (serverseitig), User-Profile im MVP. Eine `trips`-Tabelle existiert bewusst nicht (siehe `03-data-models.md`).
 
+**Crash-Reports sind opt-in, nicht opt-out:** Der Schalter „Anonyme Fehlerberichte senden" (Einstellungen → Community) ist standardmäßig aus; ohne ihn verlässt kein Bericht das Gerät (`ErrorReporter._enabled` startet mit `false`). Abschalten verwirft wartende, noch nicht gesendete Berichte sofort — ein Widerruf wirkt also auch rückwirkend auf die Warteschlange.
+
 ## 2. Datenfluss Position
 
 ```

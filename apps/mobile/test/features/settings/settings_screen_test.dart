@@ -94,6 +94,7 @@ void main() {
     // 500 ist voruebergehend: der Bericht bleibt in der Warteschlange
     // (ein 400 waere endgueltig und wuerde verworfen).
     ErrorReporter.instance.debugConfigure(
+      enabled: true, // Opt-in: sonst bleibt die Warteschlange leer.
       sender: (payload) async => 500,
       appVersion: '1.0.3',
     );
@@ -209,7 +210,7 @@ void main() {
     // Auch die uebrigen Texte der Sektion folgen der Sprachwahl.
     expect(find.text('Send anonymous error reports'), findsOneWidget);
     expect(find.text('Anonyme Fehlerberichte senden'), findsNothing);
-    expect(find.textContaining('Helps support find outages'), findsOneWidget);
+    expect(find.textContaining('Off by default'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.textContaining('reached support'),

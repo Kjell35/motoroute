@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motoroute_app/core/constants/route_enums.dart';
 import 'package:motoroute_app/core/network/api_client.dart';
+import 'package:motoroute_app/core/network/error_reporter.dart'
+    show kTelemetryPrefKey, persistedTelemetryEnabled;
 import 'package:motoroute_app/core/utils/formatters.dart';
 import 'package:motoroute_app/core/utils/geo.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
@@ -41,6 +43,8 @@ Future<void> initSessionSettings() async {
   persistedNotificationsEnabled = prefs.getBool(_kNotifications) ?? true;
   persistedVoiceAnnouncementsEnabled =
       prefs.getBool(_kVoiceAnnouncements) ?? true;
+  // Opt-in fuer Fehlerberichte: Default aus (docs/07-privacy-security.md).
+  persistedTelemetryEnabled = prefs.getBool(kTelemetryPrefKey) ?? false;
 }
 
 /// Von initSessionSettings gesetzte Startwerte (Riverpod-Provider

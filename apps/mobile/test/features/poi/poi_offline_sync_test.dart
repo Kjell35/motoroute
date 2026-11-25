@@ -373,10 +373,13 @@ void main() {
   test('Fehlschlag landet als bikerpoi.sync in der Telemetrie', () async {
     final reports = <Map<String, Object?>>[];
     ErrorReporter.instance.debugReset();
-    ErrorReporter.instance.debugConfigure(sender: (payload) async {
-      reports.add(payload);
-      return 200;
-    });
+    ErrorReporter.instance.debugConfigure(
+      enabled: true, // Opt-in: sonst sendet der Reporter nichts.
+      sender: (payload) async {
+        reports.add(payload);
+        return 200;
+      },
+    );
     addTearDown(ErrorReporter.instance.debugReset);
 
     when(() => dio.get<Map<String, dynamic>>(

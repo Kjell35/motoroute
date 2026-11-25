@@ -14,6 +14,11 @@ import 'error_message.dart';
 /// Netzwerkfehlern. In Tests austauschbar, damit kein Server nötig ist.
 typedef TelemetrySender = Future<int> Function(Map<String, Object?> payload);
 
+/// SharedPreferences-Schluessel des Opt-in-Schalters. Auch
+/// `initSessionSettings()` liest ihn, damit der Schalter in den
+/// Einstellungen den gespeicherten Stand zeigt und nicht den Default.
+const String kTelemetryPrefKey = 'telemetry.enabled';
+
 /// Zähler rund um das Reporting. Sie machen sichtbar, wenn Berichte NICHT
 /// ankommen - vorher verschwand jeder Fehlschlag spurlos.
 ///
@@ -104,7 +109,10 @@ class TelemetryDiagnostics {
 ///      auf Accounts ist serverseitig durch das Salz ausgeschlossen.
 ///   3. Gedrosselt: max. 30 Berichte pro App-Sitzung und 30 s Cooldown
 ///      pro Kategorie, damit eine Fehlerschleife nicht spammt.
-///   4. Opt-out: Nutzer kann es in den Einstellungen (Community) abschalten.
+///   4. OPT-IN: standardmaessig AUS. Gesendet wird erst, wenn der
+///      Schalter in den Einstellungen (Community) eingeschaltet wurde
+///      - das Datenschutz-Versprechen aus `docs/07-privacy-security.md`.
+///      Abschalten verwirft wartende Berichte sofort (Widerruf).
 ///   5. VERLUSTFREI (soweit möglich): Ein Bericht, der nicht ankommt,
 ///      landet in einer kleinen persistenten Warteschlange und wird beim
 ///      nächsten Versuch bzw. beim nächsten App-Start nachgeliefert.
@@ -122,7 +130,6 @@ class ErrorReporter {
   ErrorReporter._();
   static final ErrorReporter instance = ErrorReporter._();
 
-  static const _kPrefKey = 'telemetry.enabled';
   static const _kOutboxKey = 'telemetry.outbox.v1';
   static const _kDiagnosticsKey = 'telemetry.diagnostics.v1';
   static const _maxPerSession = 30;
@@ -130,7 +137,7 @@ class ErrorReporter {
   static const _maxFlushPerRun = 3;
   static const _categoryCooldown = Duration(seconds: 30);
 
-  bool _enabled = true;
+  bool _enabled = false;
   int _sessionCount = 0;
   final Map<String, DateTime> _lastSent = {};
   final List<_PendingReport> _outbox = [];
@@ -156,18 +163,20 @@ class ErrorReporter {
   /// Meldet jede Änderung am Versandstatus (für die Diagnose-Anzeige).
   ValueListenable<int> get changes => _revision;
 
-  /// Opt-out, Warteschlange und Zähler laden (einmalig, z. B. in main()).
+  /// Opt-in-Stand, Warteschlange und Zähler laden (einmalig, z. B. in main()).
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _enabled = prefs.getBool(_kPrefKey) ?? true;
+      _enabled = prefs.getBool(kTelemetryPrefKey) ?? false;
       _outbox
         ..clear()
         ..addAll(_decodeOutbox(prefs.getString(_kOutboxKey)));
       final stored = TelemetryDiagnostics.decode(prefs.getString(_kDiagnosticsKey));
       if (stored != null) _diagnostics = stored;
     } catch (_) {
-      _enabled = true;
+      // Lesefehler heisst nicht "ein" - ohne bestaetigtes Opt-in
+      // wird nichts gesendet.
+      _enabled = false;
     }
     _diagnostics.queued = _outbox.length;
     // Beginn der Zählung festhalten: die Diagnose zeigt "Seit <Datum>".
@@ -185,16 +194,23 @@ class ErrorReporter {
     _activity = _activity.then((_) => _flush());
   }
 
-  /// Im Einstellungs-Tile umgeschaltet.
+  /// Im Einstellungs-Tile umgeschaltet (Opt-in).
   Future<void> setEnabled(bool value) async {
     _enabled = value;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kPrefKey, value);
+      await prefs.setBool(kTelemetryPrefKey, value);
     } catch (_) {}
     if (value) {
       _activity = _activity.then((_) => _flush());
+      return;
     }
+    // Widerruf: wartende Berichte werden geloescht, nicht beim naechsten
+    // Einschalten nachgeliefert - "aus" heisst auch rückwirkend aus.
+    _outbox.clear();
+    _diagnostics.queued = 0;
+    await _persistOutbox();
+    await _commit();
   }
 
   /// Auth-Token-Lieferant binden (main(): AuthController.accessToken).
@@ -420,18 +436,24 @@ class ErrorReporter {
         _ => 'web',
       };
 
-  /// Nur für Tests: Sender/Version setzen.
+  /// Nur für Tests: Sender/Version setzen. [enabled] bildet das Opt-in
+  /// nach, wenn ein Test bewusst ohne `init()` arbeitet.
   @visibleForTesting
-  void debugConfigure({TelemetrySender? sender, String? appVersion}) {
+  void debugConfigure({
+    TelemetrySender? sender,
+    String? appVersion,
+    bool? enabled,
+  }) {
     if (sender != null) _sender = sender;
     if (appVersion != null) _appVersion = appVersion;
+    if (enabled != null) _enabled = enabled;
   }
 
   /// Nur für Tests: Speicher-Zustand zurücksetzen. Die Persistenz bleibt
   /// absichtlich unangetastet - so lässt sich ein App-Neustart nachstellen.
   @visibleForTesting
   void debugReset() {
-    _enabled = true;
+    _enabled = false;
     _sessionCount = 0;
     _lastSent.clear();
     _outbox.clear();
@@ -491,9 +513,15 @@ class _PendingReport {
   }
 }
 
-/// Opt-out-Provider (Einstellungen > Community). Startet mit true;
-/// die Persistenz lädt der ErrorReporter selbst in init().
-final telemetryEnabledProvider = StateProvider<bool>((ref) => true);
+/// Gespeicherter Opt-in-Stand, von [initSessionSettings] vor runApp
+/// gesetzt. Standard: aus.
+bool persistedTelemetryEnabled = false;
+
+/// Opt-in-Provider (Einstellungen > Community). Startet mit dem
+/// gespeicherten Stand: mit einem festen Default wuerde der Schalter
+/// nach einem Neustart "aus" zeigen, obwohl weiter gesendet wird.
+final telemetryEnabledProvider =
+    StateProvider<bool>((ref) => persistedTelemetryEnabled);
 
 /// Globale Crash-/Fehler-Haken installieren (einmalig in main()).
 /// Ungefangene Flutter- und Dart-Fehler werden anonym gemeldet und dann

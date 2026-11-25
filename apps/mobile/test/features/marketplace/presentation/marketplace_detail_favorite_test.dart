@@ -138,10 +138,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final reports = <Map<String, Object?>>[];
     ErrorReporter.instance.debugReset();
-    ErrorReporter.instance.debugConfigure(sender: (payload) async {
-      reports.add(payload);
-      return 200;
-    });
+    ErrorReporter.instance.debugConfigure(
+      enabled: true, // Opt-in: sonst sendet der Reporter nichts.
+      sender: (payload) async {
+        reports.add(payload);
+        return 200;
+      },
+    );
     addTearDown(ErrorReporter.instance.debugReset);
 
     await _pumpDetail(tester, repo, settle: false);

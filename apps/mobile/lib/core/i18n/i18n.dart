@@ -331,8 +331,9 @@ const _catalog = <String, Map<String, String>>{
         'erscheinen direkt in der App.',
     'settings.telemetry.toggle': 'Anonyme Fehlerberichte senden',
     'settings.telemetry.toggleHint':
-        'Hilft dem Support, Ausfälle zu finden - ganz ohne Namen, E-Mail oder '
-        'Standort. Jederzeit abschaltbar.',
+        'Standardmäßig aus: erst wenn du einschaltest, gehen Fehlerberichte '
+        'an den Support - ohne Namen, E-Mail oder Standort. Beim Abschalten '
+        'werden wartende Berichte verworfen.',
     'settings.chatAccount.notConnectedHint':
         'Nicht verbunden - Anmeldung in der App nötig',
     'settings.chatAccount.connectedAs': 'Verbunden als {name}',
@@ -789,8 +790,9 @@ const _catalog = <String, Map<String, String>>{
         'the app.',
     'settings.telemetry.toggle': 'Send anonymous error reports',
     'settings.telemetry.toggleHint':
-        'Helps support find outages - without name, email or location. '
-        'Can be turned off at any time.',
+        'Off by default: only when you switch it on do error reports reach '
+        'support - without name, email or location. Switching it off discards '
+        'reports that are still waiting.',
     'settings.chatAccount.notConnectedHint':
         'Not connected - sign-in in the app required',
     'settings.chatAccount.connectedAs': 'Connected as {name}',
