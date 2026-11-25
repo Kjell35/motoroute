@@ -18,6 +18,16 @@ on:
 permissions:
   contents: read
 
+# Zwei Laeufe auf denselben Tag wuerden dieselben Release-Assets schreiben -
+# der zuletzt fertige gewinnt, auch wenn er der aeltere Build ist. Die Gruppe
+# haengt deshalb am Tag, nicht am Ref: ein Tag-Push (refs/tags/next-v1.0.2)
+# und ein workflow_dispatch auf denselben Tag (refs/heads/monorepo) landen in
+# derselben Gruppe und laufen nacheinander. Abbrechen waere hier falsch - ein
+# laufender Release soll zu Ende laufen, der neue wartet.
+concurrency:
+  group: next-release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   # Laeuft zuerst: ein falsch getaggter Release soll in Sekunden auffallen,
   # nicht erst nach dem Android-Build. Braucht kein Android-SDK, nur Git und
@@ -150,6 +160,11 @@ jobs:
     name: Build and publish Android APK
     needs: preflight
     runs-on: ubuntu-latest
+    # Ohne Timeout haengt ein blockierter Gradle- oder Flutter-Schritt bis zu
+    # sechs Stunden auf dem Runner - und blockiert wegen der concurrency-Gruppe
+    # jeden weiteren Release auf denselben Tag. Der Build dauert wenige
+    # Minuten; 30 Minuten sind Luft fuer einen kalten Cache.
+    timeout-minutes: 30
     # Einziger Job mit Schreibrecht: Release anlegen und APKs anhaengen.
     permissions:
       contents: write
