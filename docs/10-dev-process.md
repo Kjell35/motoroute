@@ -62,6 +62,50 @@ motoroute/
 - Alle Releases vor dieser Umstellung waren mit dem Zufalls-Debug-Schlüssel des jeweiligen CI-Runners signiert. Für ein Update von einer dieser Versionen ist einmalig eine Neuinstallation nötig.
 
 ## 6. Testing-Pyramide (konkret)
+### 5.2 Keystore-Backup (ausserhalb dieses Rechners)
+
+- Die Arbeitskopie unter `.artifacts/signing/` (nicht versioniert) ist **keine** Sicherung: Sie liegt auf derselben Platte wie das Repo.
+- Gesichert wird auf ein **externes Medium** (USB-Stick) in den Ordner `MotoRoute-KeyBackup/`: `signing/motoroute-release.jks`, `signing/motoroute-release.jks.b64` (dieselben Bytes als Base64 fuer `MOTOROUTE_KEYSTORE_B64`) und `RESTORE.md` mit der Wiederherstellungsanleitung samt Pruefsummen.
+- Das Passwort steht **nicht** auf diesem Medium, sondern im Passwort-Manager unter dem Eintrag "MotoRoute Release-Keystore"; dort haengt die `.jks` zusaetzlich als Dateianhang (zweite Kopie an einem anderen Ort).
+- Nach jedem Kopieren die Pruefsummen aus `RESTORE.md` vergleichen statt hoffen.
+- Offen (Stand 2026-11-25): Die Kopie auf ein externes Medium steht noch aus - beim Einrichten war kein Medium angeschlossen. Bis dahin existiert der Keystore nur auf dieser Platte.
+
+### 5.3 Keystore-Wiederherstellung
+
+Anlass: neuer Rechner, geloeschtes `.artifacts/signing/`, oder die CI-Secrets muessen neu gesetzt werden. Die Anleitung steht bewusst auch hier - der Backup-Ordner allein liegt auf derselben Platte, die er absichern soll. Die Datei-Pruefsummen dazu stehen in `RESTORE.md` im Backup-Ordner.
+
+**Quelle**: externe Sicherung aus 5.2 (`signing/motoroute-release.jks` oder `signing/motoroute-release.jks.b64`), Passwort aus dem Passwort-Manager. Alias `motoroute`; Keystore und Schluessel teilen sich dasselbe Passwort. `RESTORE.md` nennt daneben `signing/keystore-password.txt` - diese Klartextdatei gehoert **nicht** auf das externe Medium und ist nach dem Umzug in den Passwort-Manager zu loeschen.
+
+**Lokal bauen** - dieselben vier Variablen, die der CI-Job setzt:
+
+```bash
+export MOTOROUTE_KEYSTORE_PATH="<Backup>/signing/motoroute-release.jks"
+export MOTOROUTE_KEYSTORE_PASSWORD="<Passwort aus dem Passwort-Manager>"
+export MOTOROUTE_KEY_ALIAS=motoroute
+export MOTOROUTE_KEY_PASSWORD="$MOTOROUTE_KEYSTORE_PASSWORD"
+cd apps/mobile && flutter build apk --release --split-per-abi
+```
+
+**CI-Secrets neu setzen** (Settings -> Secrets and variables -> Actions), Namen wie in 5.1:
+
+| Secret | Inhalt |
+|---|---|
+| `MOTOROUTE_KEYSTORE_B64` | kompletter Inhalt von `signing/motoroute-release.jks.b64` |
+| `MOTOROUTE_KEYSTORE_PASSWORD` | Passwort aus dem Passwort-Manager |
+| `MOTOROUTE_KEY_PASSWORD` | dasselbe Passwort |
+| `MOTOROUTE_KEY_ALIAS` | `motoroute` |
+| `MOTOROUTE_SIGNING_CERT_SHA256` | `95d17c32a101e4e182423ccfc9b8650c1470338e3f09583d0461c1bac3e66f59` |
+
+**Pruefen, dass es wirklich der richtige Schluessel ist** - nicht der Vorgang zaehlt, sondern das Ergebnis:
+
+```bash
+apksigner verify --print-certs <apk> | grep "SHA-256 digest"
+```
+
+Erwartet wird `95d17c32...`; der Release-Job vergleicht genau diesen Wert und bricht ab, wenn eine APK debug-signiert ist oder abweicht. Ein Restore gilt erst als gelungen, wenn eine so gebaute APK sich ueber die installierte Version legen laesst: gleiche Signatur, `versionCode` hoeher als bei der installierten App (dafuer `apps/mobile/pubspec.yaml` bumpen). Dieser Test wurde am 2026-11-24 zweimal gefahren - einmal nur neu signiert aus der Kopie, einmal mit frischem Clone ohne `.artifacts/signing`; Ergebnis jeweils `de.motoroute.app`, versionName 1.0.14, versionCode 50, Zertifikat `95d17c32...`.
+
+**Nicht ins Repo**: Keystore, `.b64` und Passwort - auch nicht in Issues, Chats oder Screenshots; das Repo ist oeffentlich.
+
 
 | Ebene | Umfang | Beispiel |
 |---|---|---|
