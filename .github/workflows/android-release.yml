@@ -98,6 +98,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          # Gradle-Distribution und Abhaengigkeiten aus dem Actions-Cache:
+          # ohne Cache laedt jeder Lauf die Wrapper-Distribution neu.
+          cache: gradle
 
       - name: Flutter
         uses: subosito/flutter-action@v2
