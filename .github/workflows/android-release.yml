@@ -442,11 +442,11 @@ jobs:
           echo "VERSION_NO_V=${V#v}" >> "$GITHUB_ENV"
           # SHA-256-Liste fuer den Release-Text. Die Namen kommen aus dem Glob,
           # es gibt keine zweite Asset-Liste im Workflow zu pflegen.
-          bt='`'
           sums=()
           for APK in MotoRoute-*.apk; do
             SUM=$(sha256sum "$APK" | cut -d" " -f1)
-            sums+=("- ${bt}${APK}${bt} - ${bt}${SUM}${bt}")
+            # shellcheck disable=SC2016 # Backticks sind Markdown, keine Shell-Expansion
+            sums+=("$(printf -- '- `%s` - `%s`' "$APK" "$SUM")")
           done
           printf '%s\n' "${sums[@]}"
           {
