@@ -22,6 +22,7 @@ import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { BadgesModule } from './modules/badges/badges.module';
 import { TelemetryModule } from './modules/telemetry/telemetry.module';
 import { HealthController } from './modules/health/health.controller';
+import { PairingModule } from './modules/pairing/pairing.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { HealthController } from './modules/health/health.controller';
     MarketplaceModule,
     BadgesModule,
     TelemetryModule,
+    PairingModule,
   ],
   controllers: [HealthController],
   providers: [LoggingInterceptor],
