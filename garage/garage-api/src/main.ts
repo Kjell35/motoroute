@@ -61,6 +61,15 @@ interface HttpError extends Error {
 }
 
 app.use((err: HttpError, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // express.raw bricht bei Überschreitung des Limits mit "request entity too large"
+  // ab - daraus soll eine lesbare Meldung werden, kein generisches 500er.
+  if ((err as { type?: string }).type === 'entity.too.large' || err.status === 413) {
+    res.status(413).json({
+      error: 'FILE_TOO_LARGE',
+      message: 'Die Datei ist zu groß (max. 8 MB)',
+    });
+    return;
+  }
   const status = err.status ?? 500;
   if (status >= 500) {
     console.error(err);
