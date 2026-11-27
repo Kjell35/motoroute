@@ -57,6 +57,9 @@
   var autosaveTimer = null;
   var unsaved = false;
   var saving = false;
+  // Zaehlt Aenderungen: unterscheidet "waehrend des Speicherns etwas
+  // dazugekommen" von "das Speichern ist fehlgeschlagen".
+  var editSeq = 0;
   var AUTOSAVE_MS = 800;
   // Lokaler Entwurf: liegt unter einem Schluessel pro Code im Browser und
   // ueberlebt Reload, Absturz und einen abgelaufenen Code.
@@ -66,6 +69,12 @@
   // gemerkt, damit ein zweiter Versuch nicht noch einen Code anlegt.
   var rescueToken = null;
   var rescuing = false;
+  // Rueckgaengig: die letzten Zustaende der Punkte, nicht nur der letzte
+  // Punkt. Jede Aenderung legt den Stand davor ab, Undo stellt ihn wieder her.
+  var UNDO_LIMIT = 30;
+  var undoStack = [];
+  var undoing = false;
+  var lastPoints = null;
 
   function pointLine(p) {
     return p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + ', ' + p.label;
@@ -77,6 +86,29 @@
       if (pointLine(a[i]) !== pointLine(b[i])) return false;
     }
     return true;
+  }
+
+  function clonePoints(points) {
+    return points.map(function (p) {
+      return { lat: p.lat, lon: p.lon, label: p.label, detail: p.detail };
+    });
+  }
+
+  function updateUndoButton() {
+    if (!undoButton) return;
+    var entry = undoStack[undoStack.length - 1];
+    undoButton.disabled = !entry;
+    undoButton.title = entry ? 'Rückgängig: ' + entry.label : 'Nichts rückgängig zu machen';
+    undoButton.setAttribute('aria-label', undoButton.title);
+  }
+
+  // Stand VOR einer Aenderung ablegen. Die Obergrenze haelt den Speicher
+  // klein; 30 Schritte reichen fuer eine Klick-Sitzung.
+  function pushUndo(points, label) {
+    if (!points) return;
+    undoStack.push({ points: clonePoints(points), label: label || 'Änderung' });
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    updateUndoButton();
   }
 
   function draftStorage() {
@@ -253,7 +285,8 @@
       row.appendChild(listButton('×', 'Punkt löschen', false, function () { removePoint(index); }));
       list.appendChild(row);
     });
-    if (undoButton) undoButton.disabled = points.length === 0;
+    // Der Undo-Knopf haengt am Stapel (updateUndoButton), nicht an der
+    // Punktzahl: auch Loeschen, Umdrehen und Ziehen sind Schritte.
     // Umdrehen braucht zwei Punkte, sonst waere es ein Nichts-Tun.
     if (reverseButton) reverseButton.disabled = points.length < 2;
   }
@@ -278,7 +311,7 @@
       label: name,
       detail: old.detail
     };
-    writePoints(current, 'Punkt umbenannt: ' + name);
+    writePoints(current, 'Punkt umbenannt: ' + name, undefined, 'Punkt umbenannt');
   }
 
   function movePoint(index, step) {
@@ -288,7 +321,7 @@
     var swapped = current[index];
     current[index] = current[target];
     current[target] = swapped;
-    writePoints(current, 'Reihenfolge geändert.');
+    writePoints(current, 'Reihenfolge geändert.', undefined, 'Reihenfolge geändert');
   }
 
   function removePoint(index) {
@@ -296,7 +329,7 @@
     if (index < 0 || index >= current.length) return;
     current.splice(index, 1);
     if (map) map.closePopup();
-    writePoints(current, 'Punkt gelöscht.');
+    writePoints(current, 'Punkt gelöscht.', undefined, 'Punkt gelöscht');
   }
 
   // Hin- und Rueckweg: dieselben Punkte in umgekehrter Reihenfolge. Der
@@ -306,15 +339,23 @@
     var current = readPoints() || [];
     if (current.length < 2) return;
     current.reverse();
-    writePoints(current, 'Reihenfolge umgedreht - Ziel ist jetzt Start.');
+    writePoints(current, 'Reihenfolge umgedreht - Ziel ist jetzt Start.', undefined, 'Umdrehen');
   }
 
-  function undoLast() {
-    var current = readPoints() || [];
-    if (!current.length) return;
-    current.pop();
-    if (map) map.closePopup();
-    writePoints(current, 'Letzten Punkt zurückgenommen.');
+  // Rueckgaengig ueber die letzten Zustaende: Loeschen (Liste und Popup),
+  // Umdrehen, Ziehen, Umbenennen und Tippen legen jeweils den Stand davor ab.
+  function undo() {
+    var entry = undoStack.pop();
+    if (!entry) { updateUndoButton(); return; }
+    // Ein Undo schreibt selbst keinen neuen Schritt in den Stapel, sonst
+    // liesse es sich endlos hin und her schalten.
+    undoing = true;
+    try {
+      writePoints(entry.points, 'Rückgängig gemacht: ' + entry.label + '.');
+    } finally {
+      undoing = false;
+    }
+    updateUndoButton();
   }
 
   // ---- Ortssuche: laeuft ueber das eigene Backend (eigener User-Agent,
@@ -333,7 +374,7 @@
   function addFromSearch(result) {
     var current = readPoints() || [];
     current.push({ lat: result.lat, lon: result.lon, label: result.label });
-    writePoints(current, 'Punkt "' + result.label + '" aus der Suche übernommen.');
+    writePoints(current, 'Punkt "' + result.label + '" aus der Suche übernommen.', undefined, 'Punkt aus der Suche');
     if (map) map.setView([result.lat, result.lon], 12);
     clearResults();
     setSearchStatus('');
@@ -407,13 +448,17 @@
     });
   }
 
-  function writePoints(points, message, redraw) {
+  function writePoints(points, message, redraw, undoLabel) {
+    // Der Stand davor wandert in den Undo-Stapel - ausser wenn das Undo
+    // selbst schreibt.
+    if (!undoing) pushUndo(readPoints(), undoLabel || message);
     writeGuard = true;
     area.value = points.map(pointLine).join('\n');
     // Schon hier lokal sichern, nicht erst beim Speichern: der Entwurf ist
     // die Versicherung, wenn der Server nicht antwortet.
     saveDraft(points);
     writeGuard = false;
+    lastPoints = points;
     syncRoute(points);
     // redraw === false laesst vorhandene Marker stehen (Fall: Marker gezogen -
     // der Marker sitzt nach dem Drag schon richtig, ein Neuaufbau waere nur
@@ -427,6 +472,7 @@
   // hintereinander ergeben so einen einzigen Aufruf.
   function scheduleAutosave() {
     unsaved = true;
+    editSeq += 1;
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(autosave, AUTOSAVE_MS);
   }
@@ -515,6 +561,7 @@
     var points;
     try { points = parse(area.value); } catch (err) { return; }
     saving = true;
+    var seq = editSeq;
     saveRequest(points)
       .then(function (res) {
         if (res.ok) {
@@ -535,8 +582,9 @@
       })
       .then(function () {
         saving = false;
-        // Waehrend des Speicherns weitergeklickt: den Rest nachziehen.
-        if (unsaved) scheduleAutosave();
+        // Nur nachziehen, wenn waehrend des Speicherns etwas dazukam. Ein
+        // Fehlschlag wird bewusst nicht im 800-ms-Takt wiederholt.
+        if (unsaved && editSeq !== seq) scheduleAutosave();
       });
   }
 
@@ -549,6 +597,7 @@
   });
 
   function drawMarkers(points) {
+    lastPoints = points;
     syncRoute(points);
     renderList(points);
     if (!markerLayer) return;
@@ -607,7 +656,7 @@
         // Marker NICHT neu aufbauen: clearLayers() zerstoert hier genau das
         // Element, an dem der Browser den Drag gerade beendet - der naechste
         // Klick (z. B. auf "Punkte speichern") kann dadurch verschluckt werden.
-        writePoints(current, 'Punkt verschoben - Zeile aktualisiert.', false);
+        writePoints(current, 'Punkt verschoben - Zeile aktualisiert.', false, 'Verschieben');
       });
     });
     if (points.length && points.length !== lastCount) {
@@ -637,7 +686,7 @@
         lon: event.latlng.lng,
         label: 'Wegpunkt ' + (current.length + 1)
       });
-      writePoints(current, 'Punkt gesetzt - die Textzeile ist ergänzt.');
+      writePoints(current, 'Punkt gesetzt - die Textzeile ist ergänzt.', undefined, 'Punkt gesetzt');
     });
     var initial = readPoints() || [];
     if (initial.length) drawMarkers(initial);
@@ -652,6 +701,9 @@
     editTimer = setTimeout(function () {
       var points = readPoints();
       if (!points) return;
+      if (lastPoints && !samePoints(lastPoints, points)) {
+        pushUndo(lastPoints, 'Textfeld geändert');
+      }
       drawMarkers(points);
       saveDraft(points);
       show('', '');
@@ -681,6 +733,7 @@
   });
 initMap();
   offerDraft();
-  if (undoButton) undoButton.addEventListener('click', undoLast);
+  updateUndoButton();
+  if (undoButton) undoButton.addEventListener('click', undo);
   if (reverseButton) reverseButton.addEventListener('click', reversePoints);
 })();

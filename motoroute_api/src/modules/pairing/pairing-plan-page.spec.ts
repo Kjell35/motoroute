@@ -389,15 +389,6 @@ describe('Plan-Seite in jsdom: Löschen', () => {
     expect(labels(doc)).toEqual(['Kufstein']);
   });
 
-  it('nimmt den letzten Punkt über den Undo-Knopf zurück', async () => {
-    const { doc } = await mountPage(threePoints);
-
-    doc.getElementById('undo').click();
-
-    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze']);
-    expect(doc.getElementById('status').textContent).toBe('Letzten Punkt zurückgenommen.');
-  });
-
   it('dreht die Reihenfolge um - Start/Ziel, Etappen und Textzeilen mit', async () => {
     const { doc, markers } = await mountPage(threePoints);
     const summary = doc.getElementById('summary').textContent;
@@ -514,6 +505,136 @@ describe('Plan-Seite in jsdom: Löschen', () => {
     expect(einer.doc.getElementById('reverse').disabled).toBe(true);
     einer.doc.getElementById('reverse').click(); // gesperrt: ändert nichts
     expect(labels(einer.doc)).toEqual(['Eibsee']);
+  });
+});
+
+describe('Plan-Seite in jsdom: Rückgängig', () => {
+  it('ist beim Laden gesperrt', async () => {
+    const { doc } = await mountPage(threePoints);
+
+    expect(doc.getElementById('undo').disabled).toBe(true);
+    expect(doc.getElementById('undo').title).toBe('Nichts rückgängig zu machen');
+  });
+
+  it('holt einen über × gelöschten Punkt samt Namen zurück', async () => {
+    const { doc } = await mountPage(threePoints);
+
+    rows(doc)[1].querySelectorAll('button')[2].click();
+    expect(labels(doc)).toEqual(['Eibsee', 'Kufstein']);
+
+    doc.getElementById('undo').click();
+
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(lines(doc)[1]).toBe('47.50000, 11.50000, Zugspitze');
+    expect(doc.getElementById('status').textContent).toBe('Rückgängig gemacht: Punkt gelöscht.');
+    // Zurück in der Ausgangslage: nichts mehr rückgängig zu machen.
+    expect(doc.getElementById('undo').disabled).toBe(true);
+  });
+
+  it('holt einen im Marker-Popup gelöschten Punkt zurück', async () => {
+    const { doc, markers } = await mountPage(threePoints);
+    const popupButton = markers[0].popup.querySelector('button');
+
+    popupButton.click();
+    expect(labels(doc)).toEqual(['Zugspitze', 'Kufstein']);
+
+    doc.getElementById('undo').click();
+
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(markers).toHaveLength(3);
+    // Start/Ziel sitzen wieder richtig.
+    expect(rows(doc).map((row: any) => row.querySelector('.nr').className)).toEqual([
+      'nr start',
+      'nr',
+      'nr end',
+    ]);
+  });
+
+  it('macht das Umdrehen rückgängig', async () => {
+    const { doc, markers } = await mountPage(threePoints);
+
+    doc.getElementById('reverse').click();
+    expect(labels(doc)).toEqual(['Kufstein', 'Zugspitze', 'Eibsee']);
+
+    doc.getElementById('undo').click();
+
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(lines(doc)[0]).toBe('47.42110, 10.98480, Eibsee');
+    expect(markers.map((m) => m.options.title)).toEqual(['Start', 'Wegpunkt 2', 'Ziel']);
+    expect(doc.getElementById('status').textContent).toBe('Rückgängig gemacht: Umdrehen.');
+  });
+
+  it('stellt nach dem Ziehen die alte Lage wieder her', async () => {
+    const { doc, markers } = await mountPage(threePoints);
+    const marker = markers[1];
+
+    marker.latlng = { lat: 48.9, lng: 12.9 };
+    marker.on_dragend();
+    expect(lines(doc)[1]).toBe('48.90000, 12.90000, Zugspitze');
+
+    doc.getElementById('undo').click();
+
+    expect(lines(doc)[1]).toBe('47.50000, 11.50000, Zugspitze');
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(doc.getElementById('status').textContent).toBe('Rückgängig gemacht: Verschieben.');
+  });
+
+  it('nimmt eine Umbenennung zurück', async () => {
+    const { doc, win } = await mountPage(threePoints);
+
+    renameInList(win, doc, 1, 'Gipfel');
+    expect(labels(doc)).toEqual(['Eibsee', 'Gipfel', 'Kufstein']);
+
+    doc.getElementById('undo').click();
+
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(lines(doc)[1]).toBe('47.50000, 11.50000, Zugspitze');
+  });
+
+  it('geht mehrere Schritte einzeln zurück und sperrt sich am Anfang', async () => {
+    const { doc, state } = await mountPage(threePoints);
+
+    state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+    state.clickHandler!({ latlng: { lat: 47.8, lng: 12.0 } });
+    rows(doc)[0].querySelectorAll('button')[2].click(); // × auf Zeile 1
+    expect(labels(doc)).toEqual(['Zugspitze', 'Kufstein', 'Wegpunkt 4', 'Wegpunkt 5']);
+
+    // Der Titel sagt, was der naechste Schritt rueckgaengig macht.
+    expect(doc.getElementById('undo').title).toBe('Rückgängig: Punkt gelöscht');
+
+    doc.getElementById('undo').click();
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein', 'Wegpunkt 4', 'Wegpunkt 5']);
+    expect(doc.getElementById('undo').title).toBe('Rückgängig: Punkt gesetzt');
+
+    doc.getElementById('undo').click();
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein', 'Wegpunkt 4']);
+
+    doc.getElementById('undo').click();
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(doc.getElementById('undo').disabled).toBe(true);
+  });
+
+  it('macht auch Änderungen im Textfeld rückgängig', async () => {
+    try {
+      const { doc, win } = await mountPage(threePoints);
+      jest.useFakeTimers();
+      const area = doc.getElementById('points');
+
+      area.value = '47.4211, 10.9848, Eibsee\n47.5, 11.5, Zugspitze';
+      area.dispatchEvent(new win.Event('input', { bubbles: true }));
+      jest.advanceTimersByTime(400);
+      expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze']);
+
+      doc.getElementById('undo').click();
+
+      expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+      expect(area.value).toContain('Kufstein');
+      expect(doc.getElementById('status').textContent).toBe(
+        'Rückgängig gemacht: Textfeld geändert.',
+      );
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
@@ -687,6 +808,32 @@ describe('Plan-Seite in jsdom: Entwurf im Browser', () => {
 
     expect(win.localStorage.getItem('motoroute.plan.K7G7YY')).not.toBeNull();
     expect(doc.getElementById('status').textContent).toContain('fehlgeschlagen');
+  });
+
+  it('wiederholt ein fehlgeschlagenes Speichern nicht im Takt', async () => {
+    const fetchMock = jest.fn(async (): Promise<any> => ({ ok: false, status: 503 }));
+    try {
+      const { doc, win, state } = await mountPage(threePoints, { fetch: fetchMock });
+      jest.useFakeTimers();
+
+      state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+      jest.advanceTimersByTime(800);
+      for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Frueher plante sich der Autosave nach einem Fehlschlag endlos neu ein.
+      jest.advanceTimersByTime(4000);
+      for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(doc.getElementById('status').textContent).toContain('fehlgeschlagen');
+
+      // Ungespeichert bleibt ungespeichert: die Warnung beim Verlassen steht.
+      const event = new win.Event('beforeunload', { cancelable: true });
+      win.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
