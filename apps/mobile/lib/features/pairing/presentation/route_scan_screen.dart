@@ -76,18 +76,31 @@ class _RouteScanScreenState extends ConsumerState<RouteScanScreen> {
         await _controller?.start();
         return;
       }
+      // Bestehende Route nicht still überschreiben: vorher fragen. Der
+      // Scanner ist hier bereits gestoppt - bei "Behalten" wieder starten.
+      final bool replace = await _confirmReplace(points.length);
+      if (!mounted) return;
+      if (!replace) {
+        setState(() {
+          _error = 'Nichts übernommen - die bestehende Route bleibt unverändert.';
+          _handled = false;
+        });
+        await _controller?.start();
+        return;
+      }
       // Brücke in die alte App: echte Wegpunkt-Liste der Touren.
       ref.read(waypointListProvider.notifier).state = points
           .map((p) => Waypoint(lat: p.lat, lng: p.lng, label: p.label))
           .toList(growable: false);
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: context.palette.accentPrimary,
           content: Text('Route mit ${points.length} Punkten übernommen.'),
         ),
       );
-      Navigator.of(context).pushReplacementNamed('/waypoints');
+      // Zurück zum Aufrufer statt erneut '/waypoints' zu pushen: die Liste
+      // liegt bereits darunter und zeigt die Punkte sofort an.
+      Navigator.of(context).pop(true);
     } on PairingException catch (error) {
       if (mounted) {
         setState(() {
@@ -97,6 +110,35 @@ class _RouteScanScreenState extends ConsumerState<RouteScanScreen> {
         await _controller?.start();
       }
     }
+  }
+
+  /// Fragt nach, bevor eine bestehende Route überschrieben wird.
+  /// Leere Liste -> keine Rückfrage nötig.
+  Future<bool> _confirmReplace(int incoming) async {
+    final existing = ref.read(waypointListProvider);
+    if (existing.isEmpty) return true;
+    final bool? replace = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: context.palette.bgSurface,
+        title: const Text('Bestehende Route ersetzen?'),
+        content: Text(
+          'Es sind bereits ${existing.length} Wegpunkte geplant. '
+          'Der Plan mit $incoming Punkten ersetzt sie.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Behalten'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Ersetzen'),
+          ),
+        ],
+      ),
+    );
+    return replace ?? false;
   }
 
   @override
