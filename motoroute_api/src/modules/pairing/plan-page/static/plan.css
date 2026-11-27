@@ -1,0 +1,56 @@
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0;
+         padding: 24px; background: #f4f4f5; color: #18181b; }
+  main { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 16px;
+         padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p, li { line-height: 1.5; }
+  .muted { color: #52525b; font-size: 14px; }
+  #search { display: flex; gap: 8px; margin: 12px 0 8px; }
+  #search input { flex: 1; min-width: 0; padding: 10px 12px; font-size: 15px;
+                  border: 1px solid #d4d4d8; border-radius: 10px; }
+  #search button { margin: 0; padding: 10px 14px; font-size: 15px; }
+  #search-status { margin: 0 0 8px; min-height: 18px; }
+  #results { list-style: none; margin: 0 0 12px; padding: 0; }
+  #results li { margin: 0 0 4px; }
+  #results button { width: 100%; margin: 0; padding: 8px 10px; text-align: left;
+                    font-size: 14px; background: #e4e4e7; color: #18181b; border-radius: 8px; }
+  #results .sub { display: block; font-size: 12px; opacity: .7; font-weight: 400; }
+  code { background: #f4f4f5; padding: 2px 6px; border-radius: 6px; }
+  #map { height: 340px; margin: 0 0 6px; border: 1px solid #d4d4d8; border-radius: 12px;
+         background: #f4f4f5; z-index: 0; }
+  #summary { margin: 0 0 4px; font-weight: 500; }
+  #pointlist { list-style: none; margin: 0 0 8px; padding: 0; }
+  #pointlist li { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+                  border-top: 1px solid #e4e4e7; }
+  #pointlist .nr { flex: none; width: 24px; height: 24px; border-radius: 50%;
+                   background: #18181b; color: #fff; font-size: 12px; font-weight: 600;
+                   display: flex; align-items: center; justify-content: center; }
+  #pointlist input.name { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px;
+                          border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; }
+  input.name:focus { outline: 2px solid #18181b; outline-offset: 0; }
+  .leaflet-popup-content input.popup-name { width: 100%; box-sizing: border-box;
+                                            padding: 4px 6px; margin: 0 0 6px;
+                                            font-size: 14px; border: 1px solid #d4d4d8;
+                                            border-radius: 6px; }
+  .smallbtn { margin: 0 0 12px; padding: 4px 9px; font-size: 14px; background: #e4e4e7;
+              color: #18181b; border-radius: 8px; line-height: 1.2; }
+  .smallbtn:disabled { opacity: .35; cursor: default; }
+  #pointlist .smallbtn { margin: 0; }
+  .numbered-pin span { display: flex; align-items: center; justify-content: center;
+                       width: 26px; height: 26px; border-radius: 50%; background: #18181b;
+                       color: #fff; font-size: 13px; font-weight: 600; border: 2px solid #fff;
+                       box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  #map-hint { margin: 0 0 16px; }
+  .linkish { background: none; border: 0; padding: 0; color: #b91c1c; cursor: pointer;
+             font-size: 13px; text-decoration: underline; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 220px; font: 14px/1.5 ui-monospace, monospace;
+             padding: 12px; border: 1px solid #d4d4d8; border-radius: 10px; resize: vertical; }
+  button { margin-top: 12px; padding: 12px 18px; font-size: 16px; border: 0; border-radius: 10px;
+           background: #18181b; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .qr { text-align: center; }
+  .qr img { width: 220px; height: 220px; image-rendering: pixelated; }
+  #status { margin-top: 12px; font-size: 14px; min-height: 20px; }
+  .ok { color: #15803d; } .err { color: #b91c1c; }

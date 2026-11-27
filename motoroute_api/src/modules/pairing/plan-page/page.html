@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Route planen – MotoRoute</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="/plan/assets/plan.css">
+</head>
+<body data-token="{{TOKEN}}"><main>
+<h1>Route am Computer planen</h1>
+<p class="muted">Code <strong>{{TOKEN}}</strong> · gültig für 2 Stunden · gespeichert: <span id="count">{{COUNT}}</span></p>
+<form id="search" autocomplete="off">
+  <input id="q" type="search" placeholder="Ort suchen, z. B. Eibsee" aria-label="Ort suchen">
+  <button id="search-btn" type="submit">Suchen</button>
+</form>
+<div id="search-status" class="muted"></div>
+<ul id="results"></ul>
+<div id="map" role="application" aria-label="Karte: Klick setzt einen Wegpunkt"></div>
+<p class="muted" id="summary"></p>
+<p class="muted" id="map-hint">In die Karte klicken setzt einen Punkt, Marker ziehen verschiebt ihn -
+  die Zeilen darunter werden automatisch mitgeführt (und bleiben der Fallback).
+  Namen ändert man direkt in der Liste oder im Popup des Markers.</p>
+<ul id="pointlist"></ul>
+<button id="undo" type="button" class="smallbtn" disabled>Letzten Punkt zurücknehmen</button>
+<div class="row">
+  <div class="qr">
+    <img src="{{QR_DATA_URL}}" alt="QR-Code mit dem Plan-Link" width="220" height="220">
+    <p class="muted">In der App scannen:<br>Wegpunkte → „Am Computer planen“</p>
+  </div>
+  <div style="flex:1; min-width: 260px;">
+    <p>Punkte eintragen — eine Zeile pro Wegpunkt:<br>
+      <code>Breite, Länge, Name</code><br>
+      <span class="muted">z.&nbsp;B. <code>47.4211, 10.9848, Eibsee</code></span></p>
+    <textarea id="points" spellcheck="false" placeholder="47.4211, 10.9848, Eibsee">{{PREFILL}}</textarea>
+    <button id="save" type="button">Punkte speichern</button>
+    <div id="status"></div>
+    <p class="muted">Link zum Abtippen:<br><code>{{PLAN_URL}}</code></p>
+  </div>
+</div>
+</main>
+<script src="/plan/assets/plan.js"></script>
+</body>
+</html>

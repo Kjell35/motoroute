@@ -1,23 +1,19 @@
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
+import { readPlanAsset, renderTemplate } from './plan-page/assets';
 import { PairingPlanPageController } from './pairing-plan-page.controller';
 import { PairingService } from './pairing.service';
 
 /**
- * Sichert das gerenderte HTML der Plan-Seite ab.
+ * Sichert die Plan-Seite ab: das gerenderte HTML (Werte pro Plan) und die
+ * ausgelagerten Dateien (CSS, Skript), die vorher als Template-String im
+ * Controller steckten.
  *
- * Zwei Fehler sind bisher nur beim Rumklicken aufgefallen und sollen die Suite
- * künftig abfangen:
- *  1. ein Syntaxfehler im Inline-Skript - die Seite lud, aber kein Marker,
- *     keine Liste und kein Klick wurde mehr verarbeitet;
+ * Zwei Fehler waren bisher nur beim Rumklicken zu sehen und sollen hier
+ * hängenbleiben:
+ *  1. ein Syntaxfehler im Skript - die Seite lud, reagierte aber nicht mehr;
  *  2. ein Prefill mit literalen `\n` - das Textfeld zeigte nach dem Laden den
- *     Backslash statt Zeilenumbrüchen, also einen einzigen kaputten Eintrag.
- *
- * Deshalb prüft dieser Test die ausgelieferte Zeichenkette: echte Umbrüche im
- * <textarea>, die Bausteine der Punktliste (Nummer, Namensfeld, ▲/▼/×) und den
- * nummerierten divIcon der Marker. Das Inline-Skript wird zusätzlich durch
- * `new Function` kompiliert (ohne es auszuführen) - genau das hätte Fehler 1
- * gemeldet.
+ *     Backslash statt Zeilenumbrüchen.
  */
 type Point = { label: string; detail: string | null; lat: number; lon: number };
 
@@ -42,12 +38,10 @@ async function renderPlan(points: Point[] | null): Promise<{ status: number; htm
   };
 }
 
-function inlineScript(html: string): string {
-  const start = html.indexOf('<script>');
-  const end = html.indexOf('</script>', start);
-  expect(start).toBeGreaterThan(-1);
-  expect(end).toBeGreaterThan(start);
-  return html.slice(start + '<script>'.length, end);
+function textareaOf(html: string): string {
+  const textarea = /<textarea[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1];
+  expect(textarea).toBeDefined();
+  return textarea!;
 }
 
 describe('Plan-Seite: gerendertes HTML', () => {
@@ -58,10 +52,9 @@ describe('Plan-Seite: gerendertes HTML', () => {
 
   it('schreibt den Prefill mit echten Zeilenumbrüchen ins Textfeld', async () => {
     const { html } = await renderPlan(points);
-    const textarea = /<textarea[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1];
+    const textarea = textareaOf(html);
 
-    expect(textarea).toBeDefined();
-    expect(textarea!.split('\n')).toEqual([
+    expect(textarea.split('\n')).toEqual([
       '47.4211, 10.9848, Eibsee',
       '47.5, 11.5, Zugspitze',
     ]);
@@ -73,49 +66,91 @@ describe('Plan-Seite: gerendertes HTML', () => {
     const { html } = await renderPlan([
       { lat: 47.5, lon: 11.5, label: 'Zugspitze & Co <b>', detail: null },
     ]);
-    const textarea = /<textarea[^>]*>([\s\S]*?)<\/textarea>/.exec(html)![1];
 
-    expect(textarea).toBe('47.5, 11.5, Zugspitze &amp; Co &lt;b&gt;');
+    expect(textareaOf(html)).toBe('47.5, 11.5, Zugspitze &amp; Co &lt;b&gt;');
   });
 
-  it('liefert Punktliste, nummerierte Marker und die Sortier-/Löschknöpfe aus', async () => {
+  it('setzt Code, Anzahl und QR-Bild in die Vorlage ein', async () => {
     const { html } = await renderPlan(points);
 
-    // Die Liste selbst und der Aufbau ihrer Zeilen: Nummer, Namensfeld, Knöpfe.
+    expect(html).toContain('data-token="K7G7YY"');
+    expect(html).toContain('id="count">2<');
+    expect(html).toContain('<img src="data:image/png;base64,');
+    expect(html).toContain('https://api.example.org/plan/K7G7YY');
+    // Keine unaufgelösten Platzhalter - sonst stünde das im Browser.
+    expect(html).not.toMatch(/\{\{[A-Z_]+\}\}/);
+  });
+
+  it('bindet CSS und Skript als statische Dateien ein', async () => {
+    const { html } = await renderPlan(points);
+
+    expect(html).toContain('<link rel="stylesheet" href="/plan/assets/plan.css">');
+    expect(html).toContain('<script src="/plan/assets/plan.js"></script>');
+    // Nichts mehr inline: weder <style> noch ein zweiter Skriptblock.
+    expect(html).not.toContain('<style>');
+    expect(html.match(/<script/g)).toHaveLength(2); // Leaflet + plan.js
+    // Die Liste, in die das Skript seine Zeilen schreibt, muss da sein.
     expect(html).toContain('<ul id="pointlist"></ul>');
-    expect(html).toMatch(/function renderList\(points\)\s*\{[\s\S]*?nr\.className = 'nr';/);
-    expect(html).toMatch(/name\.className = 'name';/);
-    expect(html).toContain("listButton('▲', 'Nach oben', index === 0,");
-    expect(html).toContain("listButton('▼', 'Nach unten', index === points.length - 1,");
-    expect(html).toContain("listButton('×', 'Punkt löschen', false,");
+  });
+
+  it('liefert für abgelaufene Pläne die 404-Seite', async () => {
+    const { status, html } = await renderPlan(null);
+
+    expect(status).toBe(404);
+    expect(html).toContain('Dieser Plan ist abgelaufen');
+    expect(html).toContain('https://api.example.org/plan/K7G7YY');
+    expect(html).not.toMatch(/\{\{[A-Z_]+\}\}/);
+  });
+});
+
+describe('Plan-Seite: ausgelagerte Dateien', () => {
+  it('baut Punktliste, nummerierte Marker und Sortier-/Löschknöpfe im Skript auf', () => {
+    const script = readPlanAsset('static/plan.js');
+
+    // Die Zeile: Nummer, Namensfeld, Knöpfe.
+    expect(script).toMatch(/function renderList\(points\)\s*\{[\s\S]*?nr\.className = 'nr';/);
+    expect(script).toMatch(/name\.className = 'name';/);
+    expect(script).toContain("listButton('▲', 'Nach oben', index === 0,");
+    expect(script).toContain("listButton('▼', 'Nach unten', index === points.length - 1,");
+    expect(script).toContain("listButton('×', 'Punkt löschen', false,");
     // Die Knöpfe müssen auch etwas tun, nicht nur da sein.
-    expect(html).toMatch(/movePoint\(index, -1\)/);
-    expect(html).toMatch(/movePoint\(index, 1\)/);
-    expect(html).toMatch(/removePoint\(index\)/);
+    expect(script).toMatch(/movePoint\(index, -1\)/);
+    expect(script).toMatch(/movePoint\(index, 1\)/);
+    expect(script).toMatch(/removePoint\(index\)/);
 
     // Marker: divIcon mit der Position in der Tour als Zahl.
-    expect(html).toMatch(/className: 'numbered-pin'/);
-    expect(html).toMatch(/html: '<span>' \+ \(index \+ 1\) \+ '<\/span>'/);
+    expect(script).toMatch(/className: 'numbered-pin'/);
+    expect(script).toMatch(/html: '<span>' \+ \(index \+ 1\) \+ '<\/span>'/);
     // Und die Liste wird beim Zeichnen der Marker mit aufgebaut, sonst
     // entstünde sie nur beim Laden und nach Aktionen nie wieder.
-    expect(html).toMatch(/function drawMarkers\(points\)\s*\{\s*syncRoute\(points\);\s*renderList\(points\);/);
+    expect(script).toMatch(/function drawMarkers\(points\)\s*\{\s*syncRoute\(points\);\s*renderList\(points\);/);
+
+    // Der Plan-Code kommt aus dem data-Attribut, das Skript ist statisch.
+    expect(script).toContain("document.body.getAttribute('data-token')");
   });
 
-  it('rendert ohne Punkte ein leeres Textfeld', async () => {
-    const { html } = await renderPlan([]);
-    const textarea = /<textarea[^>]*>([\s\S]*?)<\/textarea>/.exec(html)![1];
+  it('liefert ein syntaktisch gültiges Skript aus', () => {
+    const script = readPlanAsset('static/plan.js');
 
-    expect(textarea).toBe('');
-    expect(html).toContain('id="count">0<');
-  });
-
-  it('liefert ein syntaktisch gültiges Inline-Skript aus', async () => {
-    const { html } = await renderPlan(points);
-    const script = inlineScript(html);
-
-    expect(script).toContain('"K7G7YY"');
+    expect(script).toContain('function drawMarkers');
     // Kompiliert, ohne es auszuführen: meldet Syntaxfehler wie den, der die
     // Seite zuvor still lahmlegte.
     expect(() => new Function(script)).not.toThrow();
+  });
+
+  it('enthält das Stylesheet der Seite', () => {
+    const css = readPlanAsset('static/plan.css');
+
+    expect(css).toContain('#pointlist .nr');
+    expect(css).toContain('.numbered-pin span');
+    expect(css).toContain('#map {');
+    expect(css).not.toContain('<style>');
+  });
+});
+
+describe('Plan-Seite: Vorlagen füllen', () => {
+  it('ersetzt Platzhalter und meldet fehlende Werte', () => {
+    expect(renderTemplate('a {{X}} b', { X: '1' })).toBe('a 1 b');
+    expect(() => renderTemplate('a {{FEHLT}} b', { X: '1' })).toThrow(/FEHLT/);
   });
 });

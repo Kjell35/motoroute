@@ -4,6 +4,7 @@ import * as dotenv from 'dotenv';
 // merged process.env ÜBER die .env-Datei, ohne override gewinnt der
 // Shell-Wert und app.listen(0) bindet einen Zufallsport.
 dotenv.config({ override: true });
+import { join } from 'node:path';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -19,6 +20,16 @@ async function bootstrap() {
   // greifen und nach 5 Aufrufen die ganze Welt aussperren. Ein Hop passt zu
   // Render (ein Proxy vor dem Dienst).
   app.set('trust proxy', 1);
+
+  // Plan-Seite: CSS und Skript liegen als eigene Dateien unter
+  // src/modules/pairing/plan-page/static (nest-cli.json kopiert sie nach
+  // dist). Das HTML rendert der Controller mit Platzhaltern; diese beiden
+  // Dateien sind für alle Pläne gleich und werden deshalb hier ausgeliefert,
+  // nicht bei jeder Anfrage neu durch den Controller geschickt.
+  app.useStaticAssets(join(__dirname, 'modules/pairing/plan-page/static'), {
+    prefix: '/plan/assets/',
+    index: false,
+  });
 
   // whitelist strips unknown properties instead of erroring on them -
   // forbidNonWhitelisted flips that to a hard 400, which we want here:
