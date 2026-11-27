@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -212,5 +213,129 @@ describe('AuthService', () => {
     expect((err as ForbiddenException).getStatus()).toBe(403);
     expect((err as ForbiddenException).message).toContain('noch nicht bestätigt');
     expect((err as ForbiddenException).message).not.toContain('Passwort falsch');
+  });
+
+  it('Login: Rate-Limit -> 429 mit eigenem Hinweis statt 401', async () => {
+    const { service, signIn } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Request rate limit reached',
+        status: 429,
+        code: 'over_request_rate_limit',
+      },
+    });
+
+    const err = await service
+      .login({ email: 'rider@example.de', password: 'geheim123' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HttpException);
+    expect((err as HttpException).getStatus()).toBe(429);
+    expect((err as HttpException).getResponse()).toMatchObject({ error: 'RATE_LIMITED' });
+    expect(JSON.stringify((err as HttpException).getResponse())).toContain('Zu viele Versuche');
+  });
+
+  it('Login: E-Mail-Versandlimit -> 429 mit E-Mail-Hinweis', async () => {
+    const { service, signIn } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Email rate limit exceeded',
+        status: 429,
+        code: 'over_email_send_rate_limit',
+      },
+    });
+
+    const err = await service
+      .login({ email: 'rider@example.de', password: 'geheim123' })
+      .catch((e: unknown) => e);
+    expect((err as HttpException).getStatus()).toBe(429);
+    expect(JSON.stringify((err as HttpException).getResponse())).toContain('Zu viele E-Mails');
+  });
+
+  it('Registrierung: Netzwerkfehler -> 503 statt 401', async () => {
+    const { service, signUp } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signUp.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthRetryableFetchError',
+        message: 'TypeError: fetch failed',
+        status: 0,
+      },
+    });
+
+    await expect(
+      service.register({ email: 'neu@example.de', password: 'geheim123' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('Registrierung: Rate-Limit -> 429 statt 401', async () => {
+    const { service, signUp } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signUp.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Email rate limit exceeded',
+        status: 429,
+        code: 'over_email_send_rate_limit',
+      },
+    });
+
+    const err = await service
+      .register({ email: 'neu@example.de', password: 'geheim123' })
+      .catch((e: unknown) => e);
+    expect((err as HttpException).getStatus()).toBe(429);
+  });
+
+  it('Refresh: GoTrue 5xx -> 503 statt "Sitzung abgelaufen"', async () => {
+    const { service, refresh } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    refresh.mockResolvedValue({
+      data: { session: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Internal Server Error',
+        status: 500,
+        code: 'unexpected_failure',
+      },
+    });
+
+    await expect(service.refresh('rt')).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('Refresh: abgelaufenes Token bleibt 401', async () => {
+    const { service, refresh } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    refresh.mockResolvedValue({
+      data: { session: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Invalid Refresh Token: Refresh Token Not Found',
+        status: 400,
+        code: 'refresh_token_not_found',
+      },
+    });
+
+    const err = await service.refresh('rt').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    expect((err as UnauthorizedException).getStatus()).toBe(401);
   });
 });

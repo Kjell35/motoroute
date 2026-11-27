@@ -1,6 +1,8 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   ServiceUnavailableException,
   Logger,
@@ -150,22 +152,68 @@ export class AuthService {
     }
     return false;
   }
+
+  /** GoTrue-Codes fuer Drosselung (HTTP 429). */
+  private static readonly RATE_LIMIT_CODES = new Set([
+    'over_request_rate_limit',
+    'over_email_send_rate_limit',
+    'over_sms_send_rate_limit',
+  ]);
+
+  private isRateLimited(error: AuthError): boolean {
+    if (error.status === 429) {
+      return true;
+    }
+    return typeof error.code === 'string' && AuthService.RATE_LIMIT_CODES.has(error.code);
+  }
+
+  /**
+   * Uebersetzt Dienst-Probleme von GoTrue in eigene HTTP-Fehler, damit der
+   * Client sie nicht als falsche Zugangsdaten deutet:
+   * - 429 RATE_LIMITED bei Drosselung (zu viele Versuche / zu viele Mails),
+   * - 503, wenn GoTrue nicht antwortet (Netzwerkfehler oder 5xx).
+   *
+   * Fachliche Fehler (falsches Passwort, ungueltiges Token, fehlende
+   * Bestaetigung) bleiben beim Aufrufer. Gilt fuer login, register und
+   * refresh gleichermassen.
+   */
+  private throwIfServiceProblem(error: AuthError, context: string): void {
+    if (this.isRateLimited(error)) {
+      const emailLimit = error.code === 'over_email_send_rate_limit';
+      this.logger.warn(
+        `${context}: GoTrue-Rate-Limit (${error.code ?? '-'}, status=${error.status ?? '-'})`,
+      );
+      throw new HttpException(
+        {
+          error: 'RATE_LIMITED',
+          message: emailLimit
+            ? 'Zu viele E-Mails angefordert - bitte in einigen Minuten erneut versuchen'
+            : 'Zu viele Versuche - bitte kurz warten und erneut versuchen',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    if (this.isAuthServiceFailure(error)) {
+      this.logger.error(
+        `${context}: Anmeldedienst nicht erreichbar (${error.name}, status=${error.status ?? '-'}, code=${error.code ?? '-'}): ${error.message}`,
+      );
+      throw new ServiceUnavailableException(
+        'Anmeldung derzeit nicht möglich - der Anmeldedienst antwortet nicht. Bitte später erneut versuchen.',
+      );
+    }
+  }
+
   async login(dto: LoginDto): Promise<AuthSession> {
     const client = this.requireClient();
     const { data, error } = await client.auth.signInWithPassword({
       email: dto.email,
       password: dto.password,
     });
-    if (error && this.isAuthServiceFailure(error)) {
-      // Kein Credential-Problem: GoTrue antwortet nicht (Netz/5xx) oder der
-      // Transport ist gescheitert. Frueher wurde auch das als "falsches
-      // Passwort" gemeldet - der Nutzer drehte dann endlos an seinen Daten.
-      this.logger.error(
-        `login: Anmeldedienst nicht erreichbar (${error.name}, status=${error.status ?? '-'}, code=${error.code ?? '-'}): ${error.message}`,
-      );
-      throw new ServiceUnavailableException(
-        'Anmeldung derzeit nicht möglich - der Anmeldedienst antwortet nicht. Bitte später erneut versuchen.',
-      );
+    if (error) {
+      // Weder falsche Daten noch fehlende Bestaetigung: Drosselung (429)
+      // oder ein nicht antwortender Dienst (503). Frueher landete beides
+      // als "falsches Passwort" beim Nutzer.
+      this.throwIfServiceProblem(error, 'login');
     }
     if (error?.code === 'email_not_confirmed') {
       // Das Konto existiert, die Adresse ist nur unbestätigt. Als
@@ -207,6 +255,9 @@ export class AuthService {
           await this.provisionUser(signIn.user.id, dto.email, dto.displayName);
           return this.toSession(signIn.session, signIn.user);
         }
+        if (signInError) {
+          this.throwIfServiceProblem(signInError, 'register/sign-in');
+        }
         throw new UnauthorizedException(
           'Konto erstellt - bitte melde dich mit E-Mail und Passwort an',
         );
@@ -228,6 +279,7 @@ export class AuthService {
     });
 
     if (error) {
+      this.throwIfServiceProblem(error, 'register');
       const alreadyExists = /already|exists|registered/i.test(error.message);
       if (alreadyExists) {
         throw new ConflictException('Diese E-Mail ist bereits registriert');
@@ -250,6 +302,11 @@ export class AuthService {
   async refresh(refreshToken: string): Promise<AuthSession> {
     const client = this.requireClient();
     const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
+    if (error) {
+      // Nur ein fachlich ungueltiges Token bedeutet "abgelaufen". Ein
+      // Netz-/5xx-Fehler darf den Client nicht ausloggen, sondern ist 503.
+      this.throwIfServiceProblem(error, 'refresh');
+    }
     if (error || !data.session) {
       throw new UnauthorizedException('Sitzung abgelaufen - bitte neu anmelden');
     }
