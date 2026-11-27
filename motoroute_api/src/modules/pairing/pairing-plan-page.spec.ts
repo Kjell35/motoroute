@@ -182,6 +182,21 @@ function lines(doc: any): string[] {
   return doc.getElementById('points').value.split('\n');
 }
 
+function legKm(doc: any, row: number): number {
+  const text = rows(doc)[row].querySelector('.leg').textContent as string;
+  return Number(text.replace('≈', '').replace('km', '').replace(',', '.').trim());
+}
+
+function luftlinie(a: Point, b: Point): number {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLon = (b.lon - a.lon) * rad;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371.0088 * Math.asin(Math.sqrt(s));
+}
+
 function pressEnter(win: any, input: any): void {
   input.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 }
@@ -322,6 +337,11 @@ describe('Plan-Seite in jsdom: Bedienung', () => {
 });
 
 describe('Plan-Seite in jsdom: Etappen', () => {
+  const equatorPoints: Point[] = [
+    { lat: 0, lon: 0, label: 'A', detail: null },
+    { lat: 0, lon: 1, label: 'B', detail: null },
+    { lat: 0, lon: 3, label: 'C', detail: null },
+  ];
   // Punkte auf dem Äquator: 1 Längengrad sind 111,19 km - gut nachzurechnen.
   const equator: Point[] = [
     { lat: 0, lon: 0, label: 'A', detail: null },
@@ -338,10 +358,57 @@ describe('Plan-Seite in jsdom: Etappen', () => {
     const leg = doc.querySelector('#pointlist .leg');
 
     // A→B ein Längengrad, B→C zwei.
-    expect(legs(doc)).toEqual(['→ 111,2 km', '→ 222,4 km']);
+    // 111,2 km Luftlinie ueber 50 km -> Faktor 1,2 -> 133,4 km geschaetzt.
+    expect(legs(doc)).toEqual(['≈ 133,4 km', '≈ 266,9 km']);
     // Die Zeile hat auch ihre eigene Auszeichnung (klein, gedämpft).
     expect(win.getComputedStyle(leg).fontSize).toBe('12px');
     expect(win.getComputedStyle(leg).color).toBe('rgb(82, 82, 91)');
+  });
+
+  it('schätzt in drei Stufen nach Länge der Etappe', async () => {
+    // Punkte auf dem Aequator: 1 Laengengrad sind 111,19 km, also laesst sich
+    // die Luftlinie in Kilometern direkt vorgeben.
+    const grad = (km: number) => km / 111.1949;
+    const punkte: Point[] = [
+      { lat: 0, lon: 0, label: 'A', detail: null },
+      { lat: 0, lon: grad(14.5), label: 'B', detail: null },
+      { lat: 0, lon: grad(30), label: 'C', detail: null },
+      { lat: 0, lon: grad(79), label: 'D', detail: null },
+      { lat: 0, lon: grad(130), label: 'E', detail: null },
+    ];
+    const { doc } = await mountPage(punkte);
+
+    // 14,5 km (unter 15) -> 1,5; 15,5 km -> 1,35; 49 km -> 1,35; 51 km -> 1,2.
+    expect(legKm(doc, 0)).toBeCloseTo(14.5 * 1.5, 0);
+    expect(legKm(doc, 1)).toBeCloseTo(15.5 * 1.35, 0);
+    expect(legKm(doc, 2)).toBeCloseTo(49 * 1.35, 0);
+    expect(legKm(doc, 3)).toBeCloseTo(51 * 1.2, 0);
+    // Jede Etappe traegt die Tilde, keine zeigt die nackte Luftlinie.
+    expect([...doc.querySelectorAll('#pointlist .leg')].map((leg: any) => leg.textContent.slice(0, 2)))
+      .toEqual(['≈ ', '≈ ', '≈ ', '≈ ']);
+  });
+
+  it('weist in der Zusammenfassung Luftlinie und Schätzung getrennt aus', async () => {
+    const { doc } = await mountPage(equatorPoints);
+
+    // 111,2 + 222,4 = 333,6 km Luftlinie, geschaetzt 133,4 + 266,9 = 400,3 km.
+    expect(doc.getElementById('summary').textContent).toBe(
+      '3 Punkte · Luftlinie 333,6 km · geschätzt 400,3 km',
+    );
+  });
+
+  it('fällt bei nicht schätzbaren Etappen auf die Luftlinie zurück', async () => {
+    // Zwei gleiche Punkte: 0 km - dafuer gibt es keinen Faktor.
+    const gleich: Point[] = [
+      { lat: 47.5, lon: 11.5, label: 'Start', detail: null },
+      { lat: 47.5, lon: 11.5, label: 'Ziel', detail: null },
+    ];
+    const { doc } = await mountPage(gleich);
+    const leg = rows(doc)[0].querySelector('.leg');
+
+    expect(leg.textContent).toBe('→ 0 m');
+    expect(leg.getAttribute('title')).toBe('Luftlinie - zu kurz für eine Schätzung');
+    expect(doc.getElementById('summary').textContent).toBe('2 Punkte · Luftlinie 0 m');
   });
 
   it('lässt die letzte Zeile ohne Etappe', async () => {
@@ -350,7 +417,7 @@ describe('Plan-Seite in jsdom: Etappen', () => {
     expect(rows(doc)[2].querySelector('.leg')).toBeNull();
     expect(rows(doc)[0].querySelector('.leg')).not.toBeNull();
     expect(rows(doc)[0].querySelector('.leg').getAttribute('title')).toBe(
-      'Luftlinie zum nächsten Punkt',
+      'Geschätzt: Luftlinie 111,2 km × 1,2 - nicht geroutet',
     );
   });
 
@@ -360,7 +427,7 @@ describe('Plan-Seite in jsdom: Etappen', () => {
     rows(doc)[0].querySelectorAll('button')[1].click(); // ▼: A und B tauschen
 
     expect(labels(doc)).toEqual(['B', 'A', 'C']);
-    expect(legs(doc)).toEqual(['→ 111,2 km', '→ 333,6 km']);
+    expect(legs(doc)).toEqual(['≈ 133,4 km', '≈ 400,3 km']);
   });
 });
 
@@ -412,8 +479,9 @@ describe('Plan-Seite in jsdom: Löschen', () => {
     expect(markers[0].options.icon.className).toContain('start');
     expect(markers[2].options.icon.className).toContain('end');
     // Etappen in der neuen Richtung, Gesamtstrecke bleibt gleich.
-    expect(rows(doc)[0].querySelector('.leg').textContent).toBe('→ 46,4 km');
-    expect(rows(doc)[1].querySelector('.leg').textContent).toBe('→ 39,7 km');
+    // 46,4 km und 39,7 km Luftlinie liegen in der Stufe bis 50 km (Faktor 1,35).
+    expect(legKm(doc, 0)).toBeCloseTo(luftlinie(threePoints[2], threePoints[1]) * 1.35, 1);
+    expect(legKm(doc, 1)).toBeCloseTo(luftlinie(threePoints[1], threePoints[0]) * 1.35, 1);
     expect(rows(doc)[2].querySelector('.leg')).toBeNull();
     expect(doc.getElementById('summary').textContent).toBe(summary);
     expect(doc.getElementById('status').textContent).toBe(

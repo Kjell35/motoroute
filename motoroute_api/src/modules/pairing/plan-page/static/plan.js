@@ -207,14 +207,61 @@
     return km.toFixed(1).replace('.', ',') + ' km';
   }
 
+  // Strassenkilometer schaetzen: Luftlinie mal Erfahrungswert, in drei Stufen.
+  // Kurze Etappen liegen haeufiger im Detail (Ortsdurchfahrten, Umwege),
+  // lange verlaufen eher auf Hauptstrassen - daher kein einzelner Faktor.
+  // Die Werte stammen aus zwölf gemessenen Etappen (Faktor 1,12 bis 1,36 auf
+  // Strassen, 1,5 bis 2,3 abseits davon); geschaetzt bleibt geschaetzt.
+  function roadFactor(airKm) {
+    if (airKm < 15) return 1.5;
+    if (airKm <= 50) return 1.35;
+    return 1.2;
+  }
+
+  // null heisst: keine Schaetzung moeglich (z. B. zwei gleiche Punkte) - dann
+  // bleibt die Luftlinie stehen, ohne Tilde.
+  function estimateKm(airKm) {
+    if (!isFinite(airKm) || airKm <= 0) return null;
+    return airKm * roadFactor(airKm);
+  }
+
+  function factorText(factor) {
+    return String(factor).replace('.', ',');
+  }
+
+  // Die Tilde macht sichtbar, dass die Zahl geschaetzt ist und nicht geroutet.
+  function legText(airKm) {
+    var estimate = estimateKm(airKm);
+    if (estimate === null) return '→ ' + formatKm(airKm);
+    return '≈ ' + formatKm(estimate);
+  }
+
+  function legTitle(airKm) {
+    var estimate = estimateKm(airKm);
+    if (estimate === null) return 'Luftlinie - zu kurz für eine Schätzung';
+    return 'Geschätzt: Luftlinie ' + formatKm(airKm) + ' × ' + factorText(roadFactor(airKm)) +
+      ' - nicht geroutet';
+  }
+
   function updateSummary(points) {
     if (!summary) return;
     if (!points.length) { summary.textContent = 'Noch keine Punkte.'; return; }
     var parts = [points.length === 1 ? '1 Punkt' : points.length + ' Punkte'];
     if (points.length > 1) {
-      var km = 0;
-      for (var i = 1; i < points.length; i += 1) km += distanceKm(points[i - 1], points[i]);
-      parts.push('Luftlinie ' + formatKm(km));
+      var air = 0;
+      var estimated = 0;
+      var hasEstimate = false;
+      for (var i = 1; i < points.length; i += 1) {
+        var leg = distanceKm(points[i - 1], points[i]);
+        air += leg;
+        var estimate = estimateKm(leg);
+        if (estimate === null) { estimated += leg; } else {
+          estimated += estimate;
+          hasEstimate = true;
+        }
+      }
+      parts.push('Luftlinie ' + formatKm(air));
+      if (hasEstimate) parts.push('geschätzt ' + formatKm(estimated));
     }
     summary.textContent = parts.join(' · ');
   }
@@ -287,8 +334,9 @@
       if (index < points.length - 1) {
         var leg = document.createElement('span');
         leg.className = 'leg';
-        leg.textContent = '→ ' + formatKm(distanceKm(p, points[index + 1]));
-        leg.title = 'Luftlinie zum nächsten Punkt';
+        var airKm = distanceKm(p, points[index + 1]);
+        leg.textContent = legText(airKm);
+        leg.title = legTitle(airKm);
         row.appendChild(leg);
       }
       row.appendChild(listButton('▲', 'Nach oben', index === 0, function () { movePoint(index, -1); }));
