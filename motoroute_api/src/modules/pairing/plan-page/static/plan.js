@@ -244,6 +244,15 @@
     return button;
   }
 
+  // Nach dem Umsortieren den Fokus mitnehmen: sonst landet die Tastatur
+  // nach dem Neuaufbau der Liste wieder am Dokumentanfang.
+  function focusRow(index) {
+    if (!list) return;
+    var rows = list.querySelectorAll('li');
+    var input = rows[index] ? rows[index].querySelector('input.name') : null;
+    if (input) input.focus();
+  }
+
   function renderList(points) {
     if (!list) return;
     list.innerHTML = '';
@@ -262,6 +271,8 @@
       name.className = 'name';
       name.value = p.label;
       name.setAttribute('aria-label', 'Name von Punkt ' + (index + 1));
+      // Screenreader wissen so, dass der Punkt per Tastatur wandern kann.
+      name.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown');
       name.addEventListener('change', function () { renamePoint(index, name.value, name); });
       name.addEventListener('keydown', function (event) {
         // Enter uebernimmt sofort: auf das change-Event beim Blur allein ist
@@ -283,6 +294,21 @@
       row.appendChild(listButton('▲', 'Nach oben', index === 0, function () { movePoint(index, -1); }));
       row.appendChild(listButton('▼', 'Nach unten', index === points.length - 1, function () { movePoint(index, 1); }));
       row.appendChild(listButton('×', 'Punkt löschen', false, function () { removePoint(index); }));
+      // Tastatur: Alt+Pfeil verschiebt den Punkt, in dem der Cursor steht.
+      // Ohne Alt bleibt der Pfeil das, was er im Textfeld ist - Cursor bewegen.
+      row.addEventListener('keydown', function (event) {
+        if (!event.altKey) return;
+        var step = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+        if (!step) return;
+        event.preventDefault();
+        var target = index + step;
+        if (target < 0 || target >= points.length) {
+          show(step < 0 ? 'Das ist schon der erste Punkt.' : 'Das ist schon der letzte Punkt.');
+          return;
+        }
+        movePoint(index, step);
+        focusRow(target);
+      });
       list.appendChild(row);
     });
     // Der Undo-Knopf haengt am Stapel (updateUndoButton), nicht an der

@@ -80,9 +80,14 @@
   @media (max-width: 480px) {
     body { padding: 12px; }
     main { padding: 16px; border-radius: 12px; }
-    #pointlist li { gap: 6px; }
+    #pointlist li { gap: 4px; }
     #pointlist .nr { width: 22px; height: 22px; font-size: 11px; }
     #pointlist input.name { padding: 5px 6px; }
     #pointlist .leg { font-size: 11px; color: #a1a1aa; }
-    #pointlist .smallbtn { padding: 4px 6px; font-size: 13px; }
+    /* Fingerfreundlich: rund 32 px Kantenlaenge fuer ▲▼×, ohne dass die
+       Zeile umbricht. Die Glyphen werden darin zentriert. */
+    #pointlist .smallbtn { min-width: 32px; min-height: 32px; padding: 0 4px;
+                           font-size: 15px; line-height: 1;
+                           display: inline-flex; align-items: center;
+                           justify-content: center; }
   }

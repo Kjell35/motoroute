@@ -508,6 +508,95 @@ describe('Plan-Seite in jsdom: Löschen', () => {
   });
 });
 
+describe('Plan-Seite in jsdom: Tastatur und Vorlesen', () => {
+  function taste(win: any, input: any, key: string, altKey: boolean): void {
+    input.dispatchEvent(
+      new win.KeyboardEvent('keydown', { key, altKey, bubbles: true }),
+    );
+  }
+
+  it('verschiebt einen Punkt mit Alt+Pfeil nach unten', async () => {
+    const { doc, win } = await mountPage(threePoints);
+    const input = rows(doc)[0].querySelector('input.name');
+    input.focus();
+
+    taste(win, input, 'ArrowDown', true);
+
+    expect(labels(doc)).toEqual(['Zugspitze', 'Eibsee', 'Kufstein']);
+    expect(doc.getElementById('status').textContent).toBe('Reihenfolge geändert.');
+    // Der Fokus wandert mit dem Punkt - sonst tippt man nach dem Verschieben
+    // in ein Feld, das es so nicht mehr gibt.
+    expect(doc.activeElement.value).toBe('Eibsee');
+  });
+
+  it('verschiebt mit Alt+Pfeil nach oben', async () => {
+    const { doc, win } = await mountPage(threePoints);
+    const input = rows(doc)[2].querySelector('input.name');
+    input.focus();
+
+    taste(win, input, 'ArrowUp', true);
+
+    expect(labels(doc)).toEqual(['Eibsee', 'Kufstein', 'Zugspitze']);
+    // Kufstein war der dritte Punkt und sitzt jetzt auf Platz 2.
+    expect(doc.activeElement.value).toBe('Kufstein');
+  });
+
+  it('meldet an den Listenrändern, dass nichts mehr geht', async () => {
+    const { doc, win } = await mountPage(threePoints);
+    const erste = rows(doc)[0].querySelector('input.name');
+    erste.focus();
+
+    taste(win, erste, 'ArrowUp', true);
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(doc.getElementById('status').textContent).toBe('Das ist schon der erste Punkt.');
+
+    const letzte = rows(doc)[2].querySelector('input.name');
+    letzte.focus();
+    taste(win, letzte, 'ArrowDown', true);
+    expect(doc.getElementById('status').textContent).toBe('Das ist schon der letzte Punkt.');
+  });
+
+  it('lässt den Pfeil ohne Alt den Cursor bewegen', async () => {
+    const { doc, win } = await mountPage(threePoints);
+    const input = rows(doc)[0].querySelector('input.name');
+    input.focus();
+
+    taste(win, input, 'ArrowDown', false);
+
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(doc.getElementById('status').textContent).toBe('');
+  });
+
+  it('kündigt die Tastenkürzel am Namensfeld an', async () => {
+    const { doc } = await mountPage(threePoints);
+    const input = rows(doc)[0].querySelector('input.name');
+
+    expect(input.getAttribute('aria-keyshortcuts')).toBe('Alt+ArrowUp Alt+ArrowDown');
+  });
+
+  it('macht Statusmeldungen zu Live-Regionen', async () => {
+    const { doc } = await mountPage(threePoints);
+    const status = doc.getElementById('status');
+    const searchStatus = doc.getElementById('search-status');
+
+    expect(status.getAttribute('role')).toBe('status');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(status.getAttribute('aria-atomic')).toBe('true');
+    expect(searchStatus.getAttribute('role')).toBe('status');
+    expect(searchStatus.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('hält die Tap-Flächen im Stylesheet bei 480 px auf 32 px', () => {
+    const css = readPlanAsset('static/plan.css');
+    const mobil = css.slice(css.indexOf('@media (max-width: 480px)'));
+
+    expect(mobil).toMatch(/#pointlist \.smallbtn \{[^}]*min-width: 32px/);
+    expect(mobil).toMatch(/#pointlist \.smallbtn \{[^}]*min-height: 32px/);
+    // Der Hinweis auf die Tastatur steht auch im ausgelieferten HTML.
+    expect(readPlanAsset('page.html')).toContain('verschiebt man den Punkt, in dem der Cursor steht');
+  });
+});
+
 describe('Plan-Seite in jsdom: Rückgängig', () => {
   it('ist beim Laden gesperrt', async () => {
     const { doc } = await mountPage(threePoints);

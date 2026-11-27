@@ -20,7 +20,7 @@
   <input id="q" type="search" placeholder="Ort suchen, z. B. Eibsee" aria-label="Ort suchen">
   <button id="search-btn" type="submit">Suchen</button>
 </form>
-<div id="search-status" class="muted"></div>
+<div id="search-status" class="muted" role="status" aria-live="polite"></div>
 <ul id="results"></ul>
 <div id="map" role="application" aria-label="Karte: Klick setzt einen Wegpunkt"></div>
 <p class="muted" id="summary"></p>
@@ -29,7 +29,8 @@
   Namen ändert man direkt in der Liste oder im Popup des Markers.
   Grün ist der Start, rot das Ziel.
   Gespeichert wird automatisch kurz nach der letzten Änderung; „Punkte speichern“ geht sofort.
-  Läuft der Code ab, legt die Seite beim nächsten Speichern selbst einen neuen an.</p>
+  Läuft der Code ab, legt die Seite beim nächsten Speichern selbst einen neuen an.
+  Mit <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> verschiebt man den Punkt, in dem der Cursor steht.</p>
 <ul id="pointlist"></ul>
 <div class="listactions">
   <button id="undo" type="button" class="smallbtn" disabled title="Nichts rückgängig zu machen">Rückgängig</button>
@@ -46,7 +47,7 @@
       <span class="muted">z.&nbsp;B. <code>47.4211, 10.9848, Eibsee</code></span></p>
     <textarea id="points" spellcheck="false" placeholder="47.4211, 10.9848, Eibsee">{{PREFILL}}</textarea>
     <button id="save" type="button">Punkte speichern</button>
-    <div id="status"></div>
+    <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
     <p class="muted">Link zum Abtippen:<br><code id="plan-url">{{PLAN_URL}}</code></p>
     <p class="muted">GPX fürs Navi (Punkte samt Namen):<br>
       <a id="gpx" href="/plan/{{TOKEN}}/gpx" download>MotoRoute-{{TOKEN}}.gpx</a></p>
