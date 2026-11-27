@@ -64,6 +64,7 @@ function layout(title: string, body: string, extraHead = ''): string {
   code { background: #f4f4f5; padding: 2px 6px; border-radius: 6px; }
   #map { height: 340px; margin: 0 0 6px; border: 1px solid #d4d4d8; border-radius: 12px;
          background: #f4f4f5; z-index: 0; }
+  #summary { margin: 0 0 4px; font-weight: 500; }
   #map-hint { margin: 0 0 16px; }
   .linkish { background: none; border: 0; padding: 0; color: #b91c1c; cursor: pointer;
              font-size: 13px; text-decoration: underline; }
@@ -99,6 +100,7 @@ function planPage(
 <h1>Route am Computer planen</h1>
 <p class="muted">Code <strong>${escapeHtml(token)}</strong> · gültig für 2 Stunden · gespeichert: <span id="count">${points.length}</span></p>
 <div id="map" role="application" aria-label="Karte: Klick setzt einen Wegpunkt"></div>
+<p class="muted" id="summary"></p>
 <p class="muted" id="map-hint">In die Karte klicken setzt einen Punkt, Marker ziehen verschiebt ihn -
   die Zeilen darunter werden automatisch mitgeführt (und bleiben der Fallback).</p>
 <div class="row">
@@ -125,6 +127,7 @@ function planPage(
   var count = document.getElementById('count');
   var mapBox = document.getElementById('map');
   var mapHint = document.getElementById('map-hint');
+  var summary = document.getElementById('summary');
   function show(text, cls) { status.textContent = text; status.className = cls || ''; }
   function parse(text) {
     var points = [];
@@ -147,6 +150,7 @@ function planPage(
   // und Tippen im Textfeld zeichnet die Marker nach.
   var map = null;
   var markerLayer = null;
+  var routeLine = null;
   var lastCount = -1;
   var writeGuard = false;
   var editTimer = null;
@@ -155,12 +159,53 @@ function planPage(
     try { return parse(area.value); } catch (err) { return null; }
   }
 
+  // Luftlinie zwischen zwei Punkten (Haversine, Erdradius 6371,0088 km).
+  // Bewusst ohne Routingdienst: die Linie ist eine Lesehilfe fuer die
+  // Reihenfolge, keine berechnete Strassenstrecke.
+  function distanceKm(a, b) {
+    var rad = Math.PI / 180;
+    var dLat = (b.lat - a.lat) * rad;
+    var dLon = (b.lon - a.lon) * rad;
+    var s = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * 6371.0088 * Math.asin(Math.sqrt(s));
+  }
+
+  function formatKm(km) {
+    if (km < 1) return Math.round(km * 1000) + ' m';
+    return km.toFixed(1).replace('.', ',') + ' km';
+  }
+
+  function updateSummary(points) {
+    if (!summary) return;
+    if (!points.length) { summary.textContent = 'Noch keine Punkte.'; return; }
+    var parts = [points.length === 1 ? '1 Punkt' : points.length + ' Punkte'];
+    if (points.length > 1) {
+      var km = 0;
+      for (var i = 1; i < points.length; i += 1) km += distanceKm(points[i - 1], points[i]);
+      parts.push('Luftlinie ' + formatKm(km));
+    }
+    summary.textContent = parts.join(' · ');
+  }
+
+  // Linie in der Reihenfolge der Punkte: zeigt sofort, wenn die Tour
+  // zickzackt. interactive: false, damit sie keine Klicks auf die Karte
+  // abfaengt. Laeuft auch beim Drag mit, dort werden die Marker nicht neu
+  // aufgebaut.
+  function syncRoute(points) {
+    updateSummary(points);
+    if (routeLine) {
+      routeLine.setLatLngs(points.map(function (p) { return [p.lat, p.lon]; }));
+    }
+  }
+
   function writePoints(points, message, redraw) {
     writeGuard = true;
     area.value = points.map(function (p) {
       return p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + ', ' + p.label;
     }).join('\\n');
     writeGuard = false;
+    syncRoute(points);
     // redraw === false laesst vorhandene Marker stehen (Fall: Marker gezogen -
     // der Marker sitzt nach dem Drag schon richtig, ein Neuaufbau waere nur
     // ein DOM-Teardown mitten in der laufenden Mausgeste).
@@ -169,6 +214,7 @@ function planPage(
   }
 
   function drawMarkers(points) {
+    syncRoute(points);
     if (!markerLayer) return;
     markerLayer.clearLayers();
     points.forEach(function (p, index) {
@@ -216,6 +262,7 @@ function planPage(
   function initMap() {
     if (!window.L || !mapBox) {
       if (mapHint) mapHint.textContent = 'Karte hier nicht verfügbar - Punkte wie gewohnt als Zeilen eintragen, das funktioniert genauso.';
+      updateSummary(readPoints() || []);
       return;
     }
     map = L.map(mapBox, { scrollWheelZoom: false }).setView([47.6, 11.0], 8);
@@ -224,6 +271,7 @@ function planPage(
       attribution: '&copy; OpenStreetMap-Mitwirkende'
     }).addTo(map);
     markerLayer = L.layerGroup().addTo(map);
+    routeLine = L.polyline([], { color: '#18181b', weight: 3, opacity: 0.7, interactive: false }).addTo(map);
     map.on('click', function (event) {
       var current = readPoints() || [];
       current.push({
