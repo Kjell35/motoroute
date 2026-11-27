@@ -280,19 +280,40 @@ class GarageDocument {
   final String type;
   final String title;
   final String fileUrl;
+  final String? fileName;
+  final bool hasFile;
+  final int? fileSizeBytes;
+  final String? mimeType;
 
-  const GarageDocument(
-      {required this.id,
-      required this.type,
-      required this.title,
-      required this.fileUrl});
+  const GarageDocument({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.fileUrl,
+    this.fileName,
+    this.hasFile = false,
+    this.fileSizeBytes,
+    this.mimeType,
+  });
 
   factory GarageDocument.fromJson(Map<String, dynamic> j) => GarageDocument(
         id: j['id'] as String,
         type: (j['type'] ?? 'other') as String,
         title: (j['title'] ?? '') as String,
         fileUrl: (j['fileUrl'] ?? '') as String,
+        fileName: j['fileName'] as String?,
+        hasFile: j['hasFile'] == true,
+        fileSizeBytes: j['fileSizeBytes'] as int?,
+        mimeType: j['mimeType'] as String?,
       );
+
+  String get sizeLabel {
+    final bytes = fileSizeBytes;
+    if (bytes == null || bytes <= 0) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
 }
 
 class GarageCosts {
@@ -613,19 +634,62 @@ class GarageRepository {
         .toList();
   }
 
-  Future<void> addDocument(
+  /// Legt das Dokument an und lädt die Datei hoch (zwei Requests, für den
+  /// Aufrufer ein Schritt). Die Bytes liegen serverseitig pro Nutzer und
+  /// werden nur nach Ownership-Prüfung wieder ausgeliefert.
+  Future<GarageDocument> uploadDocument(
     String baseUrl,
     String token,
     String vehicleId, {
     required String type,
     required String title,
-    required String fileUrl,
+    required String fileName,
+    required List<int> bytes,
+    String? mimeType,
+    String? notes,
   }) async {
-    await _post(baseUrl, token, '/api/vehicles/$vehicleId/documents', {
+    final created = await _post(
+        baseUrl, token, '/api/vehicles/$vehicleId/documents', {
       'type': type,
       'title': title,
-      'fileUrl': fileUrl,
+      'fileName': fileName,
+      'fileSizeBytes': bytes.length,
+      if (mimeType != null) 'mimeType': mimeType,
+      if (notes != null) 'notes': notes,
     });
+    final map = (created as Map).cast<String, dynamic>();
+    final id = map['id'] as String;
+    await _putBytes(
+      baseUrl,
+      token,
+      '/api/vehicles/$vehicleId/documents/$id/file?fileName=${Uri.encodeQueryComponent(fileName)}',
+      bytes,
+      mimeType,
+    );
+    return GarageDocument.fromJson({
+      ...map,
+      'hasFile': true,
+      'fileName': fileName,
+      'fileSizeBytes': bytes.length,
+      'mimeType': mimeType,
+    });
+  }
+
+  /// Datei eines Dokuments laden (nur eigene Dokumente, Server prüft).
+  Future<List<int>> downloadDocument(
+      String baseUrl, String token, String vehicleId, String documentId) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        '$baseUrl/api/vehicles/$vehicleId/documents/$documentId/file',
+        options: Options(
+          headers: {if (token.isNotEmpty) 'Authorization': 'Bearer $token'},
+          responseType: ResponseType.bytes,
+        ),
+      );
+      return res.data ?? const <int>[];
+    } on DioException catch (e) {
+      throw GarageApiException(_msg(e), e.response?.statusCode);
+    }
   }
 
   // -- Katalog ----------------------------------------------------------------
@@ -697,6 +761,25 @@ class GarageRepository {
           data: body,
           options: Options(
               headers: {if (token != null) 'Authorization': 'Bearer $token'}));
+      return res.data;
+    } on DioException catch (e) {
+      throw GarageApiException(_msg(e), e.response?.statusCode);
+    }
+  }
+
+  /// Rohe Bytes hochladen (kein Multipart): Content-Type sagt dem Server,
+  /// was in der Datei steckt.
+  Future<dynamic> _putBytes(String baseUrl, String? token, String path,
+      List<int> bytes, String? mimeType) async {
+    try {
+      final res = await _dio.put<dynamic>('$baseUrl$path',
+          data: bytes,
+          options: Options(
+            headers: {
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+            contentType: mimeType ?? 'application/octet-stream',
+          ));
       return res.data;
     } on DioException catch (e) {
       throw GarageApiException(_msg(e), e.response?.statusCode);

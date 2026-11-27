@@ -147,15 +147,22 @@ String? tireProblem({
 ///
 /// Bis es einen Upload-Endpunkt gibt, wird ein fertiger Link erfasst - er
 /// muss vollstaendig sein und http(s) verwenden.
-String? documentProblem({required String title, required String fileUrl}) {
+/// Obergrenze wie im Backend (garage-api/src/modules/documents/documents.routes.ts).
+const int kMaxDocumentBytes = 8 * 1024 * 1024;
+
+/// Dokumente werden als Datei hochgeladen - geprüft werden Titel,
+/// Dateiauswahl und Größe (das frühere Link-Feld gibt es nicht mehr).
+String? documentProblem({
+  required String title,
+  required String fileName,
+  required int sizeBytes,
+}) {
   if (title.trim().isEmpty) return 'Bitte einen Titel angeben.';
-  final text = fileUrl.trim();
-  final uri = Uri.tryParse(text);
-  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-    return 'Bitte einen vollständigen Link angeben, z. B. https://example.com/rechnung.pdf';
+  if (fileName.trim().isEmpty || sizeBytes <= 0) {
+    return 'Bitte eine Datei auswählen.';
   }
-  if (uri.scheme != 'http' && uri.scheme != 'https') {
-    return 'Nur http- und https-Links werden unterstützt.';
+  if (sizeBytes > kMaxDocumentBytes) {
+    return 'Die Datei ist zu groß (max. 8 MB).';
   }
   return null;
 }

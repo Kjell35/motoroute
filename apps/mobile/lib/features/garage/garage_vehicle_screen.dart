@@ -1,5 +1,10 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../core/i18n/i18n.dart';
 import '../../core/theme/app_colors.dart';
@@ -718,7 +723,9 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     };
     var type = 'invoice';
     final titleCtrl = TextEditingController();
-    final urlCtrl = TextEditingController();
+    String? fileName;
+    List<int>? fileBytes;
+    String? fileMime;
     String? error;
     final ok = await showDialog<bool>(
       context: context,
@@ -742,11 +749,38 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
             const SizedBox(height: 10),
             TextField(controller: titleCtrl, decoration: _deco(label: 'Titel')),
             const SizedBox(height: 10),
-            TextField(
-              controller: urlCtrl,
-              keyboardType: TextInputType.url,
-              decoration: _deco(label: 'Link (https://…)'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: context.palette.accentPrimary,
+                ),
+                icon: const Icon(Icons.attach_file, size: 18),
+                label: Text(fileName == null ? 'Datei auswählen' : 'Andere Datei wählen'),
+                onPressed: () async {
+                  final file = await FilePicker.pickFile();
+                  if (file == null) return;
+                  final bytes = await file.readAsBytes();
+                  setDialog(() {
+                    fileName = file.name;
+                    fileBytes = bytes;
+                    fileMime = _mimeForFile(file.name);
+                    error = null;
+                  });
+                },
+              ),
             ),
+            if (fileName != null) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '$fileName (${_formatBytes(fileBytes?.length ?? 0)})',
+                  key: const ValueKey('document-file'),
+                  style: TextStyle(color: context.palette.textSecondary, fontSize: 12),
+                ),
+              ),
+            ],
             if (error != null) ...[
               const SizedBox(height: 10),
               Text(error!,
@@ -761,7 +795,8 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
               onPressed: () {
                 final message = documentProblem(
                   title: titleCtrl.text,
-                  fileUrl: urlCtrl.text,
+                  fileName: fileName ?? '',
+                  sizeBytes: fileBytes?.length ?? 0,
                 );
                 if (message != null) {
                   setDialog(() => error = message);
@@ -778,13 +813,15 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
     if (ok != true) return;
     try {
       final ctx = await _callCtx();
-      await ref.read(garageRepositoryProvider).addDocument(
+      await ref.read(garageRepositoryProvider).uploadDocument(
             ctx['baseUrl']!,
             ctx['token']!,
             widget.vehicleId,
             type: type,
             title: titleCtrl.text.trim(),
-            fileUrl: urlCtrl.text.trim(),
+            fileName: fileName ?? 'dokument',
+            bytes: fileBytes ?? const <int>[],
+            mimeType: fileMime,
           );
       await _reload();
     } catch (e) {
@@ -806,13 +843,92 @@ class _GarageVehicleScreenState extends ConsumerState<GarageVehicleScreen> {
       ),
       docs.isEmpty
           ? [Text(i18n.gNoDocuments, style: TextStyle(color: context.palette.textSecondary))]
-          : docs.map((d) => Row(children: [
-                Icon(Icons.description_outlined, color: context.palette.textSecondary, size: 18),
-                const SizedBox(width: 8),
-                Expanded(child: Text(d.title, style: TextStyle(color: context.palette.textPrimary, fontSize: 13))),
-                Text(_docTypeLabel(d.type), style: TextStyle(color: context.palette.textSecondary, fontSize: 12)),
-              ])).toList(),
+          : docs.map((d) => InkWell(
+                onTap: d.hasFile ? () => _openDocument(d) : null,
+                child: Row(children: [
+                  Icon(Icons.description_outlined, color: context.palette.textSecondary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(d.title, style: TextStyle(color: context.palette.textPrimary, fontSize: 13)),
+                      if (d.hasFile && d.sizeLabel.isNotEmpty)
+                        Text(d.sizeLabel, style: TextStyle(color: context.palette.textSecondary, fontSize: 11)),
+                    ]),
+                  ),
+                  Text(_docTypeLabel(d.type), style: TextStyle(color: context.palette.textSecondary, fontSize: 12)),
+                  if (d.hasFile)
+                    IconButton(
+                      tooltip: 'Öffnen',
+                      icon: Icon(Icons.open_in_new, size: 16, color: context.palette.accentPrimary),
+                      onPressed: () => _openDocument(d),
+                    ),
+                ]),
+              )).toList(),
     );
+  }
+
+  /// Lädt die Datei (Server prüft Ownership) und zeigt sie an bzw. legt sie
+  /// ab - Bilder direkt als Vorschau, alles andere als Datei im
+  /// App-Verzeichnis (im Projekt gibt es kein Öffnen-Paket).
+  Future<void> _openDocument(GarageDocument doc) async {
+    try {
+      final ctx = await _callCtx();
+      final bytes = await ref
+          .read(garageRepositoryProvider)
+          .downloadDocument(ctx['baseUrl']!, ctx['token']!, widget.vehicleId, doc.id);
+      if (!mounted) return;
+      if ((doc.mimeType ?? '').startsWith('image/') && bytes.isNotEmpty) {
+        final palette = context.palette;
+        await showDialog<void>(
+          context: context,
+          builder: (dialogCtx) => AlertDialog(
+            backgroundColor: palette.bgSurface,
+            title: Text(doc.title, style: TextStyle(color: palette.textPrimary)),
+            content: InteractiveViewer(
+              child: Image.memory(Uint8List.fromList(bytes)),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Schließen'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      final dir = await getApplicationDocumentsDirectory();
+      final safeName = (doc.fileName ?? 'dokument').replaceAll(RegExp(r'[\\/]'), '_');
+      final file = File('${dir.path}/garage_${doc.id}_$safeName');
+      await file.writeAsBytes(bytes, flush: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gespeichert: ${file.path}')),
+      );
+    } catch (e) {
+      ErrorReporter.instance.report('garage.write', e);
+      final i18n = ref.read(i18nProvider);
+      _showGarageError(garageMessageFor(e,
+          loginFailed: i18n.gLoginFailed, unreachable: i18n.gServerUnreachable));
+    }
+  }
+
+  /// Grobe Zuordnung für den Upload-Content-Type (Server speichert ihn mit).
+  String _mimeForFile(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.heic')) return 'image/heic';
+    return 'application/octet-stream';
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   String _docTypeLabel(String type) => switch (type) {
