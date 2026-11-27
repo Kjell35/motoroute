@@ -72,6 +72,20 @@ describe('ClientThrottlerGuard: Schlüssel aus X-Forwarded-For', () => {
     expect(calls.slice(0, 5).map((call) => call.remaining)).toEqual(['4', '3', '2', '1', '0']);
   });
 
+  it('trifft mit unterschiedlichem XFF-Schwanz denselben Zähler', async () => {
+    const first = await post('203.0.113.40, 172.16.0.1');
+    const second = await post('203.0.113.40, 172.16.0.99');
+    // Dritter Aufruf mit anderem Schwanz, aber fremdem Client: muss einen
+    // eigenen Zähler haben - sonst hieße der Test nur "alle teilen req.ip".
+    const otherClient = await post('203.0.113.41, 172.16.0.1');
+
+    expect(first.status).toBe(200);
+    expect(first.remaining).toBe('4');
+    expect(second.status).toBe(200);
+    expect(second.remaining).toBe('3');
+    expect(otherClient.remaining).toBe('4');
+  });
+
   it('lässt einen anderen Client davon unberührt', async () => {
     const call = await post('198.51.100.4, 10.0.0.7');
 
