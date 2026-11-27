@@ -91,7 +91,7 @@ function planPage(
 ): string {
   const prefill = points
     .map((p) => `${p.lat}, ${p.lon}, ${p.label}`)
-    .join('\n');
+    .join('\\n');
   const body = `
 <h1>Route am Computer planen</h1>
 <p class="muted">Code <strong>${escapeHtml(token)}</strong> · gültig für 2 Stunden · gespeichert: <span id="count">${points.length}</span></p>
@@ -156,7 +156,7 @@ function planPage(
     writeGuard = true;
     area.value = points.map(function (p) {
       return p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + ', ' + p.label;
-    }).join('\n');
+    }).join('\\n');
     writeGuard = false;
     drawMarkers(points);
     if (message) show(message, 'ok');
