@@ -62,3 +62,15 @@
   .qr img { width: 220px; height: 220px; image-rendering: pixelated; }
   #status { margin-top: 12px; font-size: 14px; min-height: 20px; }
   .ok { color: #15803d; } .err { color: #b91c1c; }
+  /* Schmale Anzeige (Handy, ~360 px): In einer Zeile muessen Nummer, Name,
+     Etappe und drei Knoepfe nebeneinander passen. Der Name bekommt den Platz,
+     die Etappe bleibt sichtbar, tritt aber zurueck (kleiner, gedaempft). */
+  @media (max-width: 480px) {
+    body { padding: 12px; }
+    main { padding: 16px; border-radius: 12px; }
+    #pointlist li { gap: 6px; }
+    #pointlist .nr { width: 22px; height: 22px; font-size: 11px; }
+    #pointlist input.name { padding: 5px 6px; }
+    #pointlist .leg { font-size: 11px; color: #a1a1aa; }
+    #pointlist .smallbtn { padding: 4px 6px; font-size: 13px; }
+  }
