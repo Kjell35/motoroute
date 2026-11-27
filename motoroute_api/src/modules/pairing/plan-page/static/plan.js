@@ -290,13 +290,19 @@
     if (!markerLayer) return;
     markerLayer.clearLayers();
     points.forEach(function (p, index) {
+      // Start gruen, Ziel rot: die Reihenfolge bleibt allein Sache der Liste,
+      // die Farbe macht nur sichtbar, wo die Tour anfaengt und aufhoert. Bei
+      // einem einzigen Punkt ist er beides - dann bleibt er gruen.
+      var isStart = index === 0;
+      var isEnd = points.length > 1 && index === points.length - 1;
       var marker = L.marker([p.lat, p.lon], {
         draggable: true,
         keyboard: false,
+        title: isStart ? 'Start' : isEnd ? 'Ziel' : 'Wegpunkt ' + (index + 1),
         // Nummerierter Pin: die Zahl ist die Position in der Tour und macht
         // Reihenfolge-Fehler sofort sichtbar.
         icon: L.divIcon({
-          className: 'numbered-pin',
+          className: 'numbered-pin' + (isStart ? ' start' : '') + (isEnd ? ' end' : ''),
           html: '<span>' + (index + 1) + '</span>',
           iconSize: [26, 26],
           iconAnchor: [13, 13]

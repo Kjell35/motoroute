@@ -121,6 +121,12 @@ describe('Plan-Seite: ausgelagerte Dateien', () => {
     // Marker: divIcon mit der Position in der Tour als Zahl.
     expect(script).toMatch(/className: 'numbered-pin'/);
     expect(script).toMatch(/html: '<span>' \+ \(index \+ 1\) \+ '<\/span>'/);
+    // Start und Ziel sind farblich markiert (grün/rot) und benannt; die
+    // Nummerierung und damit die Reihenfolge bleibt unverändert.
+    expect(script).toMatch(/isStart \? ' start' : ''/);
+    expect(script).toMatch(/isEnd \? ' end' : ''/);
+    expect(script).toContain("title: isStart ? 'Start' : isEnd ? 'Ziel' : 'Wegpunkt ' + (index + 1),");
+    expect(script).toMatch(/var isEnd = points\.length > 1 && index === points\.length - 1;/);
     // Und die Liste wird beim Zeichnen der Marker mit aufgebaut, sonst
     // entstünde sie nur beim Laden und nach Aktionen nie wieder.
     expect(script).toMatch(/function drawMarkers\(points\)\s*\{\s*syncRoute\(points\);\s*renderList\(points\);/);
@@ -150,6 +156,8 @@ describe('Plan-Seite: ausgelagerte Dateien', () => {
 
     expect(css).toContain('#pointlist .nr');
     expect(css).toContain('.numbered-pin span');
+    expect(css).toContain('.numbered-pin.start span { background: #15803d; }');
+    expect(css).toContain('.numbered-pin.end span { background: #b91c1c; }');
     expect(css).toContain('#map {');
     expect(css).not.toContain('<style>');
   });
