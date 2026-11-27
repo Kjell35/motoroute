@@ -8,7 +8,9 @@ import {
   Post,
   Put,
   Req,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { PairingService, PairingStart } from './pairing.service';
@@ -33,8 +35,16 @@ export class PairingController {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Öffentlich und schreibt bei jedem Aufruf eine Zeile nach pairing_plans -
+   * deshalb gedrosselt (5 Starts pro Minute und Client). Ohne Guard wäre der
+   * Decorator wirkungslos: der Throttler ist in dieser App nirgends global
+   * gebunden, hier hängt er bewusst nur an dieser Route.
+   */
   @Post('start')
   @HttpCode(200)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   start(@Req() req: Request): Promise<PairingStart> {
     return this.pairing.start(
       publicOrigin(req, this.config.get<string>('PAIRING_PUBLIC_BASE_URL')),

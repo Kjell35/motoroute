@@ -6,11 +6,19 @@ import * as dotenv from 'dotenv';
 dotenv.config({ override: true });
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Render (und jeder Proxy davor) setzt X-Forwarded-For/X-Forwarded-Proto.
+  // Ohne trust proxy wäre req.ip für alle Clients die Proxy-IP - die
+  // IP-Drosselung von POST /pairing/start würde dann global statt pro Client
+  // greifen und nach 5 Aufrufen die ganze Welt aussperren. Ein Hop passt zu
+  // Render (ein Proxy vor dem Dienst).
+  app.set('trust proxy', 1);
 
   // whitelist strips unknown properties instead of erroring on them -
   // forbidNonWhitelisted flips that to a hard 400, which we want here:
