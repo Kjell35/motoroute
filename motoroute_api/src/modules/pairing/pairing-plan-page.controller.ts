@@ -276,7 +276,9 @@ function planPage(
       name.setAttribute('aria-label', 'Name von Punkt ' + (index + 1));
       name.addEventListener('change', function () { renamePoint(index, name.value, name); });
       name.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') { event.preventDefault(); name.blur(); }
+        // Enter uebernimmt sofort: auf das change-Event beim Blur allein ist
+        // kein Verlass (z. B. wenn der Wert programmatisch gesetzt wurde).
+        if (event.key === 'Enter') { event.preventDefault(); renamePoint(index, name.value, name); }
       });
       row.appendChild(nr);
       row.appendChild(name);
@@ -467,7 +469,7 @@ function planPage(
       title.setAttribute('aria-label', 'Name von Punkt ' + (index + 1));
       title.addEventListener('change', function () { renamePoint(index, title.value, title); });
       title.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') { event.preventDefault(); title.blur(); }
+        if (event.key === 'Enter') { event.preventDefault(); renamePoint(index, title.value, title); }
       });
       var remove = document.createElement('button');
       remove.type = 'button';
