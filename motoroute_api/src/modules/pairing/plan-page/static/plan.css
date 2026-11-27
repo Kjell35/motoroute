@@ -1,4 +1,6 @@
-  :root { color-scheme: light dark; }
+  /* Nur hell: Das Formular bringt eigene Farben mit, im Dunkelmodus zeichnete
+     der Browser die Namensfelder sonst weiss auf weiss. */
+  :root { color-scheme: light; }
   body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0;
          padding: 24px; background: #f4f4f5; color: #18181b; }
   main { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 16px;
@@ -29,7 +31,8 @@
   #pointlist .nr.start { background: #15803d; }
   #pointlist .nr.end { background: #b91c1c; }
   #pointlist input.name { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px;
-                          border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; }
+                          border: 1px solid #d4d4d8; border-radius: 8px; background: #fff;
+                          color: #18181b; }
   input.name:focus { outline: 2px solid #18181b; outline-offset: 0; }
   .leaflet-popup-content input.popup-name { width: 100%; box-sizing: border-box;
                                             padding: 4px 6px; margin: 0 0 6px;
