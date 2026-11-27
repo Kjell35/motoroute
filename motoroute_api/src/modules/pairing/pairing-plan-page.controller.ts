@@ -22,6 +22,21 @@ export class PairingPlanPageController {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * QR-Code als PNG. Die Seite laedt ihn nach der Rettung eines abgelaufenen
+   * Codes neu, statt das ganze Dokument zu wechseln.
+   */
+  @Get(':token/qr.png')
+  async qr(
+    @Param('token') token: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const planUrl = `${publicOrigin(req, this.config.get<string>('PAIRING_PUBLIC_BASE_URL'))}/plan/${normalizeToken(token)}`;
+    const png = await QRCode.toBuffer(planUrl, { margin: 1, width: 260, type: 'png' });
+    res.type('png').send(png);
+  }
+
   @Get(':token')
   async page(
     @Param('token') token: string,

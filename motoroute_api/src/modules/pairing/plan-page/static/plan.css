@@ -66,6 +66,14 @@
   .qr img { width: 220px; height: 220px; image-rendering: pixelated; }
   #status { margin-top: 12px; font-size: 14px; min-height: 20px; }
   .ok { color: #15803d; } .err { color: #b91c1c; }
+  /* Entwurf aus dem Browser: Leiste ueber der Suche, solange ein lokaler
+     Stand vom Server abweicht. */
+  .banner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+            background: #fef3c7; border: 1px solid #fcd34d; border-radius: 10px;
+            padding: 10px; margin: 12px 0 0; font-size: 14px; }
+  /* Ohne diese Zeile gewinnt display:flex gegen das hidden-Attribut. */
+  .banner[hidden] { display: none; }
+  .banner .smallbtn { margin: 0; }
   /* Schmale Anzeige (Handy, ~360 px): In einer Zeile muessen Nummer, Name,
      Etappe und drei Knoepfe nebeneinander passen. Der Name bekommt den Platz,
      die Etappe bleibt sichtbar, tritt aber zurueck (kleiner, gedaempft). */

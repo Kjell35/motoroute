@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { JSDOM } from 'jsdom';
+import QRCode from 'qrcode';
 import { readPlanAsset, renderTemplate } from './plan-page/assets';
 import { PairingPlanPageController } from './pairing-plan-page.controller';
 import { PairingService } from './pairing.service';
@@ -40,6 +41,23 @@ async function renderPlan(points: Point[] | null): Promise<{ status: number; htm
     status: (res.status as unknown as jest.Mock).mock.calls[0]?.[0] ?? 200,
     html: send.mock.calls[0][0] as string,
   };
+}
+
+async function renderQr(token: string): Promise<{ contentType: unknown; body: unknown }> {
+  const controller = new PairingPlanPageController(
+    { getPoints: async () => [] } as unknown as PairingService,
+    new ConfigService({ PAIRING_PUBLIC_BASE_URL: 'https://api.example.org' }),
+  );
+  const res = {
+    type: jest.fn().mockReturnThis(),
+    send: jest.fn(),
+  } as unknown as Response;
+
+  await controller.qr(token, { headers: {}, protocol: 'https' } as unknown as Request, res);
+
+  const type = res.type as unknown as jest.Mock;
+  const send = res.send as unknown as jest.Mock;
+  return { contentType: type.mock.calls[0]?.[0], body: send.mock.calls[0]?.[0] };
 }
 
 /** Minimale Leaflet-Attrappe: sammelt Marker, Popup-Knoten und den Kartenklick. */
@@ -110,7 +128,12 @@ type Mounted = {
   fetchMock: jest.Mock;
 };
 
-async function mountPage(points: Point[] | null): Promise<Mounted> {
+type MountOptions = { draft?: unknown; fetch?: jest.Mock };
+
+async function mountPage(
+  points: Point[] | null,
+  options: MountOptions = {},
+): Promise<Mounted> {
   const { html } = await renderPlan(points);
   const dom = new JSDOM(html, {
     url: 'https://api.example.org/plan/K7G7YY',
@@ -119,8 +142,16 @@ async function mountPage(points: Point[] | null): Promise<Mounted> {
   const win = dom.window as any;
   const { markers, state } = installLeaflet(win);
 
-  const fetchMock = jest.fn(async () => ({ ok: true, status: 200 }));
+  const fetchMock = options.fetch ?? jest.fn(async () => ({ ok: true, status: 200 }));
   win.fetch = fetchMock;
+
+  // Entwurf vor dem Laden setzen: das Skript liest ihn beim Start.
+  if (options.draft !== undefined) {
+    win.localStorage.setItem(
+      'motoroute.plan.K7G7YY',
+      JSON.stringify({ version: 1, at: Date.now(), points: options.draft }),
+    );
+  }
 
   // Das Seiten-Stylesheet lädt jsdom nicht selbst nach; einfügen, damit
   // getComputedStyle die Farben der Badges kennt.
@@ -159,6 +190,13 @@ function renameInList(win: any, doc: any, row: number, name: string): void {
   const input = rows(doc)[row].querySelector('input.name');
   input.value = name;
   pressEnter(win, input);
+}
+
+/** Laesst die Promise-Ketten der Seite durchlaufen (mehrere then-Ebenen). */
+async function flush(win: any, ticks = 8): Promise<void> {
+  for (let i = 0; i < ticks; i += 1) {
+    await new Promise((resolve) => win.setTimeout(resolve, 0));
+  }
 }
 
 describe('Plan-Seite in jsdom: Laden', () => {
@@ -479,6 +517,198 @@ describe('Plan-Seite in jsdom: Löschen', () => {
   });
 });
 
+describe('Plan-Seite in jsdom: abgelaufener Code', () => {
+  /**
+   * Server, auf dem der alte Code abgelaufen ist: PUT auf K7G7YY -> 404,
+   * POST /start -> neuer Code, alles andere -> 200.
+   */
+  function expiredMock(): jest.Mock {
+    return jest.fn(async (url: string, _init?: any): Promise<any> => {
+      if (url === '/api/v1/pairing/start') {
+        return { ok: true, status: 200, json: async () => ({ token: 'NEU234' }) };
+      }
+      if (url === '/api/v1/pairing/K7G7YY/points') return { ok: false, status: 404 };
+      return { ok: true, status: 200 };
+    });
+  }
+
+  it('legt einen neuen Code an und übernimmt die Punkte', async () => {
+    const fetchMock = expiredMock();
+    const { doc, win } = await mountPage(threePoints, { fetch: fetchMock });
+
+    doc.getElementById('save').click();
+    await flush(win);
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/v1/pairing/K7G7YY/points',
+      '/api/v1/pairing/start',
+      '/api/v1/pairing/NEU234/points',
+    ]);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).points).toHaveLength(3);
+    expect(doc.getElementById('status').textContent).toContain('Neuer Code NEU234');
+    expect(doc.getElementById('code').textContent).toBe('NEU234');
+    expect(doc.body.getAttribute('data-token')).toBe('NEU234');
+    // Adresszeile mitgezogen: ein Reload landet beim neuen Code.
+    expect(win.location.pathname).toBe('/plan/NEU234');
+  });
+
+  it('hängt Link, QR und GPX auf den neuen Code um', async () => {
+    const { doc, win } = await mountPage(threePoints, { fetch: expiredMock() });
+
+    doc.getElementById('save').click();
+    await flush(win);
+
+    expect(doc.getElementById('plan-url').textContent).toBe(
+      'https://api.example.org/plan/NEU234',
+    );
+    expect(doc.getElementById('qr').getAttribute('src')).toBe('/plan/NEU234/qr.png');
+    const gpx = doc.getElementById('gpx');
+    expect(gpx.getAttribute('href')).toBe('/plan/NEU234/gpx');
+    expect(gpx.getAttribute('download')).toBe('MotoRoute-NEU234.gpx');
+    expect(gpx.textContent).toBe('MotoRoute-NEU234.gpx');
+  });
+
+  it('speichert danach unter dem neuen Code weiter', async () => {
+    const fetchMock = expiredMock();
+    const { doc, win, state } = await mountPage(threePoints, { fetch: fetchMock });
+
+    doc.getElementById('save').click();
+    await flush(win);
+    fetchMock.mockClear();
+
+    state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+    doc.getElementById('save').click();
+    await flush(win);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/pairing/NEU234/points');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).points).toHaveLength(4);
+  });
+
+  it('rettet auch beim automatischen Speichern', async () => {
+    try {
+      const { doc, win, state, fetchMock } = await mountPage(threePoints, {
+        fetch: expiredMock(),
+      });
+      jest.useFakeTimers();
+
+      state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+      jest.advanceTimersByTime(800);
+      for (let tick = 0; tick < 14; tick += 1) await Promise.resolve();
+
+      expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/pairing/K7G7YY/points');
+      expect(doc.getElementById('code').textContent).toBe('NEU234');
+      // Der gesetzte Punkt geht mit, nicht nur der alte Stand.
+      expect(JSON.parse(fetchMock.mock.calls[2][1].body).points).toHaveLength(4);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('sichert den Entwurf und rät zum Neuladen, wenn kein neuer Code klappt', async () => {
+    const fetchMock = jest.fn(async (url: string, _init?: any): Promise<any> => {
+      if (url === '/api/v1/pairing/start') return { ok: false, status: 429 };
+      return { ok: false, status: 404 };
+    });
+    const { doc, win } = await mountPage(threePoints, { fetch: fetchMock });
+
+    doc.getElementById('save').click();
+    await flush(win);
+
+    expect(doc.getElementById('status').textContent).toContain('liegen als Entwurf im Browser');
+    expect(doc.getElementById('code').textContent).toBe('K7G7YY');
+    expect(win.localStorage.getItem('motoroute.plan.K7G7YY')).not.toBeNull();
+  });
+});
+
+describe('Plan-Seite in jsdom: Entwurf im Browser', () => {
+  const draftPoints: Point[] = [
+    ...threePoints,
+    { lat: 47.7, lon: 11.9, label: 'Sprint', detail: null },
+  ];
+
+  it('bietet beim Laden einen abweichenden Entwurf an', async () => {
+    const { doc } = await mountPage(threePoints, { draft: draftPoints });
+
+    expect(doc.getElementById('draft').hidden).toBe(false);
+    expect(doc.getElementById('draft-text').textContent).toContain('4 Punkten');
+    expect(doc.getElementById('draft-text').textContent).toContain('Entwurf von');
+  });
+
+  it('übernimmt den Entwurf auf Knopfdruck', async () => {
+    const { doc } = await mountPage(threePoints, { draft: draftPoints });
+
+    doc.getElementById('draft-use').click();
+
+    expect(doc.getElementById('draft').hidden).toBe(true);
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein', 'Sprint']);
+    expect(doc.getElementById('status').textContent).toContain('Entwurf übernommen');
+  });
+
+  it('verwirft den Entwurf und räumt den Speicher', async () => {
+    const { doc, win } = await mountPage(threePoints, { draft: draftPoints });
+
+    doc.getElementById('draft-drop').click();
+
+    expect(doc.getElementById('draft').hidden).toBe(true);
+    expect(win.localStorage.getItem('motoroute.plan.K7G7YY')).toBeNull();
+    expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
+    expect(doc.getElementById('status').textContent).toBe('Entwurf verworfen.');
+  });
+
+  it('schweigt, wenn der Entwurf dem gespeicherten Stand entspricht', async () => {
+    const { doc, win } = await mountPage(threePoints, { draft: threePoints });
+
+    expect(doc.getElementById('draft').hidden).toBe(true);
+    expect(win.localStorage.getItem('motoroute.plan.K7G7YY')).toBeNull();
+  });
+
+  it('schreibt jede Änderung lokal und räumt nach dem Speichern auf', async () => {
+    const { doc, win, state } = await mountPage(threePoints);
+    const key = 'motoroute.plan.K7G7YY';
+
+    state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+    expect(JSON.parse(win.localStorage.getItem(key)!).points).toHaveLength(4);
+    // Die Leiste erscheint nur beim Laden, nicht bei jeder Änderung.
+    expect(doc.getElementById('draft').hidden).toBe(true);
+
+    doc.getElementById('save').click();
+    await flush(win);
+    // Gespeichert: der Server ist die Wahrheit, kein Entwurf mehr nötig.
+    expect(win.localStorage.getItem(key)).toBeNull();
+  });
+
+  it('hält den Entwurf, wenn das Speichern scheitert', async () => {
+    const fetchMock = jest.fn(async (): Promise<any> => ({ ok: false, status: 503 }));
+    const { doc, win, state } = await mountPage(threePoints, { fetch: fetchMock });
+
+    state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+    doc.getElementById('save').click();
+    await flush(win);
+
+    expect(win.localStorage.getItem('motoroute.plan.K7G7YY')).not.toBeNull();
+    expect(doc.getElementById('status').textContent).toContain('fehlgeschlagen');
+  });
+});
+
+describe('Plan-Seite: QR-Code als PNG', () => {
+  it('kodiert den Plan-Link des Tokens', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const spy = jest.spyOn(QRCode, 'toBuffer').mockResolvedValue(png as never);
+    try {
+      const { contentType, body } = await renderQr('k7g7yy');
+
+      expect(spy).toHaveBeenCalledWith(
+        'https://api.example.org/plan/K7G7YY',
+        expect.objectContaining({ type: 'png' }),
+      );
+      expect(contentType).toBe('png');
+      expect(body).toEqual(png);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe('Plan-Seite: ausgeliefertes HTML', () => {
   it('bindet CSS und Skript als statische Dateien ein', async () => {
     const { html } = await renderPlan(threePoints);
@@ -490,6 +720,12 @@ describe('Plan-Seite: ausgeliefertes HTML', () => {
     // GPX-Download hängt direkt an der Seite - kein App-Build nötig.
     expect(html).toContain('href="/plan/K7G7YY/gpx"');
     expect(html).toContain('MotoRoute-K7G7YY.gpx');
+    // Die Rettung haengt genau diese Stellen auf einen neuen Code um.
+    expect(html).toContain('id="code"');
+    expect(html).toContain('id="plan-url"');
+    expect(html).toContain('id="qr"');
+    expect(html).toContain('id="draft"');
+    expect(html).toContain('verlängert sich beim Speichern');
     // Keine unaufgelösten Platzhalter - sonst stünde das im Browser.
     expect(html).not.toMatch(/\{\{[A-Z_]+\}\}/);
   });

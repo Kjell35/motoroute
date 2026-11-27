@@ -1,7 +1,13 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
-import { PAIRING_TTL_SECONDS, PairingService, normalizeToken } from './pairing.service';
+import {
+  PAIRING_MAX_SECONDS,
+  PAIRING_TTL_SECONDS,
+  PairingService,
+  nextExpiry,
+  normalizeToken,
+} from './pairing.service';
 
-type Row = { token: string; points: unknown; expires_at: string };
+type Row = { token: string; points: unknown; expires_at: string; created_at?: string };
 
 /**
  * Minimaler Supabase-Ersatz: bildet nur die Aufrufe nach, die der Service
@@ -214,6 +220,7 @@ describe('PairingService', () => {
       built.db.rows.push({
         token: 'ABC234',
         points: [],
+        created_at: new Date(Date.now() - 60_000).toISOString(),
         expires_at: new Date(Date.now() + 60_000).toISOString(),
       });
       return built;
@@ -297,6 +304,72 @@ describe('PairingService', () => {
         { lat: 47, lon: 11, label: 'Punkt', detail: '   ' },
       ]);
       expect(saved?.[0].detail).toBeNull();
+    });
+  });
+
+  describe('savePoints() / Gültigkeit verlängern', () => {
+    it('schiebt den Ablauf um das volle Zeitfenster nach vorn', async () => {
+      const { db, service } = build();
+      db.rows.push({
+        token: 'ABC234',
+        points: [],
+        created_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      });
+
+      await service.savePoints('ABC234', [{ lat: 47, lon: 11, label: 'Weiter' }]);
+
+      const restSekunden = (Date.parse(db.rows[0].expires_at) - Date.now()) / 1000;
+      // Aus einer Minute Restzeit werden wieder zwei Stunden.
+      expect(restSekunden).toBeGreaterThan(PAIRING_TTL_SECONDS - 5);
+      expect(restSekunden).toBeLessThan(PAIRING_TTL_SECONDS + 5);
+    });
+
+    it('verlängert höchstens acht Stunden ab Anlage', async () => {
+      const { db, service } = build();
+      const created = Date.now() - 7.9 * 60 * 60_000;
+      db.rows.push({
+        token: 'ABC234',
+        points: [],
+        created_at: new Date(created).toISOString(),
+        expires_at: new Date(Date.now() + 6 * 60_000).toISOString(),
+      });
+
+      await service.savePoints('ABC234', [{ lat: 47, lon: 11, label: 'Spät' }]);
+
+      const restSekunden = (Date.parse(db.rows[0].expires_at) - Date.now()) / 1000;
+      // 7,9 Stunden sind vorbei: nur noch bis zur Acht-Stunden-Grenze.
+      expect(restSekunden).toBeLessThan(8 * 60);
+      expect(restSekunden).toBeGreaterThan(5 * 60);
+    });
+  });
+
+  describe('nextExpiry()', () => {
+    const now = Date.parse('2026-01-01T12:00:00.000Z');
+
+    it('verlängert bis zum vollen Fenster ab jetzt', () => {
+      expect(nextExpiry(now, '2026-01-01T11:50:00.000Z', '2026-01-01T12:10:00.000Z'))
+        .toBe('2026-01-01T14:00:00.000Z');
+    });
+
+    it('stoppt an der Acht-Stunden-Grenze', () => {
+      // Anlage 04:10 Uhr -> Grenze 12:10 Uhr, obwohl 14:00 Uhr möglich wäre.
+      expect(nextExpiry(now, '2026-01-01T04:10:00.000Z', '2026-01-01T12:05:00.000Z'))
+        .toBe('2026-01-01T12:10:00.000Z');
+    });
+
+    it('verkürzt einen späteren Ablauf nie', () => {
+      expect(nextExpiry(now, '2026-01-01T11:00:00.000Z', '2026-01-01T15:00:00.000Z'))
+        .toBe('2026-01-01T15:00:00.000Z');
+    });
+
+    it('nimmt ohne Anlagedatum nur das gleitende Fenster', () => {
+      expect(nextExpiry(now, undefined, '2026-01-01T12:10:00.000Z'))
+        .toBe('2026-01-01T14:00:00.000Z');
+    });
+
+    it('bleibt bei der Obergrenze von acht Stunden', () => {
+      expect(PAIRING_MAX_SECONDS).toBe(8 * 60 * 60);
     });
   });
 

@@ -36,6 +36,8 @@ export interface PairingStart {
 const TOKEN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TOKEN_LENGTH = 6;
 export const PAIRING_TTL_SECONDS = 7200; // 2 Stunden
+/** Obergrenze fuer die Verlaengerung durch aktives Bearbeiten. */
+export const PAIRING_MAX_SECONDS = 8 * 60 * 60;
 const MAX_POINTS = 50;
 const MAX_LABEL = 120;
 const MAX_DETAIL = 200;
@@ -87,14 +89,36 @@ export class PairingService {
     return parsePoints(data.points as unknown);
   }
 
-  /** Speichert die Punkte; `null` wenn unbekannt oder abgelaufen. */
+  /**
+   * Speichert die Punkte; `null` wenn unbekannt oder abgelaufen.
+   *
+   * Jede Speicherung schiebt den Ablauf um das volle Zeitfenster nach vorn
+   * (hoechstens PAIRING_MAX_SECONDS ab Anlage): wer laenger plant, soll nicht
+   * mitten in der Arbeit ausgesperrt werden. Der Termin wird nie verkuerzt.
+   */
   async savePoints(token: string, raw: unknown): Promise<PairingPoint[] | null> {
     const points = parsePoints(raw);
     const db = this.requireDb();
+    const code = normalizeToken(token);
+    const now = new Date().toISOString();
+    const { data: row, error: readError } = await db
+      .from('pairing_plans')
+      .select('created_at, expires_at')
+      .eq('token', code)
+      .gt('expires_at', now)
+      .maybeSingle();
+    if (readError) {
+      this.logger.error(`pairing save failed: ${readError.code} ${readError.message}`);
+      throw new ServiceUnavailableException('Punkte konnten nicht gespeichert werden.');
+    }
+    if (!row) return null;
+    const stored = row as { created_at?: string; expires_at?: string };
+    const expiresAt = nextExpiry(Date.now(), stored.created_at, stored.expires_at);
+
     const { data, error } = await db
       .from('pairing_plans')
-      .update({ points })
-      .eq('token', normalizeToken(token))
+      .update({ points, expires_at: expiresAt })
+      .eq('token', code)
       .gt('expires_at', new Date().toISOString())
       .select('token')
       .maybeSingle();
@@ -136,6 +160,23 @@ export class PairingService {
 
 export function normalizeToken(token: string | undefined): string {
   return (token ?? '').trim().toUpperCase();
+}
+
+/**
+ * Ablauf nach einer Speicherung: mindestens das volle Zeitfenster ab jetzt,
+ * hoechstens PAIRING_MAX_SECONDS ab Anlage - und nie frueher als bisher.
+ */
+export function nextExpiry(
+  now: number,
+  createdAt: string | undefined,
+  currentExpiresAt: string | undefined,
+): string {
+  const sliding = now + PAIRING_TTL_SECONDS * 1000;
+  const created = createdAt ? Date.parse(createdAt) : NaN;
+  const cap = Number.isFinite(created) ? created + PAIRING_MAX_SECONDS * 1000 : sliding;
+  const current = currentExpiresAt ? Date.parse(currentExpiresAt) : NaN;
+  const base = Number.isFinite(current) ? current : 0;
+  return new Date(Math.max(Math.min(sliding, cap), base)).toISOString();
 }
 
 function parsePoints(raw: unknown): PairingPoint[] {

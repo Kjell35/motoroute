@@ -17,6 +17,14 @@
   var searchButton = document.getElementById('search-btn');
   var searchStatus = document.getElementById('search-status');
   var resultList = document.getElementById('results');
+  var codeEl = document.getElementById('code');
+  var planUrlEl = document.getElementById('plan-url');
+  var qrImage = document.getElementById('qr');
+  var gpxLink = document.getElementById('gpx');
+  var draftBox = document.getElementById('draft');
+  var draftText = document.getElementById('draft-text');
+  var draftUse = document.getElementById('draft-use');
+  var draftDrop = document.getElementById('draft-drop');
   var searchBusy = false;
   function show(text, cls) { status.textContent = text; status.className = cls || ''; }
   function parse(text) {
@@ -50,6 +58,101 @@
   var unsaved = false;
   var saving = false;
   var AUTOSAVE_MS = 800;
+  // Lokaler Entwurf: liegt unter einem Schluessel pro Code im Browser und
+  // ueberlebt Reload, Absturz und einen abgelaufenen Code.
+  var DRAFT_PREFIX = 'motoroute.plan.';
+  var DRAFT_VERSION = 1;
+  // Rettung: der neue Code entsteht erst beim ersten 404, danach wird er
+  // gemerkt, damit ein zweiter Versuch nicht noch einen Code anlegt.
+  var rescueToken = null;
+  var rescuing = false;
+
+  function pointLine(p) {
+    return p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + ', ' + p.label;
+  }
+
+  function samePoints(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i += 1) {
+      if (pointLine(a[i]) !== pointLine(b[i])) return false;
+    }
+    return true;
+  }
+
+  function draftStorage() {
+    try { return window.localStorage; } catch (err) { return null; }
+  }
+
+  function draftKey(forToken) {
+    return DRAFT_PREFIX + (forToken || token);
+  }
+
+  // Nach jeder Aenderung mitschreiben - auch wenn das Speichern noch wartet
+  // oder gerade scheitert.
+  function saveDraft(points, forToken) {
+    var store = draftStorage();
+    if (!store || !points || !points.length) return;
+    try {
+      store.setItem(draftKey(forToken), JSON.stringify({
+        version: DRAFT_VERSION,
+        at: Date.now(),
+        points: points
+      }));
+    } catch (err) { /* privater Modus oder voller Speicher: kein Weltuntergang */ }
+  }
+
+  function clearDraft(forToken) {
+    var store = draftStorage();
+    if (!store) return;
+    try { store.removeItem(draftKey(forToken)); } catch (err) { /* egal */ }
+  }
+
+  function readDraft() {
+    var store = draftStorage();
+    if (!store) return null;
+    var raw = null;
+    try { raw = store.getItem(draftKey()); } catch (err) { return null; }
+    if (!raw) return null;
+    var draft = null;
+    try { draft = JSON.parse(raw); } catch (err) { draft = null; }
+    if (!draft || draft.version !== DRAFT_VERSION || !Array.isArray(draft.points) ||
+      !draft.points.length) {
+      clearDraft();
+      return null;
+    }
+    return draft;
+  }
+
+  function formatClock(at) {
+    try {
+      return new Date(at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    } catch (err) { return ''; }
+  }
+
+  function hideDraftBox() {
+    if (draftBox) draftBox.hidden = true;
+  }
+
+  // "Entwurf fortsetzen?": nur anbieten, wenn der lokale Stand vom Server
+  // abweicht - sonst waere es ein Nichts-Tun.
+  function offerDraft() {
+    if (!draftBox || !draftText || !draftUse || !draftDrop) return;
+    var draft = readDraft();
+    if (!draft) return;
+    if (samePoints(draft.points, readPoints() || [])) { clearDraft(); return; }
+    draftText.textContent = 'Lokal liegt ein Entwurf von ' + formatClock(draft.at) + ' mit ' +
+      draft.points.length + (draft.points.length === 1 ? ' Punkt' : ' Punkten') + '.';
+    draftBox.hidden = false;
+    draftUse.onclick = function () {
+      hideDraftBox();
+      writePoints(draft.points, 'Entwurf übernommen - wird jetzt gespeichert.');
+    };
+    draftDrop.onclick = function () {
+      clearDraft();
+      hideDraftBox();
+      show('Entwurf verworfen.', 'ok');
+    };
+  }
 
   function readPoints() {
     try { return parse(area.value); } catch (err) { return null; }
@@ -264,7 +367,7 @@
     var message = data && data.message ? [].concat(data.message).join(' ') : '';
     if (status === 429) return 'Zu viele Suchen - bitte einen Moment warten.';
     if (status === 400) return message || 'Suchbegriff prüfen.';
-    if (status === 404) return 'Dieser Plan ist abgelaufen. Bitte in der App neu starten.';
+    if (status === 404) return 'Dieser Plan ist abgelaufen - beim Speichern wird automatisch ein neuer Code angelegt.';
     return message || 'Ortssuche gerade nicht erreichbar - bitte später erneut versuchen.';
   }
 
@@ -306,9 +409,10 @@
 
   function writePoints(points, message, redraw) {
     writeGuard = true;
-    area.value = points.map(function (p) {
-      return p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + ', ' + p.label;
-    }).join('\n');
+    area.value = points.map(pointLine).join('\n');
+    // Schon hier lokal sichern, nicht erst beim Speichern: der Entwurf ist
+    // die Versicherung, wenn der Server nicht antwortet.
+    saveDraft(points);
     writeGuard = false;
     syncRoute(points);
     // redraw === false laesst vorhandene Marker stehen (Fall: Marker gezogen -
@@ -327,17 +431,87 @@
     autosaveTimer = setTimeout(autosave, AUTOSAVE_MS);
   }
 
-  function saveRequest(points) {
-    return fetch('/api/v1/pairing/' + token + '/points', {
+  function saveRequest(points, target) {
+    return fetch('/api/v1/pairing/' + (target || token) + '/points', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ points: points })
     });
   }
 
+  function startPlan() {
+    return fetch('/api/v1/pairing/start', { method: 'POST' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Start fehlgeschlagen (' + res.status + ')');
+        return res.json();
+      })
+      .then(function (out) {
+        if (!out || !out.token) throw new Error('Kein Code erhalten');
+        return String(out.token);
+      });
+  }
+
+  // Alles, was am Code haengt, auf einmal umhaengen: Code-Zeile, Link zum
+  // Abtippen, QR-Code, GPX-Download und Adresszeile. Ein Reload landet
+  // dadurch beim neuen Code statt wieder auf der 404-Seite.
+  function applyToken(newToken) {
+    token = newToken;
+    document.body.setAttribute('data-token', newToken);
+    if (codeEl) codeEl.textContent = newToken;
+    if (planUrlEl) planUrlEl.textContent = location.origin + '/plan/' + newToken;
+    if (qrImage) qrImage.src = '/plan/' + newToken + '/qr.png';
+    if (gpxLink) {
+      gpxLink.href = '/plan/' + newToken + '/gpx';
+      gpxLink.setAttribute('download', 'MotoRoute-' + newToken + '.gpx');
+      gpxLink.textContent = 'MotoRoute-' + newToken + '.gpx';
+    }
+    try { window.history.replaceState(null, '', '/plan/' + newToken); } catch (err) { /* egal */ }
+  }
+
+  // Abgelaufener Code (404): neuen anlegen, Punkte hinueberretten, Seite
+  // umhaengen. Scheitert das, bleibt der Entwurf im Browser - verloren ist
+  // die Klickarbeit damit nicht.
+  function rescueExpired(points) {
+    if (rescuing) return;
+    rescuing = true;
+    unsaved = true;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    show('Der Code ist abgelaufen - neuer Code wird angelegt …');
+    var next = rescueToken ? Promise.resolve(rescueToken) : startPlan();
+    next
+      .then(function (newToken) {
+        rescueToken = newToken;
+        return saveRequest(points, newToken).then(function (res) {
+          if (!res.ok) throw new Error('Speichern fehlgeschlagen (' + res.status + ')');
+          return newToken;
+        });
+      })
+      .then(function (newToken) {
+        var oldToken = token;
+        rescueToken = null;
+        applyToken(newToken);
+        clearDraft(oldToken);
+        if (count) count.textContent = points.length;
+        unsaved = !samePoints(readPoints() || [], points);
+        if (unsaved) scheduleAutosave();
+        show('Code ' + oldToken + ' war abgelaufen. Neuer Code ' + newToken +
+          ' angelegt, deine Punkte sind übernommen - Link, QR und GPX zeigen auf den neuen Code.', 'ok');
+      })
+      .catch(function () {
+        // Nichts mehr gegen den alten Code versuchen, sonst hagelt es 404s.
+        saveDraft(points);
+        show('Der Code ist abgelaufen und ein neuer konnte nicht angelegt werden. ' +
+          'Deine Punkte liegen als Entwurf im Browser - Seite neu laden und „Entwurf fortsetzen“ wählen.', 'err');
+      })
+      .then(function () {
+        rescuing = false;
+      });
+  }
+
   function autosave() {
     autosaveTimer = null;
-    if (!unsaved || saving) return;
+    if (!unsaved || saving || rescuing) return;
     var points;
     try { points = parse(area.value); } catch (err) { return; }
     saving = true;
@@ -345,12 +519,13 @@
       .then(function (res) {
         if (res.ok) {
           unsaved = false;
+          clearDraft();
           if (count) count.textContent = points.length;
           show('Automatisch gespeichert.', 'ok');
           return;
         }
         if (res.status === 404) {
-          show('Dieser Plan ist abgelaufen. Bitte in der App neu starten.', 'err');
+          rescueExpired(points);
           return;
         }
         show('Automatisches Speichern fehlgeschlagen (' + res.status + ') - bitte "Punkte speichern".', 'err');
@@ -478,6 +653,7 @@
       var points = readPoints();
       if (!points) return;
       drawMarkers(points);
+      saveDraft(points);
       show('', '');
       scheduleAutosave();
     }, 350);
@@ -492,17 +668,19 @@
       if (res.ok) {
         count.textContent = points.length;
         unsaved = false;
+        clearDraft();
         clearTimeout(autosaveTimer);
         autosaveTimer = null;
         show(points.length + ' Punkt(e) gespeichert – in der App abholen.', 'ok');
       }
-      else if (res.status === 404) { show('Dieser Plan ist abgelaufen. Bitte in der App neu starten.', 'err'); }
+      else if (res.status === 404) { rescueExpired(points); }
       else { show('Speichern fehlgeschlagen (' + res.status + ').', 'err'); }
     }).catch(function () {
       show('Server nicht erreichbar. Verbindung prüfen und erneut versuchen.', 'err');
     }).then(function () { button.disabled = false; });
   });
 initMap();
+  offerDraft();
   if (undoButton) undoButton.addEventListener('click', undoLast);
   if (reverseButton) reverseButton.addEventListener('click', reversePoints);
 })();

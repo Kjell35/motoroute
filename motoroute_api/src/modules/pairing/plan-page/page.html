@@ -10,7 +10,12 @@
 </head>
 <body data-token="{{TOKEN}}"><main>
 <h1>Route am Computer planen</h1>
-<p class="muted">Code <strong>{{TOKEN}}</strong> · gültig für 2 Stunden · gespeichert: <span id="count">{{COUNT}}</span></p>
+<p class="muted">Code <strong id="code">{{TOKEN}}</strong> · verlängert sich beim Speichern (bis zu 8 Stunden) · gespeichert: <span id="count">{{COUNT}}</span></p>
+<div id="draft" class="banner" hidden>
+  <span id="draft-text"></span>
+  <button id="draft-use" type="button" class="smallbtn">Entwurf fortsetzen</button>
+  <button id="draft-drop" type="button" class="smallbtn">Verwerfen</button>
+</div>
 <form id="search" autocomplete="off">
   <input id="q" type="search" placeholder="Ort suchen, z. B. Eibsee" aria-label="Ort suchen">
   <button id="search-btn" type="submit">Suchen</button>
@@ -23,7 +28,8 @@
   die Zeilen darunter werden automatisch mitgeführt (und bleiben der Fallback).
   Namen ändert man direkt in der Liste oder im Popup des Markers.
   Grün ist der Start, rot das Ziel.
-  Gespeichert wird automatisch kurz nach der letzten Änderung; „Punkte speichern“ geht sofort.</p>
+  Gespeichert wird automatisch kurz nach der letzten Änderung; „Punkte speichern“ geht sofort.
+  Läuft der Code ab, legt die Seite beim nächsten Speichern selbst einen neuen an.</p>
 <ul id="pointlist"></ul>
 <div class="listactions">
   <button id="undo" type="button" class="smallbtn" disabled>Letzten Punkt zurücknehmen</button>
@@ -31,7 +37,7 @@
 </div>
 <div class="row">
   <div class="qr">
-    <img src="{{QR_DATA_URL}}" alt="QR-Code mit dem Plan-Link" width="220" height="220">
+    <img id="qr" src="{{QR_DATA_URL}}" alt="QR-Code mit dem Plan-Link" width="220" height="220">
     <p class="muted">In der App scannen:<br>Wegpunkte → „Am Computer planen“</p>
   </div>
   <div style="flex:1; min-width: 260px;">
@@ -41,7 +47,7 @@
     <textarea id="points" spellcheck="false" placeholder="47.4211, 10.9848, Eibsee">{{PREFILL}}</textarea>
     <button id="save" type="button">Punkte speichern</button>
     <div id="status"></div>
-    <p class="muted">Link zum Abtippen:<br><code>{{PLAN_URL}}</code></p>
+    <p class="muted">Link zum Abtippen:<br><code id="plan-url">{{PLAN_URL}}</code></p>
     <p class="muted">GPX fürs Navi (Punkte samt Namen):<br>
       <a id="gpx" href="/plan/{{TOKEN}}/gpx" download>MotoRoute-{{TOKEN}}.gpx</a></p>
   </div>
