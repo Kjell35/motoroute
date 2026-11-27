@@ -6,9 +6,9 @@ import type { Request } from 'express';
  * zeigt, wie der Render-Proxy X-Forwarded-For aufbaut - welcher Eintrag von
  * wem stammt. Liefert nur die Header des aufrufenden Requests.
  */
-@Controller('api/v1/pairing')
+@Controller('__probe')
 export class XffProbeController {
-  @Get('__xff-probe')
+  @Get('xff')
   probe(@Req() req: Request) {
     const raw = req.headers['x-forwarded-for'];
     const forwarded = (Array.isArray(raw) ? raw.join(' | ') : (raw ?? ''))
