@@ -10,7 +10,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ClientThrottlerGuard } from '../../common/client-throttler.guard';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { PairingService, PairingStart } from './pairing.service';
@@ -43,7 +44,7 @@ export class PairingController {
    */
   @Post('start')
   @HttpCode(200)
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ClientThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   start(@Req() req: Request): Promise<PairingStart> {
     return this.pairing.start(

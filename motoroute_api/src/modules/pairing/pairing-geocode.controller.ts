@@ -7,7 +7,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ClientThrottlerGuard } from '../../common/client-throttler.guard';
 import { PairingService } from './pairing.service';
 import { PairingGeocodeService } from './pairing-geocode.service';
 
@@ -26,7 +27,7 @@ export class PairingGeocodeController {
   ) {}
 
   @Get(':token/geocode')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ClientThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async search(@Param('token') token: string, @Query('q') q?: string) {
     const points = await this.pairing.getPoints(token);
