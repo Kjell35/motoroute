@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
+import { UuidParamPipe } from '../../common/uuid-param.pipe';
 import { HazardsService } from './hazards.service';
 import { CreateHazardDto, NearbyHazardsQueryDto } from './hazards.dto';
 
@@ -45,7 +46,7 @@ export class HazardsController {
   /** Upvote = "Gefahr existiert noch" (Validierung + Deduplizierung im RPC). */
   @Post(':id/upvote')
   @HttpCode(200)
-  upvote(@Req() req: AuthenticatedRequest, @Param('id') id: string): Promise<unknown> {
+  upvote(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string): Promise<unknown> {
     void req;
     return this.hazards.upvote(req.user!, id);
   }

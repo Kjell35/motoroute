@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
+import { UuidParamPipe } from '../../common/uuid-param.pipe';
 import { ChatService } from './chat.service';
 import {
   BlockUserDto,
@@ -62,7 +63,7 @@ export class ChatController {
   }
 
   @Get('users/:userId')
-  getUserProfile(@Req() req: AuthenticatedRequest, @Param('userId') userId: string): Promise<unknown> {
+  getUserProfile(@Req() req: AuthenticatedRequest, @Param('userId', new UuidParamPipe('userId')) userId: string): Promise<unknown> {
     return this.chat.getUserProfile(req.user!, userId);
   }
 
@@ -76,7 +77,7 @@ export class ChatController {
   @Get('conversations/:conversationId/members')
   listMembers(
     @Req() req: AuthenticatedRequest,
-    @Param('conversationId') conversationId: string,
+    @Param('conversationId', new UuidParamPipe('conversationId')) conversationId: string,
   ): Promise<unknown[]> {
     return this.chat.listMembers(req.user!, conversationId);
   }
@@ -84,7 +85,7 @@ export class ChatController {
   @Get('conversations/:conversationId/messages')
   fetchMessages(
     @Req() req: AuthenticatedRequest,
-    @Param('conversationId') conversationId: string,
+    @Param('conversationId', new UuidParamPipe('conversationId')) conversationId: string,
     @Query() query: PaginationQueryDto,
   ): Promise<unknown> {
     return this.chat.fetchMessages(req.user!, conversationId, query.before, query.limit ?? 30);
@@ -94,7 +95,7 @@ export class ChatController {
   @HttpCode(201)
   sendMessage(
     @Req() req: AuthenticatedRequest,
-    @Param('conversationId') conversationId: string,
+    @Param('conversationId', new UuidParamPipe('conversationId')) conversationId: string,
     @Body() dto: SendMessageDto,
   ): Promise<unknown> {
     return this.chat.sendMessage(req.user!, conversationId, dto.content, dto.attachment);
@@ -104,14 +105,14 @@ export class ChatController {
   @HttpCode(204)
   async markRead(
     @Req() req: AuthenticatedRequest,
-    @Param('conversationId') conversationId: string,
+    @Param('conversationId', new UuidParamPipe('conversationId')) conversationId: string,
   ): Promise<void> {
     await this.chat.markRead(req.user!, conversationId);
   }
 
   @Delete('messages/:messageId')
   @HttpCode(204)
-  async deleteMessage(@Req() req: AuthenticatedRequest, @Param('messageId') messageId: string): Promise<void> {
+  async deleteMessage(@Req() req: AuthenticatedRequest, @Param('messageId', new UuidParamPipe('messageId')) messageId: string): Promise<void> {
     await this.chat.deleteMessage(req.user!, messageId);
   }
 
@@ -144,14 +145,14 @@ export class ChatController {
   }
 
   @Get('groups/:groupId')
-  getGroup(@Req() req: AuthenticatedRequest, @Param('groupId') groupId: string): Promise<unknown> {
+  getGroup(@Req() req: AuthenticatedRequest, @Param('groupId', new UuidParamPipe('groupId')) groupId: string): Promise<unknown> {
     return this.chat.getGroup(req.user!, groupId);
   }
 
   @Put('groups/:groupId')
   updateGroup(
     @Req() req: AuthenticatedRequest,
-    @Param('groupId') groupId: string,
+    @Param('groupId', new UuidParamPipe('groupId')) groupId: string,
     @Body() dto: UpdateGroupDto,
   ): Promise<unknown> {
     return this.chat.updateGroup(req.user!, groupId, dto as unknown as Record<string, unknown>);
@@ -159,12 +160,12 @@ export class ChatController {
 
   @Delete('groups/:groupId')
   @HttpCode(204)
-  async deleteGroup(@Req() req: AuthenticatedRequest, @Param('groupId') groupId: string): Promise<void> {
+  async deleteGroup(@Req() req: AuthenticatedRequest, @Param('groupId', new UuidParamPipe('groupId')) groupId: string): Promise<void> {
     await this.chat.deleteGroup(req.user!, groupId);
   }
 
   @Post('groups/:groupId/leave')
-  leaveGroup(@Req() req: AuthenticatedRequest, @Param('groupId') groupId: string): Promise<unknown> {
+  leaveGroup(@Req() req: AuthenticatedRequest, @Param('groupId', new UuidParamPipe('groupId')) groupId: string): Promise<unknown> {
     return this.chat.leaveGroup(req.user!, groupId);
   }
 
@@ -172,7 +173,7 @@ export class ChatController {
   @HttpCode(204)
   async transferOwnership(
     @Req() req: AuthenticatedRequest,
-    @Param('groupId') groupId: string,
+    @Param('groupId', new UuidParamPipe('groupId')) groupId: string,
     @Body() dto: TransferOwnershipDto,
   ): Promise<void> {
     await this.chat.transferOwnership(req.user!, groupId, dto.newOwnerId);
@@ -182,7 +183,7 @@ export class ChatController {
   @HttpCode(204)
   async removeMember(
     @Req() req: AuthenticatedRequest,
-    @Param('groupId') groupId: string,
+    @Param('groupId', new UuidParamPipe('groupId')) groupId: string,
     @Body() dto: RemoveMemberDto,
   ): Promise<void> {
     await this.chat.removeMember(req.user!, groupId, dto.userId);
@@ -194,7 +195,7 @@ export class ChatController {
   @HttpCode(201)
   createInvitation(
     @Req() req: AuthenticatedRequest,
-    @Param('groupId') groupId: string,
+    @Param('groupId', new UuidParamPipe('groupId')) groupId: string,
     @Body() dto: CreateInvitationDto,
   ): Promise<unknown> {
     return this.chat.createInvitation(req.user!, groupId, dto.expiresInDays);
@@ -202,12 +203,12 @@ export class ChatController {
 
   @Post('groups/:groupId/invitations/deactivate')
   @HttpCode(204)
-  async deactivateInvitation(@Req() req: AuthenticatedRequest, @Param('groupId') groupId: string): Promise<void> {
+  async deactivateInvitation(@Req() req: AuthenticatedRequest, @Param('groupId', new UuidParamPipe('groupId')) groupId: string): Promise<void> {
     await this.chat.deactivateInvitation(req.user!, groupId);
   }
 
   @Get('groups/:groupId/invitations/active')
-  getActiveInvitation(@Req() req: AuthenticatedRequest, @Param('groupId') groupId: string): Promise<unknown> {
+  getActiveInvitation(@Req() req: AuthenticatedRequest, @Param('groupId', new UuidParamPipe('groupId')) groupId: string): Promise<unknown> {
     return this.chat.getActiveInvitation(req.user!, groupId);
   }
 
@@ -231,7 +232,7 @@ export class ChatController {
 
   @Delete('blocks/:userId')
   @HttpCode(204)
-  async unblockUser(@Req() req: AuthenticatedRequest, @Param('userId') userId: string): Promise<void> {
+  async unblockUser(@Req() req: AuthenticatedRequest, @Param('userId', new UuidParamPipe('userId')) userId: string): Promise<void> {
     await this.chat.unblockUser(req.user!, userId);
   }
 
@@ -275,7 +276,7 @@ export class ChatController {
   @HttpCode(200)
   async adminResolveReport(
     @Req() req: AuthenticatedRequest,
-    @Param('reportId') reportId: string,
+    @Param('reportId', new UuidParamPipe('reportId')) reportId: string,
     @Body() dto: ResolveReportDto,
   ): Promise<void> {
     await this.chat.adminResolveReport(req.user!, reportId, dto.status);

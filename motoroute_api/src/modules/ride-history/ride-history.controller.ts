@@ -24,6 +24,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
+import { UuidParamPipe } from '../../common/uuid-param.pipe';
 import { RideHistoryService, RideSyncDto, PrivacyUpdateDto } from './ride-history.service';
 
 class TrackPointDto {
@@ -122,7 +123,7 @@ export class RideHistoryController {
 
   /** Öffentliches Profil eines anderen Benutzers ansehen. */
   @Get('public/:userId')
-  async publicProfile(@Req() req: AuthenticatedRequest, @Param('userId') userId: string) {
+  async publicProfile(@Req() req: AuthenticatedRequest, @Param('userId', new UuidParamPipe('userId')) userId: string) {
     return this.service.getPublicProfile(req.user!, userId);
   }
 }

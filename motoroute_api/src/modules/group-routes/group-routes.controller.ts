@@ -1,12 +1,10 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   Param,
-  PipeTransform,
   Post,
   Put,
   Req,
@@ -14,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
 import { GroupRoutesService } from './group-routes.service';
+import { UuidParamPipe } from '../../common/uuid-param.pipe';
 import {
   AddCommentDto,
   AddStopDto,
@@ -26,27 +25,6 @@ import {
   UpdateStopDto,
 } from './group-routes.dto';
 
-/**
- * Prüft einen UUID-Pfadparameter, bevor er in Postgres landet.
- *
- * Ohne diese Prüfung ging der String unverändert in die Datenbank:
- * Postgres antwortet mit 22P02 (invalid input syntax for type uuid) und
- * der Client bekam 500 statt einer verständlichen 400 (Log: "listRoutes
- * failed: 22P02 invalid input syntax for type uuid").
- */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-class UuidParamPipe implements PipeTransform<string, string> {
-  constructor(private readonly field: string) {}
-
-  transform(value: string): string {
-    if (!UUID_PATTERN.test(value ?? '')) {
-      throw new BadRequestException(`${this.field} ist keine gültige UUID`);
-    }
-    return value;
-  }
-}
 
 /**
  * REST-Endpunkte des kollaborativen Gruppen-Routenplaners (Abschnitt 33).

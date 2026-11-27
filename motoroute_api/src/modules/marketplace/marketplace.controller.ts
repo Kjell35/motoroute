@@ -3,6 +3,7 @@ import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
 import { Transform, Type } from 'class-transformer';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
+import { UuidParamPipe } from '../../common/uuid-param.pipe';
 import { MarketplaceService } from './marketplace.service';
 import { ChatService } from '../chat/chat.service';
 import {
@@ -197,13 +198,13 @@ export class MarketplaceController {
 
   /** Oeffentliches Detail eines freigegebenen Angebots. */
   @Get('listings/:id')
-  get(@Param('id') id: string) {
+  get(@Param('id', new UuidParamPipe('id')) id: string) {
     return this.marketplace.getPublicListing(id);
   }
 
   /** Verkaeufer-Info (oeffentliche Kennung, keine privaten Daten). */
   @Get('listings/:id/seller')
-  seller(@Param('id') id: string) {
+  seller(@Param('id', new UuidParamPipe('id')) id: string) {
     return this.marketplace.sellerInfoOf(id);
   }
 
@@ -218,7 +219,7 @@ export class MarketplaceController {
   /** Abgelehntes Angebot bearbeiten + erneut einreichen (mit neuen Fotos). */
   @Put('listings/:id')
   @UseInterceptors(AnyFilesInterceptor({ limits: { files: 8, fileSize: 8 * 1024 * 1024 } }))
-  resubmit(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: CreateListingDto, @UploadedFiles() files: UploadedPhoto[]) {
+  resubmit(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string, @Body() dto: CreateListingDto, @UploadedFiles() files: UploadedPhoto[]) {
     const images = (files ?? []).map((f) => ({ buffer: f.buffer, mimeType: f.mimetype }));
     return this.marketplace.resubmitListing(req.user!, id, dto, images);
   }
@@ -230,12 +231,12 @@ export class MarketplaceController {
   }
 
   @Put('me/listings/:id/status')
-  setStatus(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: StatusDto) {
+  setStatus(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string, @Body() dto: StatusDto) {
     return this.marketplace.updateStatus(req.user!, id, dto.status);
   }
 
   @Delete('me/listings/:id')
-  delete(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+  delete(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string) {
     return this.marketplace.deleteListing(req.user!, id);
   }
 
@@ -246,31 +247,31 @@ export class MarketplaceController {
   }
 
   @Post('me/favorites/:listingId')
-  addFavorite(@Req() req: AuthenticatedRequest, @Param('listingId') id: string) {
+  addFavorite(@Req() req: AuthenticatedRequest, @Param('listingId', new UuidParamPipe('listingId')) id: string) {
     return this.marketplace.addFavorite(req.user!, id);
   }
 
   @Delete('me/favorites/:listingId')
-  removeFavorite(@Req() req: AuthenticatedRequest, @Param('listingId') id: string) {
+  removeFavorite(@Req() req: AuthenticatedRequest, @Param('listingId', new UuidParamPipe('listingId')) id: string) {
     return this.marketplace.removeFavorite(req.user!, id);
   }
 
   // Meldungen
   @Post('listings/:id/report')
   @HttpCode(HttpStatus.CREATED)
-  report(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: ReportDto) {
+  report(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string, @Body() dto: ReportDto) {
     return this.marketplace.reportListing(req.user!, id, dto.reason, dto.details);
   }
 
   /** Verkaeufer kontaktieren - erstellt den privaten Chat via ChatService. */
   @Post('listings/:id/contact')
-  contact(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: ContactSellerDto) {
+  contact(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string, @Body() dto: ContactSellerDto) {
     return this.marketplace.contactSeller(req.user!, id, dto.message, this.chatService);
   }
 
   // Bewertungen (Migration 0007)
   @Get('listings/:id/reviews')
-  reviews(@Param('id') id: string) {
+  reviews(@Param('id', new UuidParamPipe('id')) id: string) {
     return this.marketplace.listReviews(id);
   }
 
@@ -278,7 +279,7 @@ export class MarketplaceController {
   @HttpCode(HttpStatus.CREATED)
   createReview(
     @Req() req: AuthenticatedRequest,
-    @Param('id') id: string,
+    @Param('id', new UuidParamPipe('id')) id: string,
     @Body() dto: ReviewDto,
   ) {
     return this.marketplace.createReview(req.user!, id, dto.rating, dto.comment);
@@ -308,17 +309,17 @@ export class MarketplaceController {
   }
 
   @Put('admin/listings/:id')
-  adminPatch(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: AdminPatchDto) {
+  adminPatch(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string, @Body() dto: AdminPatchDto) {
     return this.marketplace.adminSetStatus(req.user!, id, dto);
   }
 
   @Delete('admin/listings/:id')
-  adminDelete(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+  adminDelete(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string) {
     return this.marketplace.adminDeleteListing(req.user!, id);
   }
 
   @Put('admin/users/:id/ban')
-  adminBan(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: BanDto) {
+  adminBan(@Req() req: AuthenticatedRequest, @Param('id', new UuidParamPipe('id')) id: string, @Body() dto: BanDto) {
     return this.marketplace.adminSetUserBanned(req.user!, id, dto.banned);
   }
 
