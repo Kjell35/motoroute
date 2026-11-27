@@ -11,6 +11,15 @@
 #    bei normalem Entwicklungsfluss (Auto-Deploys) bleibt das Repo aktiv.
 #  - Überschneidungen sind ausgeschlossen (concurrency group).
 #  - Fällt GitHub aus, greift der Auto-Retry in der App (v0.3.3+).
+#
+# WICHTIG (Supabase-Pause): /v1/health ist nur eine Prozess-Antwort und
+# beruehrt Supabase NICHT. Deshalb pusht dieser Workflow zusaetzlich
+# /v1/health/deps - dort laufen eine echte Postgres-Query und ein echter
+# GoTrue-Request. Nur die halten das Free-Projekt aktiv; ohne sie pausiert
+# es nach ~1 Woche Inaktivitaet und der Login faellt aus (Nov 2026).
+#
+# Sichtbarkeit: Abweichungen brechen den Lauf ab (rot) statt nur zu warnen -
+# nur so kommt eine GitHub-Benachrichtigung. Log-Zeile: 'Deps: HTTP 200 ...'
 
 name: keep-alive
 
@@ -37,7 +46,20 @@ jobs:
           echo "Health: HTTP $code"
           cat /tmp/health.json || true
           if [ "$code" != "200" ]; then
-            echo "::warning::Backend antwortete nicht mit 200 (HTTP $code)"
+            echo "::error::Backend antwortete nicht mit 200 (HTTP $code)"
+            exit 1
+          fi
+
+      # Supabase (DB + Auth) - der eigentliche Pause-Schutz.
+      - name: Supabase wachhalten (DB + Auth)
+        run: |
+          code=$(curl -s -o /tmp/deps.json -w "%{http_code}" --max-time 90 https://motoroute-api-8fi9.onrender.com/v1/health/deps || echo "000")
+          echo "Deps: HTTP $code"
+          cat /tmp/deps.json || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase-Abhaengigkeiten nicht ok (HTTP $code) - Pause-Risiko"
+            exit 1
           fi
 
       - name: Garage-API aufwecken (v0.4.1+)
