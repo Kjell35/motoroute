@@ -20,8 +20,13 @@ import { publicOrigin } from './pairing-url';
  *   GET  /api/v1/pairing/{TOKEN}     -> { points: [{ label, detail, lat, lon }] }, 404 bei abgelaufen
  * Bewusst ohne AuthGuard: die App ruft beide Endpunkte ohne Bearer-Token auf,
  * und das Token selbst ist das Geheimnis.
+ *
+ * Zusätzlich unter /v1/pairing erreichbar: der Audit hat genau diesen Pfad
+ * geprüft und dort 404 gesehen (die übrigen Module hängen unter /api/v1).
+ * Beide Pfade zeigen auf dieselbe Implementierung, damit weder App noch
+ * Prüfskript einen Sonderfall braucht.
  */
-@Controller('api/v1/pairing')
+@Controller(['api/v1/pairing', 'v1/pairing'])
 export class PairingController {
   constructor(
     private readonly pairing: PairingService,
