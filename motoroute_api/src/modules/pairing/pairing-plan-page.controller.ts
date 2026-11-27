@@ -61,6 +61,16 @@ function layout(title: string, body: string, extraHead = ''): string {
   h1 { font-size: 20px; margin: 0 0 4px; }
   p, li { line-height: 1.5; }
   .muted { color: #52525b; font-size: 14px; }
+  #search { display: flex; gap: 8px; margin: 12px 0 8px; }
+  #search input { flex: 1; min-width: 0; padding: 10px 12px; font-size: 15px;
+                  border: 1px solid #d4d4d8; border-radius: 10px; }
+  #search button { margin: 0; padding: 10px 14px; font-size: 15px; }
+  #search-status { margin: 0 0 8px; min-height: 18px; }
+  #results { list-style: none; margin: 0 0 12px; padding: 0; }
+  #results li { margin: 0 0 4px; }
+  #results button { width: 100%; margin: 0; padding: 8px 10px; text-align: left;
+                    font-size: 14px; background: #e4e4e7; color: #18181b; border-radius: 8px; }
+  #results .sub { display: block; font-size: 12px; opacity: .7; font-weight: 400; }
   code { background: #f4f4f5; padding: 2px 6px; border-radius: 6px; }
   #map { height: 340px; margin: 0 0 6px; border: 1px solid #d4d4d8; border-radius: 12px;
          background: #f4f4f5; z-index: 0; }
@@ -115,6 +125,12 @@ function planPage(
   const body = `
 <h1>Route am Computer planen</h1>
 <p class="muted">Code <strong>${escapeHtml(token)}</strong> · gültig für 2 Stunden · gespeichert: <span id="count">${points.length}</span></p>
+<form id="search" autocomplete="off">
+  <input id="q" type="search" placeholder="Ort suchen, z. B. Eibsee" aria-label="Ort suchen">
+  <button id="search-btn" type="submit">Suchen</button>
+</form>
+<div id="search-status" class="muted"></div>
+<ul id="results"></ul>
 <div id="map" role="application" aria-label="Karte: Klick setzt einen Wegpunkt"></div>
 <p class="muted" id="summary"></p>
 <p class="muted" id="map-hint">In die Karte klicken setzt einen Punkt, Marker ziehen verschiebt ihn -
@@ -148,6 +164,12 @@ function planPage(
   var summary = document.getElementById('summary');
   var list = document.getElementById('pointlist');
   var undoButton = document.getElementById('undo');
+  var searchForm = document.getElementById('search');
+  var searchInput = document.getElementById('q');
+  var searchButton = document.getElementById('search-btn');
+  var searchStatus = document.getElementById('search-status');
+  var resultList = document.getElementById('results');
+  var searchBusy = false;
   function show(text, cls) { status.textContent = text; status.className = cls || ''; }
   function parse(text) {
     var points = [];
@@ -278,6 +300,96 @@ function planPage(
     current.pop();
     if (map) map.closePopup();
     writePoints(current, 'Letzten Punkt zurückgenommen.');
+  }
+
+  // ---- Ortssuche: laeuft ueber das eigene Backend (eigener User-Agent,
+  // Cache, 1 Nominatim-Anfrage pro Sekunde). Ein Treffer setzt den Punkt
+  // genau wie ein Kartenklick.
+  function setSearchStatus(text, cls) {
+    if (!searchStatus) return;
+    searchStatus.textContent = text;
+    searchStatus.className = 'muted' + (cls ? ' ' + cls : '');
+  }
+
+  function clearResults() {
+    if (resultList) resultList.innerHTML = '';
+  }
+
+  function addFromSearch(result) {
+    var current = readPoints() || [];
+    current.push({ lat: result.lat, lon: result.lon, label: result.label });
+    writePoints(current, 'Punkt "' + result.label + '" aus der Suche übernommen.');
+    if (map) map.setView([result.lat, result.lon], 12);
+    clearResults();
+    setSearchStatus('');
+  }
+
+  function renderResults(results) {
+    clearResults();
+    if (!results.length) {
+      setSearchStatus('Nichts gefunden - anderen Namen probieren?', 'err');
+      return;
+    }
+    results.forEach(function (result) {
+      var row = document.createElement('li');
+      var button = document.createElement('button');
+      button.type = 'button';
+      var main = document.createElement('span');
+      main.textContent = result.label;
+      var sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = result.detail || (result.lat.toFixed(4) + ', ' + result.lon.toFixed(4));
+      button.appendChild(main);
+      button.appendChild(sub);
+      button.addEventListener('click', function () { addFromSearch(result); });
+      row.appendChild(button);
+      resultList.appendChild(row);
+    });
+    setSearchStatus(results.length + ' Treffer - Auswahl setzt den Punkt und springt hin.');
+  }
+
+  function searchErrorText(status, data) {
+    var message = data && data.message ? [].concat(data.message).join(' ') : '';
+    if (status === 429) return 'Zu viele Suchen - bitte einen Moment warten.';
+    if (status === 400) return message || 'Suchbegriff prüfen.';
+    if (status === 404) return 'Dieser Plan ist abgelaufen. Bitte in der App neu starten.';
+    return message || 'Ortssuche gerade nicht erreichbar - bitte später erneut versuchen.';
+  }
+
+  if (searchForm) {
+    searchForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (searchBusy) return;
+      var query = (searchInput.value || '').trim();
+      if (query.length < 3) {
+        setSearchStatus('Bitte mindestens 3 Zeichen eingeben (z. B. Eibsee).', 'err');
+        return;
+      }
+      searchBusy = true;
+      if (searchButton) searchButton.disabled = true;
+      clearResults();
+      setSearchStatus('Suche läuft …');
+      fetch('/api/v1/pairing/' + token + '/geocode?q=' + encodeURIComponent(query))
+        .then(function (res) {
+          return res.json().catch(function () { return null; }).then(function (data) {
+            return { status: res.status, data: data };
+          });
+        })
+        .then(function (out) {
+          if (out.status === 200 && out.data && Array.isArray(out.data.results)) {
+            renderResults(out.data.results);
+            return;
+          }
+          setSearchStatus(searchErrorText(out.status, out.data), 'err');
+        })
+        .catch(function () {
+          setSearchStatus('Server nicht erreichbar. Verbindung prüfen und erneut versuchen.', 'err');
+        })
+        .then(function () {
+          searchBusy = false;
+          if (searchButton) searchButton.disabled = false;
+        });
+    });
   }
 
   function writePoints(points, message, redraw) {
