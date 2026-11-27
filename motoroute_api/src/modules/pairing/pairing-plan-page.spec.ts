@@ -391,6 +391,83 @@ describe('Plan-Seite in jsdom: Löschen', () => {
     );
   });
 
+  it('speichert Änderungen entprellt von selbst', async () => {
+    try {
+      const { doc, state, fetchMock } = await mountPage(threePoints);
+      jest.useFakeTimers();
+      const warte = async () => { await Promise.resolve(); await Promise.resolve(); };
+
+      state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+      state.clickHandler!({ latlng: { lat: 47.8, lng: 12.0 } });
+      jest.advanceTimersByTime(300);
+      // Noch nichts gespeichert: die Entprellung wartet die Pause ab.
+      expect(fetchMock).toHaveBeenCalledTimes(0);
+
+      jest.advanceTimersByTime(500);
+      await warte();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchMock.mock.calls[0];
+      expect(url).toBe('/api/v1/pairing/K7G7YY/points');
+      expect(options.method).toBe('PUT');
+      expect(JSON.parse(options.body).points).toHaveLength(5);
+      expect(doc.getElementById('status').textContent).toBe('Automatisch gespeichert.');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('warnt beim Verlassen nur mit ungespeicherten Änderungen', async () => {
+    try {
+      const { doc, win, state } = await mountPage(threePoints);
+      jest.useFakeTimers();
+      const verlassen = () => {
+        const event = new win.Event('beforeunload', { cancelable: true });
+        win.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+
+      // Frisch geladen ist alles gespeichert.
+      expect(verlassen()).toBe(false);
+
+      state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+      expect(verlassen()).toBe(true);
+
+      // Nach dem automatischen Speichern darf nicht mehr gewarnt werden.
+      jest.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(doc.getElementById('status').textContent).toBe('Automatisch gespeichert.');
+      expect(verlassen()).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('speichert sofort und schaltet die Warnung ab', async () => {
+    try {
+      const { doc, win, state, fetchMock } = await mountPage(threePoints);
+      jest.useFakeTimers();
+      state.clickHandler!({ latlng: { lat: 47.7, lng: 11.9 } });
+
+      doc.getElementById('save').click();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(doc.getElementById('status').textContent).toBe('4 Punkt(e) gespeichert – in der App abholen.');
+
+      // Der wartende Autosave darf keinen zweiten Aufruf auslösen.
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      const event = new win.Event('beforeunload', { cancelable: true });
+      win.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('sperrt das Umdrehen bei weniger als zwei Punkten', async () => {
     const leer = await mountPage([]);
     expect(leer.doc.getElementById('reverse').disabled).toBe(true);

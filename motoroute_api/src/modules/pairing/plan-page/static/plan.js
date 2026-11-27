@@ -44,6 +44,12 @@
   var lastCount = -1;
   var writeGuard = false;
   var editTimer = null;
+  // Automatisches Speichern: kurz nach der letzten Aenderung, damit
+  // Klickarbeit nicht verloren geht, aber nicht bei jedem einzelnen Klick.
+  var autosaveTimer = null;
+  var unsaved = false;
+  var saving = false;
+  var AUTOSAVE_MS = 800;
 
   function readPoints() {
     try { return parse(area.value); } catch (err) { return null; }
@@ -310,7 +316,62 @@
     // ein DOM-Teardown mitten in der laufenden Mausgeste).
     if (redraw !== false) drawMarkers(points);
     if (message) show(message, 'ok');
+    scheduleAutosave();
   }
+
+  // Speichert erst, wenn eine Weile nichts mehr passiert ist. Mehrere Klicks
+  // hintereinander ergeben so einen einzigen Aufruf.
+  function scheduleAutosave() {
+    unsaved = true;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosave, AUTOSAVE_MS);
+  }
+
+  function saveRequest(points) {
+    return fetch('/api/v1/pairing/' + token + '/points', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: points })
+    });
+  }
+
+  function autosave() {
+    autosaveTimer = null;
+    if (!unsaved || saving) return;
+    var points;
+    try { points = parse(area.value); } catch (err) { return; }
+    saving = true;
+    saveRequest(points)
+      .then(function (res) {
+        if (res.ok) {
+          unsaved = false;
+          if (count) count.textContent = points.length;
+          show('Automatisch gespeichert.', 'ok');
+          return;
+        }
+        if (res.status === 404) {
+          show('Dieser Plan ist abgelaufen. Bitte in der App neu starten.', 'err');
+          return;
+        }
+        show('Automatisches Speichern fehlgeschlagen (' + res.status + ') - bitte "Punkte speichern".', 'err');
+      })
+      .catch(function () {
+        show('Server nicht erreichbar - noch nicht gespeichert.', 'err');
+      })
+      .then(function () {
+        saving = false;
+        // Waehrend des Speicherns weitergeklickt: den Rest nachziehen.
+        if (unsaved) scheduleAutosave();
+      });
+  }
+
+  // Beim Verlassen (Tab zu, neu laden, Link) nachfragen, solange etwas offen ist.
+  window.addEventListener('beforeunload', function (event) {
+    if (!unsaved) return;
+    event.preventDefault();
+    event.returnValue = 'Änderungen sind noch nicht gespeichert.';
+    return event.returnValue;
+  });
 
   function drawMarkers(points) {
     syncRoute(points);
@@ -418,6 +479,7 @@
       if (!points) return;
       drawMarkers(points);
       show('', '');
+      scheduleAutosave();
     }, 350);
   });
 
@@ -426,12 +488,14 @@
     try { points = parse(area.value); } catch (e) { show(e.message, 'err'); return; }
     button.disabled = true;
     show('Speichern …');
-    fetch('/api/v1/pairing/' + token + '/points', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ points: points })
-    }).then(function (res) {
-      if (res.ok) { count.textContent = points.length; show(points.length + ' Punkt(e) gespeichert – in der App abholen.', 'ok'); }
+    saveRequest(points).then(function (res) {
+      if (res.ok) {
+        count.textContent = points.length;
+        unsaved = false;
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+        show(points.length + ' Punkt(e) gespeichert – in der App abholen.', 'ok');
+      }
       else if (res.status === 404) { show('Dieser Plan ist abgelaufen. Bitte in der App neu starten.', 'err'); }
       else { show('Speichern fehlgeschlagen (' + res.status + ').', 'err'); }
     }).catch(function () {
