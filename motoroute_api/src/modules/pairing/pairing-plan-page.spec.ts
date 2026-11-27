@@ -605,8 +605,10 @@ describe('Plan-Seite in jsdom: Tastatur und Vorlesen', () => {
     const css = readPlanAsset('static/plan.css');
     const mobil = css.slice(css.indexOf('@media (max-width: 480px)'));
 
+    // Hoehe gilt fuer alle kleinen Knoepfe, auch die unter der Liste.
+    expect(mobil).toMatch(/\.smallbtn \{[^}]*min-height: 32px/);
+    // Die Zeichen-Knoepfe der Zeile sind zusaetzlich 32 px breit.
     expect(mobil).toMatch(/#pointlist \.smallbtn \{[^}]*min-width: 32px/);
-    expect(mobil).toMatch(/#pointlist \.smallbtn \{[^}]*min-height: 32px/);
     // Der Hinweis auf die Tastatur steht auch im ausgelieferten HTML.
     expect(readPlanAsset('page.html')).toContain('verschiebt man den Punkt, in dem der Cursor steht');
   });

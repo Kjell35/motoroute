@@ -84,10 +84,12 @@
     #pointlist .nr { width: 22px; height: 22px; font-size: 11px; }
     #pointlist input.name { padding: 5px 6px; }
     #pointlist .leg { font-size: 11px; color: #a1a1aa; }
-    /* Fingerfreundlich: rund 32 px Kantenlaenge fuer ▲▼×, ohne dass die
-       Zeile umbricht. Die Glyphen werden darin zentriert. */
-    #pointlist .smallbtn { min-width: 32px; min-height: 32px; padding: 0 4px;
-                           font-size: 15px; line-height: 1;
-                           display: inline-flex; align-items: center;
-                           justify-content: center; }
+    /* Fingerfreundlich: rund 32 px Kantenlaenge fuer ALLE kleinen Knoepfe -
+       die der Zeile (▲▼×) und die beiden unter der Liste. */
+    .smallbtn { min-height: 32px; padding: 0 10px; font-size: 15px;
+                line-height: 1; display: inline-flex; align-items: center;
+                justify-content: center; }
+    /* Die Zeichen-Knoepfe bekommen zusaetzlich eine feste Breite, damit die
+       Zeile einzeilig bleibt. */
+    #pointlist .smallbtn { min-width: 32px; padding: 0 4px; }
   }
