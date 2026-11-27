@@ -248,7 +248,13 @@ model Document {
   ownerId   String
   type      DocumentType
   title     String
-  fileUrl   String // Storage-URL (privater Bucket) oder Dateipfad
+  fileUrl   String // Altbestand: externe URL; bei Uploads leer
+  // Datei selbst (max. 8 MB, siehe documents.routes.ts). bytea statt
+  // Storage-Bucket, weil die Free-Tier-Instanz kein Persistent Disk hat
+  // und kein Storage-Key konfiguriert ist.
+  fileData  Bytes?
+  fileName  String?
+  hasFile   Boolean      @default(false)
   fileSizeBytes Int?
   mimeType  String?
   notes     String?
