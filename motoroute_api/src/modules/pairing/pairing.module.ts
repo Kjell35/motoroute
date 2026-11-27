@@ -4,7 +4,6 @@ import { PairingController } from './pairing.controller';
 import { PairingGeocodeController } from './pairing-geocode.controller';
 import { PairingGeocodeService } from './pairing-geocode.service';
 import { PairingGpxController } from './pairing-gpx.controller';
-import { XffProbeController } from './xff-probe.controller';
 import { PairingPlanPageController } from './pairing-plan-page.controller';
 import { PairingService } from './pairing.service';
 
@@ -16,7 +15,6 @@ import { PairingService } from './pairing.service';
     PairingGeocodeController,
     PairingPlanPageController,
     PairingGpxController,
-    XffProbeController,
   ],
   providers: [PairingService, PairingGeocodeService],
 })

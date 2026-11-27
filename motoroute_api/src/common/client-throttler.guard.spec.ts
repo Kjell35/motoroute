@@ -53,11 +53,15 @@ describe('ClientThrottlerGuard: Schlüssel aus X-Forwarded-For', () => {
     await app.close();
   });
 
-  async function post(forwardedFor?: string): Promise<{ status: number; remaining: string | null }> {
-    const response = await fetch(`${baseUrl}/api/v1/pairing/start`, {
-      method: 'POST',
-      headers: forwardedFor ? { 'x-forwarded-for': forwardedFor } : undefined,
-    });
+  async function post(
+    forwardedFor?: string,
+    extra: Record<string, string> = {},
+  ): Promise<{ status: number; remaining: string | null }> {
+    const headers: Record<string, string> = { ...extra };
+    if (forwardedFor) headers['x-forwarded-for'] = forwardedFor;
+    const response = await fetch(`${baseUrl}/api/v1/pairing/start`,
+      { method: 'POST', headers },
+    );
     return { status: response.status, remaining: response.headers.get('x-ratelimit-remaining') };
   }
 
@@ -84,6 +88,46 @@ describe('ClientThrottlerGuard: Schlüssel aus X-Forwarded-For', () => {
     expect(second.status).toBe(200);
     expect(second.remaining).toBe('3');
     expect(otherClient.remaining).toBe('4');
+  });
+
+  it('ein gefälschter XFF-Eintrag trifft denselben Zähler', async () => {
+    // Angreifer hängt vorne an, was er will - Render hängt intern 10.x an.
+    // Nur der Eintrag davor ist der Client.
+    const first = await post('9.9.9.9, 203.0.113.70, 10.7.0.1');
+    const second = await post('8.8.8.8, 5.5.5.5, 203.0.113.70, 10.7.0.9');
+
+    expect(first.status).toBe(200);
+    expect(first.remaining).toBe('4');
+    expect(second.status).toBe(200);
+    expect(second.remaining).toBe('3');
+  });
+
+  it('nimmt hinter Cloudflare cf-connecting-ip statt den linken Eintrag', async () => {
+    const cloudflare = { 'cf-ray': 'a612342c6f49ae67-HAM', 'cdn-loop': 'cloudflare; loops=1' };
+    const first = await post('9.9.9.9, 203.0.113.80, 104.22.83.54, 10.29.164.4', {
+      ...cloudflare,
+      'cf-connecting-ip': '203.0.113.80',
+    });
+    const second = await post('7.7.7.7, 203.0.113.80, 172.71.147.98, 10.24.36.215', {
+      ...cloudflare,
+      'cf-connecting-ip': '203.0.113.80',
+    });
+    const otherClient = await post('9.9.9.9, 203.0.113.81, 104.22.83.54, 10.29.164.4', {
+      ...cloudflare,
+      'cf-connecting-ip': '203.0.113.81',
+    });
+
+    expect(first.remaining).toBe('4');
+    expect(second.remaining).toBe('3');
+    expect(otherClient.remaining).toBe('4');
+  });
+
+  it('glaubt cf-connecting-ip nicht, wenn der Request nicht von Cloudflare kommt', async () => {
+    const first = await post('203.0.113.90, 10.8.0.1', { 'cf-connecting-ip': '1.1.1.1' });
+    const second = await post('203.0.113.90, 10.8.0.2', { 'cf-connecting-ip': '2.2.2.2' });
+
+    expect(first.remaining).toBe('4');
+    expect(second.remaining).toBe('3');
   });
 
   it('lässt einen anderen Client davon unberührt', async () => {
