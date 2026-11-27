@@ -274,7 +274,7 @@ function planPage(
       name.className = 'name';
       name.value = p.label;
       name.setAttribute('aria-label', 'Name von Punkt ' + (index + 1));
-      name.addEventListener('change', function () { renamePoint(index, name.value); });
+      name.addEventListener('change', function () { renamePoint(index, name.value, name); });
       name.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') { event.preventDefault(); name.blur(); }
       });
@@ -290,12 +290,18 @@ function planPage(
 
   // Umbenennen: nur das Label tauschen, Koordinaten und Reihenfolge bleiben.
   // Leerer Name wird verworfen (sonst hätte der Punkt keinen Namen mehr).
-  function renamePoint(index, raw) {
+  function renamePoint(index, raw, field) {
     var current = readPoints() || [];
     var old = current[index];
     if (!old) return;
     var name = raw === undefined || raw === null ? '' : String(raw).trim();
-    if (!name || name === old.label) return;
+    if (!name) {
+      // Leerer Name: Feld auf den gespeicherten Namen zuruecksetzen, statt
+      // einen namenlosen Punkt zu erzeugen.
+      if (field) field.value = old.label;
+      return;
+    }
+    if (name === old.label) return;
     current[index] = {
       lat: old.lat,
       lon: old.lon,
@@ -459,7 +465,7 @@ function planPage(
       title.className = 'popup-name';
       title.value = p.label;
       title.setAttribute('aria-label', 'Name von Punkt ' + (index + 1));
-      title.addEventListener('change', function () { renamePoint(index, title.value); });
+      title.addEventListener('change', function () { renamePoint(index, title.value, title); });
       title.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') { event.preventDefault(); title.blur(); }
       });
