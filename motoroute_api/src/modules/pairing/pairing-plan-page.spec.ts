@@ -267,7 +267,8 @@ describe('Plan-Seite in jsdom: Bedienung', () => {
       'nr',
       'nr end',
     ]);
-    expect(doc.getElementById('status').textContent).toBe('Reihenfolge geändert.');
+    // Die Meldung nennt Punkt und Position, nicht nur "geändert".
+    expect(doc.getElementById('status').textContent).toBe('Eibsee ist jetzt Punkt 2 von 3.');
   });
 
   it('benennt über die Liste um (Enter)', async () => {
@@ -523,7 +524,7 @@ describe('Plan-Seite in jsdom: Tastatur und Vorlesen', () => {
     taste(win, input, 'ArrowDown', true);
 
     expect(labels(doc)).toEqual(['Zugspitze', 'Eibsee', 'Kufstein']);
-    expect(doc.getElementById('status').textContent).toBe('Reihenfolge geändert.');
+    expect(doc.getElementById('status').textContent).toBe('Eibsee ist jetzt Punkt 2 von 3.');
     // Der Fokus wandert mit dem Punkt - sonst tippt man nach dem Verschieben
     // in ein Feld, das es so nicht mehr gibt.
     expect(doc.activeElement.value).toBe('Eibsee');
@@ -539,6 +540,7 @@ describe('Plan-Seite in jsdom: Tastatur und Vorlesen', () => {
     expect(labels(doc)).toEqual(['Eibsee', 'Kufstein', 'Zugspitze']);
     // Kufstein war der dritte Punkt und sitzt jetzt auf Platz 2.
     expect(doc.activeElement.value).toBe('Kufstein');
+    expect(doc.getElementById('status').textContent).toBe('Kufstein ist jetzt Punkt 2 von 3.');
   });
 
   it('meldet an den Listenrändern, dass nichts mehr geht', async () => {
@@ -565,6 +567,19 @@ describe('Plan-Seite in jsdom: Tastatur und Vorlesen', () => {
 
     expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze', 'Kufstein']);
     expect(doc.getElementById('status').textContent).toBe('');
+  });
+
+  it('nennt beim Verschieben Punkt, Position und Gesamtzahl', async () => {
+    const { doc, win } = await mountPage(threePoints);
+    const zweiter = rows(doc)[1].querySelector('input.name');
+    zweiter.focus();
+
+    taste(win, zweiter, 'ArrowDown', true);
+
+    // Zugspitze wandert von Platz 2 auf Platz 3 - bei drei Punkten das Ende.
+    expect(labels(doc)).toEqual(['Eibsee', 'Kufstein', 'Zugspitze']);
+    expect(doc.getElementById('status').textContent).toBe('Zugspitze ist jetzt Punkt 3 von 3.');
+    expect(doc.activeElement.value).toBe('Zugspitze');
   });
 
   it('kündigt die Tastenkürzel am Namensfeld an', async () => {

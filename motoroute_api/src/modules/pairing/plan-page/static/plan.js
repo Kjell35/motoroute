@@ -344,10 +344,17 @@
     var current = readPoints() || [];
     var target = index + step;
     if (target < 0 || target >= current.length) return;
-    var swapped = current[index];
+    var moved = current[index];
     current[index] = current[target];
-    current[target] = swapped;
-    writePoints(current, 'Reihenfolge geändert.', undefined, 'Reihenfolge geändert');
+    current[target] = moved;
+    // Die Meldung nennt Punkt und neue Position: eine Live-Region, die nur
+    // "Reihenfolge geändert" sagt, hilft am Screenreader nicht weiter.
+    writePoints(
+      current,
+      moved.label + ' ist jetzt Punkt ' + (target + 1) + ' von ' + current.length + '.',
+      undefined,
+      'Reihenfolge geändert'
+    );
   }
 
   function removePoint(index) {
