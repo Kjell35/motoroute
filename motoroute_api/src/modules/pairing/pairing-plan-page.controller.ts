@@ -65,6 +65,22 @@ function layout(title: string, body: string, extraHead = ''): string {
   #map { height: 340px; margin: 0 0 6px; border: 1px solid #d4d4d8; border-radius: 12px;
          background: #f4f4f5; z-index: 0; }
   #summary { margin: 0 0 4px; font-weight: 500; }
+  #pointlist { list-style: none; margin: 0 0 8px; padding: 0; }
+  #pointlist li { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+                  border-top: 1px solid #e4e4e7; }
+  #pointlist .nr { flex: none; width: 24px; height: 24px; border-radius: 50%;
+                   background: #18181b; color: #fff; font-size: 12px; font-weight: 600;
+                   display: flex; align-items: center; justify-content: center; }
+  #pointlist .name { flex: 1; min-width: 0; font-size: 14px; overflow: hidden;
+                     text-overflow: ellipsis; white-space: nowrap; }
+  .smallbtn { margin: 0 0 12px; padding: 4px 9px; font-size: 14px; background: #e4e4e7;
+              color: #18181b; border-radius: 8px; line-height: 1.2; }
+  .smallbtn:disabled { opacity: .35; cursor: default; }
+  #pointlist .smallbtn { margin: 0; }
+  .numbered-pin span { display: flex; align-items: center; justify-content: center;
+                       width: 26px; height: 26px; border-radius: 50%; background: #18181b;
+                       color: #fff; font-size: 13px; font-weight: 600; border: 2px solid #fff;
+                       box-shadow: 0 1px 4px rgba(0,0,0,.35); }
   #map-hint { margin: 0 0 16px; }
   .linkish { background: none; border: 0; padding: 0; color: #b91c1c; cursor: pointer;
              font-size: 13px; text-decoration: underline; }
@@ -103,6 +119,8 @@ function planPage(
 <p class="muted" id="summary"></p>
 <p class="muted" id="map-hint">In die Karte klicken setzt einen Punkt, Marker ziehen verschiebt ihn -
   die Zeilen darunter werden automatisch mitgeführt (und bleiben der Fallback).</p>
+<ul id="pointlist"></ul>
+<button id="undo" type="button" class="smallbtn" disabled>Letzten Punkt zurücknehmen</button>
 <div class="row">
   <div class="qr">
     <img src="${qrDataUrl}" alt="QR-Code mit dem Plan-Link" width="220" height="220">
@@ -128,6 +146,8 @@ function planPage(
   var mapBox = document.getElementById('map');
   var mapHint = document.getElementById('map-hint');
   var summary = document.getElementById('summary');
+  var list = document.getElementById('pointlist');
+  var undoButton = document.getElementById('undo');
   function show(text, cls) { status.textContent = text; status.className = cls || ''; }
   function parse(text) {
     var points = [];
@@ -199,6 +219,67 @@ function planPage(
     }
   }
 
+  // Punktliste unter der Karte: Nummer, Name, hoch/runter/loeschen. Sie ist
+  // die einzige Moeglichkeit, die Reihenfolge zu aendern - Marker ziehen
+  // verschiebt nur die Lage eines Punktes.
+  function listButton(text, title, disabled, action) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'smallbtn';
+    button.textContent = text;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    if (disabled) { button.disabled = true; } else { button.addEventListener('click', action); }
+    return button;
+  }
+
+  function renderList(points) {
+    if (!list) return;
+    list.innerHTML = '';
+    points.forEach(function (p, index) {
+      var row = document.createElement('li');
+      var nr = document.createElement('span');
+      nr.className = 'nr';
+      nr.textContent = String(index + 1);
+      var name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = p.label;
+      row.appendChild(nr);
+      row.appendChild(name);
+      row.appendChild(listButton('▲', 'Nach oben', index === 0, function () { movePoint(index, -1); }));
+      row.appendChild(listButton('▼', 'Nach unten', index === points.length - 1, function () { movePoint(index, 1); }));
+      row.appendChild(listButton('×', 'Punkt löschen', false, function () { removePoint(index); }));
+      list.appendChild(row);
+    });
+    if (undoButton) undoButton.disabled = points.length === 0;
+  }
+
+  function movePoint(index, step) {
+    var current = readPoints() || [];
+    var target = index + step;
+    if (target < 0 || target >= current.length) return;
+    var swapped = current[index];
+    current[index] = current[target];
+    current[target] = swapped;
+    writePoints(current, 'Reihenfolge geändert.');
+  }
+
+  function removePoint(index) {
+    var current = readPoints() || [];
+    if (index < 0 || index >= current.length) return;
+    current.splice(index, 1);
+    if (map) map.closePopup();
+    writePoints(current, 'Punkt gelöscht.');
+  }
+
+  function undoLast() {
+    var current = readPoints() || [];
+    if (!current.length) return;
+    current.pop();
+    if (map) map.closePopup();
+    writePoints(current, 'Letzten Punkt zurückgenommen.');
+  }
+
   function writePoints(points, message, redraw) {
     writeGuard = true;
     area.value = points.map(function (p) {
@@ -215,10 +296,22 @@ function planPage(
 
   function drawMarkers(points) {
     syncRoute(points);
+    renderList(points);
     if (!markerLayer) return;
     markerLayer.clearLayers();
     points.forEach(function (p, index) {
-      var marker = L.marker([p.lat, p.lon], { draggable: true, keyboard: false }).addTo(markerLayer);
+      var marker = L.marker([p.lat, p.lon], {
+        draggable: true,
+        keyboard: false,
+        // Nummerierter Pin: die Zahl ist die Position in der Tour und macht
+        // Reihenfolge-Fehler sofort sichtbar.
+        icon: L.divIcon({
+          className: 'numbered-pin',
+          html: '<span>' + (index + 1) + '</span>',
+          iconSize: [26, 26],
+          iconAnchor: [13, 13]
+        })
+      }).addTo(markerLayer);
       var box = document.createElement('div');
       var title = document.createElement('strong');
       title.textContent = p.label;
@@ -314,6 +407,7 @@ function planPage(
     }).then(function () { button.disabled = false; });
   });
 initMap();
+  if (undoButton) undoButton.addEventListener('click', undoLast);
 })();
 </script>`;
   return layout(
