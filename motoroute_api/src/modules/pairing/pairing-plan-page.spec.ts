@@ -125,6 +125,13 @@ describe('Plan-Seite: ausgelagerte Dateien', () => {
     // entstünde sie nur beim Laden und nach Aktionen nie wieder.
     expect(script).toMatch(/function drawMarkers\(points\)\s*\{\s*syncRoute\(points\);\s*renderList\(points\);/);
 
+    // Löschen gibt es nur einmal: Liste und Marker-Popup rufen dieselbe
+    // Funktion, damit beide die Statusmeldung zeigen.
+    expect(script.match(/current\.splice\(/g)).toHaveLength(1);
+    expect(script).toMatch(/removePoint\(index\); \}\);/); // × in der Liste
+    expect(script).toMatch(/remove\.addEventListener\('click', function \(\) \{ removePoint\(index\); \}\);/);
+    expect(script).toContain("writePoints(current, 'Punkt gelöscht.');");
+
     // Der Plan-Code kommt aus dem data-Attribut, das Skript ist statisch.
     expect(script).toContain("document.body.getAttribute('data-token')");
   });

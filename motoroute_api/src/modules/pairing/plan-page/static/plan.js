@@ -316,12 +316,10 @@
       remove.type = 'button';
       remove.className = 'linkish';
       remove.textContent = 'Punkt entfernen';
-      remove.addEventListener('click', function () {
-        var current = readPoints() || [];
-        current.splice(index, 1);
-        map.closePopup();
-        writePoints(current);
-      });
+      // Loeschen laeuft ueber dieselbe Funktion wie der ×-Knopf der Liste:
+      // sonst fehlte hier die Statusmeldung und die beiden Wege koennten
+      // auseinanderlaufen.
+      remove.addEventListener('click', function () { removePoint(index); });
       box.appendChild(title);
       box.appendChild(document.createElement('br'));
       box.appendChild(remove);
