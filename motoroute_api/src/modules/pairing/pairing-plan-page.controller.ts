@@ -81,8 +81,13 @@ function layout(title: string, body: string, extraHead = ''): string {
   #pointlist .nr { flex: none; width: 24px; height: 24px; border-radius: 50%;
                    background: #18181b; color: #fff; font-size: 12px; font-weight: 600;
                    display: flex; align-items: center; justify-content: center; }
-  #pointlist .name { flex: 1; min-width: 0; font-size: 14px; overflow: hidden;
-                     text-overflow: ellipsis; white-space: nowrap; }
+  #pointlist input.name { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px;
+                          border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; }
+  input.name:focus { outline: 2px solid #18181b; outline-offset: 0; }
+  .leaflet-popup-content input.popup-name { width: 100%; box-sizing: border-box;
+                                            padding: 4px 6px; margin: 0 0 6px;
+                                            font-size: 14px; border: 1px solid #d4d4d8;
+                                            border-radius: 6px; }
   .smallbtn { margin: 0 0 12px; padding: 4px 9px; font-size: 14px; background: #e4e4e7;
               color: #18181b; border-radius: 8px; line-height: 1.2; }
   .smallbtn:disabled { opacity: .35; cursor: default; }
@@ -134,7 +139,8 @@ function planPage(
 <div id="map" role="application" aria-label="Karte: Klick setzt einen Wegpunkt"></div>
 <p class="muted" id="summary"></p>
 <p class="muted" id="map-hint">In die Karte klicken setzt einen Punkt, Marker ziehen verschiebt ihn -
-  die Zeilen darunter werden automatisch mitgeführt (und bleiben der Fallback).</p>
+  die Zeilen darunter werden automatisch mitgeführt (und bleiben der Fallback).
+  Namen ändert man direkt in der Liste oder im Popup des Markers.</p>
 <ul id="pointlist"></ul>
 <button id="undo" type="button" class="smallbtn" disabled>Letzten Punkt zurücknehmen</button>
 <div class="row">
@@ -263,9 +269,15 @@ function planPage(
       var nr = document.createElement('span');
       nr.className = 'nr';
       nr.textContent = String(index + 1);
-      var name = document.createElement('span');
+      var name = document.createElement('input');
+      name.type = 'text';
       name.className = 'name';
-      name.textContent = p.label;
+      name.value = p.label;
+      name.setAttribute('aria-label', 'Name von Punkt ' + (index + 1));
+      name.addEventListener('change', function () { renamePoint(index, name.value); });
+      name.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') { event.preventDefault(); name.blur(); }
+      });
       row.appendChild(nr);
       row.appendChild(name);
       row.appendChild(listButton('▲', 'Nach oben', index === 0, function () { movePoint(index, -1); }));
@@ -274,6 +286,23 @@ function planPage(
       list.appendChild(row);
     });
     if (undoButton) undoButton.disabled = points.length === 0;
+  }
+
+  // Umbenennen: nur das Label tauschen, Koordinaten und Reihenfolge bleiben.
+  // Leerer Name wird verworfen (sonst hätte der Punkt keinen Namen mehr).
+  function renamePoint(index, raw) {
+    var current = readPoints() || [];
+    var old = current[index];
+    if (!old) return;
+    var name = raw === undefined || raw === null ? '' : String(raw).trim();
+    if (!name || name === old.label) return;
+    current[index] = {
+      lat: old.lat,
+      lon: old.lon,
+      label: name,
+      detail: old.detail
+    };
+    writePoints(current, 'Punkt umbenannt: ' + name);
   }
 
   function movePoint(index, step) {
@@ -425,8 +454,15 @@ function planPage(
         })
       }).addTo(markerLayer);
       var box = document.createElement('div');
-      var title = document.createElement('strong');
-      title.textContent = p.label;
+      var title = document.createElement('input');
+      title.type = 'text';
+      title.className = 'popup-name';
+      title.value = p.label;
+      title.setAttribute('aria-label', 'Name von Punkt ' + (index + 1));
+      title.addEventListener('change', function () { renamePoint(index, title.value); });
+      title.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') { event.preventDefault(); title.blur(); }
+      });
       var remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'linkish';
