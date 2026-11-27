@@ -200,8 +200,8 @@ describe('Plan-Seite in jsdom: Laden', () => {
     expect(rows(doc)).toHaveLength(0);
     expect(doc.getElementById('points').value).toBe('');
     expect(markers).toHaveLength(0);
-    // Die Zusammenfassung bleibt beim leeren Start leer (sie wird erst beim
-    // ersten Zeichnen bzw. nach dem Löschen des letzten Punktes gesetzt).
+    // Schon beim Laden gefüllt, damit unter der Karte keine leere Zeile steht.
+    expect(doc.getElementById('summary').textContent).toBe('Noch keine Punkte.');
   });
 });
 

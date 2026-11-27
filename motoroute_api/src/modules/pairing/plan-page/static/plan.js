@@ -390,8 +390,11 @@
       });
       writePoints(current, 'Punkt gesetzt - die Textzeile ist ergänzt.');
     });
-    var initial = readPoints();
-    if (initial && initial.length) drawMarkers(initial);
+    var initial = readPoints() || [];
+    if (initial.length) drawMarkers(initial);
+    // Auch ein leerer Plan fuellt die Zeile unter der Karte - sonst bliebe sie
+    // bis zur ersten Aenderung leer stehen.
+    else updateSummary(initial);
   }
 
   area.addEventListener('input', function () {
