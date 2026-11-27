@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   ServiceUnavailableException,
   Logger,
@@ -164,6 +165,14 @@ export class AuthService {
       );
       throw new ServiceUnavailableException(
         'Anmeldung derzeit nicht möglich - der Anmeldedienst antwortet nicht. Bitte später erneut versuchen.',
+      );
+    }
+    if (error?.code === 'email_not_confirmed') {
+      // Das Konto existiert, die Adresse ist nur unbestätigt. Als
+      // "falsches Passwort" gemeldet, drehte der Nutzer endlos an den
+      // Zugangsdaten, obwohl nur der Bestätigungslink fehlte.
+      throw new ForbiddenException(
+        'E-Mail noch nicht bestätigt - bitte den Link in der Bestätigungsmail öffnen und dann anmelden',
       );
     }
     if (error || !data.session || !data.user) {

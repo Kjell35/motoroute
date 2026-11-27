@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -187,5 +188,29 @@ describe('AuthService', () => {
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UnauthorizedException);
     expect((err as UnauthorizedException).message).toBe('E-Mail oder Passwort falsch');
+  });
+
+  it('Login: unbestätigte E-Mail -> 403 mit Bestätigungshinweis statt 401', async () => {
+    const { service, signIn } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Email not confirmed',
+        status: 400,
+        code: 'email_not_confirmed',
+      },
+    });
+
+    const err = await service
+      .login({ email: 'neu@example.de', password: 'geheim123' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).getStatus()).toBe(403);
+    expect((err as ForbiddenException).message).toContain('noch nicht bestätigt');
+    expect((err as ForbiddenException).message).not.toContain('Passwort falsch');
   });
 });

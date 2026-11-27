@@ -4,6 +4,7 @@ import type { Express } from 'express';
 import { Transform, Type } from 'class-transformer';
 import { AuthProvider, AuthenticatedRequest } from '../../guards';
 import { UuidParamPipe } from '../../common/uuid-param.pipe';
+import { IntParamPipe } from '../../common/int-param.pipe';
 import { MarketplaceService } from './marketplace.service';
 import { ChatService } from '../chat/chat.service';
 import {
@@ -324,7 +325,7 @@ export class MarketplaceController {
   }
 
   @Put('admin/reports/:id/resolve')
-  adminResolve(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.marketplace.adminResolveReport(req.user!, Number(id));
+  adminResolve(@Req() req: AuthenticatedRequest, @Param('id', new IntParamPipe('id')) id: number) {
+    return this.marketplace.adminResolveReport(req.user!, id);
   }
 }
