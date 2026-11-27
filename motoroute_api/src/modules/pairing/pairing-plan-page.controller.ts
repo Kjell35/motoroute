@@ -89,9 +89,12 @@ function planPage(
   qrDataUrl: string,
   points: { label: string; detail: string | null; lat: number; lon: number }[],
 ): string {
+  // Achtung: hier echter Zeilenumbruch, kein '\\n' - das ist TS-Code
+  // (ausserhalb des HTML-Templates) und wuerde sonst als Backslash-n im
+  // Textfeld landen, sodass nach dem Laden alles in einer Zeile klebt.
   const prefill = points
     .map((p) => `${p.lat}, ${p.lon}, ${p.label}`)
-    .join('\\n');
+    .join('\n');
   const body = `
 <h1>Route am Computer planen</h1>
 <p class="muted">Code <strong>${escapeHtml(token)}</strong> · gültig für 2 Stunden · gespeichert: <span id="count">${points.length}</span></p>
