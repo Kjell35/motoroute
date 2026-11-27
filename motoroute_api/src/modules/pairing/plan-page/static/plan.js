@@ -107,8 +107,13 @@
     list.innerHTML = '';
     points.forEach(function (p, index) {
       var row = document.createElement('li');
+      var isStart = index === 0;
+      var isEnd = points.length > 1 && index === points.length - 1;
       var nr = document.createElement('span');
-      nr.className = 'nr';
+      // Dieselbe Einordnung wie auf der Karte: erster Punkt gruen, letzter
+      // rot. Die Reihenfolge selbst bestimmt weiterhin allein die Liste.
+      nr.className = 'nr' + (isStart ? ' start' : '') + (isEnd ? ' end' : '');
+      nr.title = isStart ? 'Start' : isEnd ? 'Ziel' : 'Wegpunkt ' + (index + 1);
       nr.textContent = String(index + 1);
       var name = document.createElement('input');
       name.type = 'text';

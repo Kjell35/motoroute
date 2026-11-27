@@ -26,6 +26,8 @@
   #pointlist .nr { flex: none; width: 24px; height: 24px; border-radius: 50%;
                    background: #18181b; color: #fff; font-size: 12px; font-weight: 600;
                    display: flex; align-items: center; justify-content: center; }
+  #pointlist .nr.start { background: #15803d; }
+  #pointlist .nr.end { background: #b91c1c; }
   #pointlist input.name { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px;
                           border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; }
   input.name:focus { outline: 2px solid #18181b; outline-offset: 0; }

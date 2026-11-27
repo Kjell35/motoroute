@@ -107,8 +107,9 @@ describe('Plan-Seite: ausgelagerte Dateien', () => {
   it('baut Punktliste, nummerierte Marker und Sortier-/Löschknöpfe im Skript auf', () => {
     const script = readPlanAsset('static/plan.js');
 
-    // Die Zeile: Nummer, Namensfeld, Knöpfe.
-    expect(script).toMatch(/function renderList\(points\)\s*\{[\s\S]*?nr\.className = 'nr';/);
+    // Die Zeile: Nummer (mit Start/Ziel-Farbe wie auf der Karte), Namensfeld,
+    // Knöpfe.
+    expect(script).toMatch(/function renderList\(points\)\s*\{[\s\S]*?nr\.className = 'nr' \+ \(isStart \? ' start' : ''\) \+ \(isEnd \? ' end' : ''\);/);
     expect(script).toMatch(/name\.className = 'name';/);
     expect(script).toContain("listButton('▲', 'Nach oben', index === 0,");
     expect(script).toContain("listButton('▼', 'Nach unten', index === points.length - 1,");
@@ -158,6 +159,8 @@ describe('Plan-Seite: ausgelagerte Dateien', () => {
     expect(css).toContain('.numbered-pin span');
     expect(css).toContain('.numbered-pin.start span { background: #15803d; }');
     expect(css).toContain('.numbered-pin.end span { background: #b91c1c; }');
+    expect(css).toContain('#pointlist .nr.start { background: #15803d; }');
+    expect(css).toContain('#pointlist .nr.end { background: #b91c1c; }');
     expect(css).toContain('#map {');
     expect(css).not.toContain('<style>');
   });
