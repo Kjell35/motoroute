@@ -1,4 +1,8 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 
@@ -120,5 +124,68 @@ describe('AuthService', () => {
   it('geometry-Hinweis: Service kennt kein Routing - Struktur-Test', () => {
     // Dokumentiert, dass AuthService nichts mit Routing zu tun hat.
     expect(geometry).toBeDefined();
+  });
+  it('Login: GoTrue 5xx -> ServiceUnavailableException (503), nicht 401', async () => {
+    const { service, signIn } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Internal Server Error',
+        status: 500,
+        code: 'unexpected_failure',
+      },
+    });
+
+    const err = await service
+      .login({ email: 'rider@example.de', password: 'geheim123' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect((err as ServiceUnavailableException).getStatus()).toBe(503);
+    expect((err as ServiceUnavailableException).message).toContain('Anmeldedienst antwortet nicht');
+  });
+
+  it('Login: Netzwerkausfall (Fetch-Fehler, status 0) -> 503 statt 401', async () => {
+    const { service, signIn } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthRetryableFetchError',
+        message: 'TypeError: fetch failed',
+        status: 0,
+      },
+    });
+
+    await expect(
+      service.login({ email: 'rider@example.de', password: 'geheim123' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('Login: echte GoTrue-Credential-Fehler bleiben 401', async () => {
+    const { service, signIn } = buildService({
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key-1234567890',
+    });
+    signIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'Invalid login credentials',
+        status: 400,
+        code: 'invalid_credentials',
+      },
+    });
+
+    const err = await service
+      .login({ email: 'rider@example.de', password: 'falsch' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    expect((err as UnauthorizedException).message).toBe('E-Mail oder Passwort falsch');
   });
 });

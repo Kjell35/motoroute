@@ -1,11 +1,12 @@
 import {
   ConflictException,
   Injectable,
+  ServiceUnavailableException,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { AuthError, createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuthSession, LoginDto, RegisterDto } from './auth.dto';
 import { PUBLIC_CONVERSATION_ID } from '../chat/chat.service';
 
@@ -130,12 +131,41 @@ export class AuthService {
     return this.client;
   }
 
+  /**
+   * Ist der Login-Fehler ein Server-/Transportproblem statt falscher Daten?
+   *
+   * GoTrue meldet falsche Zugangsdaten als AuthApiError mit status 400
+   * (code invalid_credentials). Ein Netzwerkausfall kommt als
+   * AuthRetryableFetchError mit status 0, ein Proxy-/Serverfehler als
+   * 5xx; ein unerwarteter Transportfehler als AuthUnknownError ohne
+   * status. Nur diese Faelle sind 503, alles andere bleibt 401.
+   */
+  private isAuthServiceFailure(error: AuthError): boolean {
+    if (error.name === 'AuthRetryableFetchError' || error.name === 'AuthUnknownError') {
+      return true;
+    }
+    if (typeof error.status === 'number') {
+      return error.status === 0 || error.status >= 500;
+    }
+    return false;
+  }
   async login(dto: LoginDto): Promise<AuthSession> {
     const client = this.requireClient();
     const { data, error } = await client.auth.signInWithPassword({
       email: dto.email,
       password: dto.password,
     });
+    if (error && this.isAuthServiceFailure(error)) {
+      // Kein Credential-Problem: GoTrue antwortet nicht (Netz/5xx) oder der
+      // Transport ist gescheitert. Frueher wurde auch das als "falsches
+      // Passwort" gemeldet - der Nutzer drehte dann endlos an seinen Daten.
+      this.logger.error(
+        `login: Anmeldedienst nicht erreichbar (${error.name}, status=${error.status ?? '-'}, code=${error.code ?? '-'}): ${error.message}`,
+      );
+      throw new ServiceUnavailableException(
+        'Anmeldung derzeit nicht möglich - der Anmeldedienst antwortet nicht. Bitte später erneut versuchen.',
+      );
+    }
     if (error || !data.session || !data.user) {
       throw new UnauthorizedException('E-Mail oder Passwort falsch');
     }
