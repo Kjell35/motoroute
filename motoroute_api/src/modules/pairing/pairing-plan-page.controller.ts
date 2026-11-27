@@ -45,13 +45,13 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function layout(title: string, body: string): string {
+function layout(title: string, body: string, extraHead = ''): string {
   return `<!doctype html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(title)}</title>${extraHead}
 <style>
   :root { color-scheme: light dark; }
   body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0;
@@ -62,6 +62,11 @@ function layout(title: string, body: string): string {
   p, li { line-height: 1.5; }
   .muted { color: #52525b; font-size: 14px; }
   code { background: #f4f4f5; padding: 2px 6px; border-radius: 6px; }
+  #map { height: 340px; margin: 0 0 6px; border: 1px solid #d4d4d8; border-radius: 12px;
+         background: #f4f4f5; z-index: 0; }
+  #map-hint { margin: 0 0 16px; }
+  .linkish { background: none; border: 0; padding: 0; color: #b91c1c; cursor: pointer;
+             font-size: 13px; text-decoration: underline; }
   textarea { width: 100%; box-sizing: border-box; min-height: 220px; font: 14px/1.5 ui-monospace, monospace;
              padding: 12px; border: 1px solid #d4d4d8; border-radius: 10px; resize: vertical; }
   button { margin-top: 12px; padding: 12px 18px; font-size: 16px; border: 0; border-radius: 10px;
@@ -90,6 +95,9 @@ function planPage(
   const body = `
 <h1>Route am Computer planen</h1>
 <p class="muted">Code <strong>${escapeHtml(token)}</strong> · gültig für 2 Stunden · gespeichert: <span id="count">${points.length}</span></p>
+<div id="map" role="application" aria-label="Karte: Klick setzt einen Wegpunkt"></div>
+<p class="muted" id="map-hint">In die Karte klicken setzt einen Punkt, Marker ziehen verschiebt ihn -
+  die Zeilen darunter werden automatisch mitgeführt (und bleiben der Fallback).</p>
 <div class="row">
   <div class="qr">
     <img src="${qrDataUrl}" alt="QR-Code mit dem Plan-Link" width="220" height="220">
@@ -112,6 +120,8 @@ function planPage(
   var status = document.getElementById('status');
   var button = document.getElementById('save');
   var count = document.getElementById('count');
+  var mapBox = document.getElementById('map');
+  var mapHint = document.getElementById('map-hint');
   function show(text, cls) { status.textContent = text; status.className = cls || ''; }
   function parse(text) {
     var points = [];
@@ -129,6 +139,106 @@ function planPage(
     });
     return points;
   }
+  // ---- Karte: Klick setzt einen Punkt, Ziehen verschiebt ihn.
+  // Die Textzeilen bleiben die Wahrheit: jede Kartenaktion schreibt sie neu,
+  // und Tippen im Textfeld zeichnet die Marker nach.
+  var map = null;
+  var markerLayer = null;
+  var lastCount = -1;
+  var writeGuard = false;
+  var editTimer = null;
+
+  function readPoints() {
+    try { return parse(area.value); } catch (err) { return null; }
+  }
+
+  function writePoints(points, message) {
+    writeGuard = true;
+    area.value = points.map(function (p) {
+      return p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + ', ' + p.label;
+    }).join('\n');
+    writeGuard = false;
+    drawMarkers(points);
+    if (message) show(message, 'ok');
+  }
+
+  function drawMarkers(points) {
+    if (!markerLayer) return;
+    markerLayer.clearLayers();
+    points.forEach(function (p, index) {
+      var marker = L.marker([p.lat, p.lon], { draggable: true, keyboard: false }).addTo(markerLayer);
+      var box = document.createElement('div');
+      var title = document.createElement('strong');
+      title.textContent = p.label;
+      var remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'linkish';
+      remove.textContent = 'Punkt entfernen';
+      remove.addEventListener('click', function () {
+        var current = readPoints() || [];
+        current.splice(index, 1);
+        map.closePopup();
+        writePoints(current);
+      });
+      box.appendChild(title);
+      box.appendChild(document.createElement('br'));
+      box.appendChild(remove);
+      marker.bindPopup(box);
+      marker.on('dragend', function () {
+        var current = readPoints() || [];
+        var moved = marker.getLatLng();
+        var old = current[index];
+        current[index] = {
+          lat: moved.lat,
+          lon: moved.lng,
+          label: old ? old.label : 'Wegpunkt ' + (index + 1),
+          detail: old ? old.detail : null
+        };
+        writePoints(current, 'Punkt verschoben - Zeile aktualisiert.');
+      });
+    });
+    if (points.length && points.length !== lastCount) {
+      lastCount = points.length;
+      map.fitBounds(L.latLngBounds(points.map(function (p) { return [p.lat, p.lon]; })),
+        { padding: [30, 30], maxZoom: 12 });
+    }
+  }
+
+  function initMap() {
+    if (!window.L || !mapBox) {
+      if (mapHint) mapHint.textContent = 'Karte hier nicht verfügbar - Punkte wie gewohnt als Zeilen eintragen, das funktioniert genauso.';
+      return;
+    }
+    map = L.map(mapBox, { scrollWheelZoom: false }).setView([47.6, 11.0], 8);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap-Mitwirkende'
+    }).addTo(map);
+    markerLayer = L.layerGroup().addTo(map);
+    map.on('click', function (event) {
+      var current = readPoints() || [];
+      current.push({
+        lat: event.latlng.lat,
+        lon: event.latlng.lng,
+        label: 'Wegpunkt ' + (current.length + 1)
+      });
+      writePoints(current, 'Punkt gesetzt - die Textzeile ist ergänzt.');
+    });
+    var initial = readPoints();
+    if (initial && initial.length) drawMarkers(initial);
+  }
+
+  area.addEventListener('input', function () {
+    if (writeGuard) return;
+    clearTimeout(editTimer);
+    editTimer = setTimeout(function () {
+      var points = readPoints();
+      if (!points) return;
+      drawMarkers(points);
+      show('', '');
+    }, 350);
+  });
+
   button.addEventListener('click', function () {
     var points;
     try { points = parse(area.value); } catch (e) { show(e.message, 'err'); return; }
@@ -146,9 +256,15 @@ function planPage(
       show('Server nicht erreichbar. Verbindung prüfen und erneut versuchen.', 'err');
     }).then(function () { button.disabled = false; });
   });
+initMap();
 })();
 </script>`;
-  return layout('Route planen – MotoRoute', body);
+  return layout(
+    'Route planen – MotoRoute',
+    body,
+    '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">' +
+      '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>',
+  );
 }
 
 function expiredPage(planUrl: string): string {
