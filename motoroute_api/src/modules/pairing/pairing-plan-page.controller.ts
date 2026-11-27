@@ -152,13 +152,16 @@ function planPage(
     try { return parse(area.value); } catch (err) { return null; }
   }
 
-  function writePoints(points, message) {
+  function writePoints(points, message, redraw) {
     writeGuard = true;
     area.value = points.map(function (p) {
       return p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + ', ' + p.label;
     }).join('\\n');
     writeGuard = false;
-    drawMarkers(points);
+    // redraw === false laesst vorhandene Marker stehen (Fall: Marker gezogen -
+    // der Marker sitzt nach dem Drag schon richtig, ein Neuaufbau waere nur
+    // ein DOM-Teardown mitten in der laufenden Mausgeste).
+    if (redraw !== false) drawMarkers(points);
     if (message) show(message, 'ok');
   }
 
@@ -194,7 +197,10 @@ function planPage(
           label: old ? old.label : 'Wegpunkt ' + (index + 1),
           detail: old ? old.detail : null
         };
-        writePoints(current, 'Punkt verschoben - Zeile aktualisiert.');
+        // Marker NICHT neu aufbauen: clearLayers() zerstoert hier genau das
+        // Element, an dem der Browser den Drag gerade beendet - der naechste
+        // Klick (z. B. auf "Punkte speichern") kann dadurch verschluckt werden.
+        writePoints(current, 'Punkt verschoben - Zeile aktualisiert.', false);
       });
     });
     if (points.length && points.length !== lastCount) {
