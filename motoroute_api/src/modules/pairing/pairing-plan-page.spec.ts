@@ -282,6 +282,49 @@ describe('Plan-Seite in jsdom: Bedienung', () => {
   });
 });
 
+describe('Plan-Seite in jsdom: Etappen', () => {
+  // Punkte auf dem Äquator: 1 Längengrad sind 111,19 km - gut nachzurechnen.
+  const equator: Point[] = [
+    { lat: 0, lon: 0, label: 'A', detail: null },
+    { lat: 0, lon: 1, label: 'B', detail: null },
+    { lat: 0, lon: 3, label: 'C', detail: null },
+  ];
+
+  function legs(doc: any): string[] {
+    return [...doc.querySelectorAll('#pointlist .leg')].map((leg: any) => leg.textContent);
+  }
+
+  it('zeigt je Zeile die Luftlinie bis zum nächsten Punkt', async () => {
+    const { doc, win } = await mountPage(equator);
+    const leg = doc.querySelector('#pointlist .leg');
+
+    // A→B ein Längengrad, B→C zwei.
+    expect(legs(doc)).toEqual(['→ 111,2 km', '→ 222,4 km']);
+    // Die Zeile hat auch ihre eigene Auszeichnung (klein, gedämpft).
+    expect(win.getComputedStyle(leg).fontSize).toBe('12px');
+    expect(win.getComputedStyle(leg).color).toBe('rgb(82, 82, 91)');
+  });
+
+  it('lässt die letzte Zeile ohne Etappe', async () => {
+    const { doc } = await mountPage(equator);
+
+    expect(rows(doc)[2].querySelector('.leg')).toBeNull();
+    expect(rows(doc)[0].querySelector('.leg')).not.toBeNull();
+    expect(rows(doc)[0].querySelector('.leg').getAttribute('title')).toBe(
+      'Luftlinie zum nächsten Punkt',
+    );
+  });
+
+  it('rechnet nach dem Sortieren neu', async () => {
+    const { doc } = await mountPage(equator);
+
+    rows(doc)[0].querySelectorAll('button')[1].click(); // ▼: A und B tauschen
+
+    expect(labels(doc)).toEqual(['B', 'A', 'C']);
+    expect(legs(doc)).toEqual(['→ 111,2 km', '→ 333,6 km']);
+  });
+});
+
 describe('Plan-Seite in jsdom: Löschen', () => {
   it('löscht über den ×-Knopf der Liste', async () => {
     const { doc, markers } = await mountPage(threePoints);

@@ -128,6 +128,16 @@
       });
       row.appendChild(nr);
       row.appendChild(name);
+      // Etappe bis zum naechsten Punkt: dieselbe Luftlinie wie die
+      // Zusammenfassung, nur pro Zeile - so laesst sich abschaetzen, wie
+      // lang ein Tagesabschnitt wird. Die letzte Zeile hat keinen Nachfolger.
+      if (index < points.length - 1) {
+        var leg = document.createElement('span');
+        leg.className = 'leg';
+        leg.textContent = '→ ' + formatKm(distanceKm(p, points[index + 1]));
+        leg.title = 'Luftlinie zum nächsten Punkt';
+        row.appendChild(leg);
+      }
       row.appendChild(listButton('▲', 'Nach oben', index === 0, function () { movePoint(index, -1); }));
       row.appendChild(listButton('▼', 'Nach unten', index === points.length - 1, function () { movePoint(index, 1); }));
       row.appendChild(listButton('×', 'Punkt löschen', false, function () { removePoint(index); }));
