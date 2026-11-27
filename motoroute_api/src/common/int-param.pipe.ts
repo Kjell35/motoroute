@@ -21,7 +21,8 @@ export class IntParamPipe implements PipeTransform<string | number, number> {
 
   transform(value: string | number): number {
     if (typeof value === 'number') {
-      if (!Number.isInteger(value) || value < 1) {
+      // isSafeInteger fängt auch 1e20 aus 20-stelligen IDs ab.
+      if (!Number.isSafeInteger(value) || value < 1) {
         throw new BadRequestException(`${this.field} muss eine positive ganze Zahl sein`);
       }
       return value;
