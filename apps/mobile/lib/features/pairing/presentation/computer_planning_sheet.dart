@@ -10,6 +10,7 @@ import 'package:motoroute_app/core/theme/app_spacing.dart';
 import 'package:motoroute_app/core/theme/app_typography.dart';
 import 'package:motoroute_app/features/routing/domain/route_entities.dart';
 import '../data/pairing_repository.dart';
+import '../data/pairing_session.dart';
 
 /// M3-Feature „Route am Computer planen": erzeugt Pairing-Token, zeigt einen
 /// QR-Code mit dem Plan-Link (Handy-Kamera statt Abtippen) und übernimmt den
@@ -34,11 +35,21 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
   Timer? _poll;
   Timer? _expiry;
   DateTime? _expiresAt;
+  bool _restored = false;
 
   @override
   void initState() {
     super.initState();
-    _startPairing();
+    // Laufenden Vorgang wieder aufnehmen statt einen neuen Token zu ziehen:
+    // ein am Rechner gespeicherter Plan bleibt so erreichbar.
+    final PairingSessionState session = ref.read(pairingSessionProvider);
+    final PairingStart? start = session.start;
+    final DateTime? expiresAt = session.expiresAt;
+    if (start != null && expiresAt != null && session.isActive) {
+      _adoptSession(start, expiresAt, restored: true, notify: false);
+    } else {
+      _startPairing();
+    }
   }
 
   @override
@@ -57,26 +68,13 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
     try {
       final PairingStart start = await widget.repository.start();
       if (!mounted) return;
-      setState(() {
-        _start = start;
-        _expiresAt = DateTime.now().add(
-          Duration(seconds: start.expiresInSeconds),
-        );
-        _error = null;
-      });
-      _poll?.cancel();
-      _expiry?.cancel();
-      // Poll mit geschützter Einzelflug-Sperre bis Ablauf der Session.
-      _poll = Timer.periodic(
-          const Duration(seconds: 4), (_) => _fetchPlan(auto: true));
-      _expiry = Timer(
-        Duration(seconds: start.expiresInSeconds),
-        () {
-          if (!mounted) return;
-          _poll?.cancel();
-          setState(() =>
-              _error = 'Der Plan-Link ist abgelaufen. Bitte neu starten.');
-        },
+      // Session merken: Token und Plan-URL sollen das Schließen des Dialogs
+      // überleben, damit ein später gespeicherter Plan nicht verwaist.
+      ref.read(pairingSessionProvider.notifier).remember(start);
+      _adoptSession(
+        start,
+        ref.read(pairingSessionProvider).expiresAt!,
+        restored: false,
       );
     } on PairingException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -87,6 +85,43 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Übernimmt eine Session in die Anzeige und startet Polling + Ablauf.
+  /// `restored` markiert eine aus dem Provider wiederhergestellte Session.
+  void _adoptSession(
+    PairingStart start,
+    DateTime expiresAt, {
+    bool restored = false,
+    bool notify = true,
+  }) {
+    _poll?.cancel();
+    _expiry?.cancel();
+    _start = start;
+    _expiresAt = expiresAt;
+    _restored = restored;
+    if (notify && mounted) setState(() {});
+
+    if (!DateTime.now().isBefore(expiresAt)) {
+      _expiry = null;
+      _error = 'Der Plan-Link ist abgelaufen. Bitte neu starten.';
+      ref.read(pairingSessionProvider.notifier).clear();
+      if (mounted) setState(() {});
+      return;
+    }
+    // Poll mit geschützter Einzelflug-Sperre bis Ablauf der Session.
+    _poll = Timer.periodic(
+        const Duration(seconds: 4), (_) => _fetchPlan(auto: true));
+    _expiry = Timer(
+      expiresAt.difference(DateTime.now()),
+      () {
+        if (!mounted) return;
+        _poll?.cancel();
+        ref.read(pairingSessionProvider.notifier).clear();
+        setState(() =>
+            _error = 'Der Plan-Link ist abgelaufen. Bitte neu starten.');
+      },
+    );
   }
 
   Future<void> _fetchPlan({bool auto = false}) async {
@@ -131,6 +166,8 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
       ref.read(waypointListProvider.notifier).state = points
           .map((p) => Waypoint(lat: p.lat, lng: p.lng, label: p.label))
           .toList(growable: false);
+      // Vorgang ist eingelöst - beim nächsten Öffnen beginnt ein neuer.
+      ref.read(pairingSessionProvider.notifier).clear();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: context.palette.accentPrimary,
@@ -197,6 +234,14 @@ class _ComputerPlanningSheetState extends ConsumerState<ComputerPlanningSheet> {
                 'Am Computer bequemer tippen? Öffne den Link, plane dort — mit „Plan abrufen" landet die Route wieder hier.',
                 style: AppTypography.captionOf(context),
               ),
+              if (_restored) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Laufender Vorgang wiederhergestellt — der Code bleibt bis zum Ablauf gültig.',
+                  style: AppTypography.captionOf(context)
+                      .copyWith(color: context.palette.accentText),
+                ),
+              ],
               const SizedBox(height: AppSpacing.md),
               if (start != null) ...[
                 Center(
