@@ -42,6 +42,10 @@
               color: #18181b; border-radius: 8px; line-height: 1.2; }
   .smallbtn:disabled { opacity: .35; cursor: default; }
   #pointlist .smallbtn { margin: 0; }
+  /* Die beiden Listen-Knoepfe nebeneinander; auf schmalen Anzeigen rutscht
+     der zweite in die naechste Zeile. */
+  .listactions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .listactions .smallbtn { margin: 0; }
   #pointlist .leg { flex: none; font-size: 12px; color: #52525b; white-space: nowrap; }
   .numbered-pin span { display: flex; align-items: center; justify-content: center;
                        width: 26px; height: 26px; border-radius: 50%; background: #18181b;

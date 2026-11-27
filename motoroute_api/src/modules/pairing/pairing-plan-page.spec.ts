@@ -359,6 +359,47 @@ describe('Plan-Seite in jsdom: Löschen', () => {
     expect(labels(doc)).toEqual(['Eibsee', 'Zugspitze']);
     expect(doc.getElementById('status').textContent).toBe('Letzten Punkt zurückgenommen.');
   });
+
+  it('dreht die Reihenfolge um - Start/Ziel, Etappen und Textzeilen mit', async () => {
+    const { doc, markers } = await mountPage(threePoints);
+    const summary = doc.getElementById('summary').textContent;
+
+    doc.getElementById('reverse').click();
+
+    expect(labels(doc)).toEqual(['Kufstein', 'Zugspitze', 'Eibsee']);
+    expect(lines(doc)).toEqual([
+      '47.60000, 12.10000, Kufstein',
+      '47.50000, 11.50000, Zugspitze',
+      '47.42110, 10.98480, Eibsee',
+    ]);
+    // Start/Ziel wandern mit: erster Punkt grün, letzter rot - Liste und Marker.
+    expect(rows(doc).map((row: any) => row.querySelector('.nr').className)).toEqual([
+      'nr start',
+      'nr',
+      'nr end',
+    ]);
+    expect(markers.map((m) => m.options.title)).toEqual(['Start', 'Wegpunkt 2', 'Ziel']);
+    expect(markers[0].options.icon.className).toContain('start');
+    expect(markers[2].options.icon.className).toContain('end');
+    // Etappen in der neuen Richtung, Gesamtstrecke bleibt gleich.
+    expect(rows(doc)[0].querySelector('.leg').textContent).toBe('→ 46,4 km');
+    expect(rows(doc)[1].querySelector('.leg').textContent).toBe('→ 39,7 km');
+    expect(rows(doc)[2].querySelector('.leg')).toBeNull();
+    expect(doc.getElementById('summary').textContent).toBe(summary);
+    expect(doc.getElementById('status').textContent).toBe(
+      'Reihenfolge umgedreht - Ziel ist jetzt Start.',
+    );
+  });
+
+  it('sperrt das Umdrehen bei weniger als zwei Punkten', async () => {
+    const leer = await mountPage([]);
+    expect(leer.doc.getElementById('reverse').disabled).toBe(true);
+
+    const einer = await mountPage([threePoints[0]]);
+    expect(einer.doc.getElementById('reverse').disabled).toBe(true);
+    einer.doc.getElementById('reverse').click(); // gesperrt: ändert nichts
+    expect(labels(einer.doc)).toEqual(['Eibsee']);
+  });
 });
 
 describe('Plan-Seite: ausgeliefertes HTML', () => {

@@ -11,6 +11,7 @@
   var summary = document.getElementById('summary');
   var list = document.getElementById('pointlist');
   var undoButton = document.getElementById('undo');
+  var reverseButton = document.getElementById('reverse');
   var searchForm = document.getElementById('search');
   var searchInput = document.getElementById('q');
   var searchButton = document.getElementById('search-btn');
@@ -144,6 +145,8 @@
       list.appendChild(row);
     });
     if (undoButton) undoButton.disabled = points.length === 0;
+    // Umdrehen braucht zwei Punkte, sonst waere es ein Nichts-Tun.
+    if (reverseButton) reverseButton.disabled = points.length < 2;
   }
 
   // Umbenennen: nur das Label tauschen, Koordinaten und Reihenfolge bleiben.
@@ -185,6 +188,16 @@
     current.splice(index, 1);
     if (map) map.closePopup();
     writePoints(current, 'Punkt gelöscht.');
+  }
+
+  // Hin- und Rueckweg: dieselben Punkte in umgekehrter Reihenfolge. Der
+  // Rest haengt an der Reihenfolge und zieht automatisch mit - Start/Ziel
+  // (Farben in Liste und Marker), Etappen und die Textzeilen.
+  function reversePoints() {
+    var current = readPoints() || [];
+    if (current.length < 2) return;
+    current.reverse();
+    writePoints(current, 'Reihenfolge umgedreht - Ziel ist jetzt Start.');
   }
 
   function undoLast() {
@@ -427,4 +440,5 @@
   });
 initMap();
   if (undoButton) undoButton.addEventListener('click', undoLast);
+  if (reverseButton) reverseButton.addEventListener('click', reversePoints);
 })();
