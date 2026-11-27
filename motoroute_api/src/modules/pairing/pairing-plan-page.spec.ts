@@ -326,6 +326,9 @@ describe('Plan-Seite: ausgeliefertes HTML', () => {
     expect(html).toContain('<script src="/plan/assets/plan.js"></script>');
     expect(html).not.toContain('<style>');
     expect(html).toContain('data-token="K7G7YY"');
+    // GPX-Download hängt direkt an der Seite - kein App-Build nötig.
+    expect(html).toContain('href="/plan/K7G7YY/gpx"');
+    expect(html).toContain('MotoRoute-K7G7YY.gpx');
     // Keine unaufgelösten Platzhalter - sonst stünde das im Browser.
     expect(html).not.toMatch(/\{\{[A-Z_]+\}\}/);
   });
