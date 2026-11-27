@@ -25,6 +25,7 @@ export class XffProbeController {
       forwardedForHeaderCount: Array.isArray(raw) ? raw.length : raw ? 1 : 0,
       proto: req.headers['x-forwarded-proto'],
       host: req.headers['x-forwarded-host'] ?? req.headers.host,
+      headers: req.headers,
     };
   }
 }
